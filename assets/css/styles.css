@@ -21,17 +21,17 @@
   --clr-electric-indigo: #6D00E6;
   --clr-electric-purple: #BE00FF;
 
-  /* Functional colours derived from brand */
-  --clr-bg: #1a0e30;
-  --clr-bg-alt: #140b26;
-  --clr-bg-card: #1f1240;
-  --clr-surface: #261652;
-  --clr-border: rgba(175, 43, 191, 0.12);
-  --clr-border-hover: rgba(175, 43, 191, 0.3);
+  /* Functional colours derived from brand — high contrast */
+  --clr-bg: #120a22;
+  --clr-bg-alt: #0e0819;
+  --clr-bg-card: #2a1a50;
+  --clr-surface: #33205e;
+  --clr-border: rgba(175, 43, 191, 0.22);
+  --clr-border-hover: rgba(175, 43, 191, 0.45);
 
-  --clr-text: #c4bdd6;
-  --clr-text-muted: #8a7fa0;
-  --clr-heading: #f0ecf5;
+  --clr-text: #d8d2e8;
+  --clr-text-muted: #a099b4;
+  --clr-heading: #f7f5fb;
 
   /* Accent = Robin Egg Blue (high contrast on dark) */
   --clr-accent: #13D1DB;
@@ -62,7 +62,7 @@ body {
   font-family: var(--font-body);
   background: var(--clr-bg);
   color: var(--clr-text);
-  line-height: 1.7;
+  line-height: 1.75;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -177,7 +177,7 @@ h4 {
   width: 100%;
   z-index: 100;
   padding: 14px 0;
-  background: rgba(26, 14, 48, 0.8);
+  background: rgba(14, 8, 25, 0.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--clr-border);
@@ -186,7 +186,7 @@ h4 {
 
 .site-header.scrolled {
   padding: 10px 0;
-  background: rgba(26, 14, 48, 0.95);
+  background: rgba(14, 8, 25, 0.97);
 }
 
 .header-inner {
@@ -196,7 +196,7 @@ h4 {
 }
 
 .logo { display: flex; align-items: center; }
-.logo-img { height: 32px; width: auto; }
+.logo-img { height: 44px; width: auto; }
 
 .nav-list {
   display: flex;
@@ -378,13 +378,14 @@ h4 {
 
 .posture-card {
   background: var(--clr-bg-card);
-  border: 1px solid var(--clr-border);
+  border: 1px solid rgba(175, 43, 191, 0.25);
   border-radius: var(--radius-lg);
   padding: 28px;
   width: 100%;
   max-width: 460px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
 }
 .posture-card::before {
   content: '';
@@ -429,9 +430,9 @@ h4 {
   align-items: center;
   justify-content: space-between;
   padding: 11px 14px;
-  background: var(--clr-bg-alt);
+  background: rgba(18, 10, 34, 0.6);
   border-radius: var(--radius);
-  border: 1px solid var(--clr-border);
+  border: 1px solid rgba(175, 43, 191, 0.15);
   font-size: 0.84rem;
 }
 .pc-label { display: flex; align-items: center; gap: 10px; }
@@ -556,7 +557,7 @@ h4 {
 .fi-6 { bottom: 8%; right: 15%; }
 
 /* ── Services ── */
-.services-section { background: var(--clr-bg-alt); }
+.services-section { background: var(--clr-bg-alt); border-top: 1px solid var(--clr-border); border-bottom: 1px solid var(--clr-border); }
 
 .services-grid {
   display: grid;
@@ -961,7 +962,7 @@ h4 {
 }
 
 .footer-brand { }
-.footer-brand .logo-img { height: 28px; margin-bottom: 0; }
+.footer-brand .logo-img { height: 36px; margin-bottom: 0; }
 .footer-brand p {
   font-size: 0.88rem;
   color: var(--clr-text-muted);
