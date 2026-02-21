@@ -196,7 +196,7 @@ h4 {
 }
 
 .logo { display: flex; align-items: center; }
-.logo-img { height: 44px; width: auto; }
+.logo-img { height: 300px; width: auto; }
 
 .nav-list {
   display: flex;
