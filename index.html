@@ -63,16 +63,16 @@
       --clr-purpureus:       #AF2BBF;
       --clr-russian-violet:  #281549;
 
-      /* ── Background: warm white two-tone ── */
-      --clr-bg-start: #FAFAFA;   /* pure warm white */
-      --clr-bg-end:   #F2F0F7;   /* barely-there violet tint */
+      /* ── Background: deeper violet-grey mid-tone ── */
+      --clr-bg-start: #EDE9F5;   /* soft violet-grey, reduces luminance gap */
+      --clr-bg-end:   #E4DFF0;   /* slightly deeper lavender wash */
 
-      /* ── Brand gradient (reusable shorthand) ── */
-      --grad-brand: linear-gradient(135deg, var(--clr-electric-indigo) 0%, var(--clr-electric-purple) 100%);
+      /* ── Brand gradient: toned-down for text (desaturated + darkened) ── */
+      --grad-brand: linear-gradient(135deg, #5500B8 0%, #9500CC 100%);
 
       /* ── Semantic text tokens ── */
-      --clr-text:       #3d3650;  /* dark violet-neutral for body copy */
-      --clr-text-muted: #7a6e90;  /* muted purple-grey for secondary text */
+      --clr-text:       #2e2545;  /* deep violet-neutral — strong but not harsh */
+      --clr-text-muted: #6b5f85;  /* muted purple-grey, lifts off deeper bg */
 
       --font-heading: 'Raleway', sans-serif;
       --font-body:    'Nunito Sans', sans-serif;
@@ -188,7 +188,7 @@
        * padded inward with a white inset to reveal only the border ring.
        */
       background:
-        linear-gradient(#FAFAFA, #FAFAFA) padding-box,
+        linear-gradient(#EDE9F5, #EDE9F5) padding-box,
         var(--grad-brand) border-box;
       border: 1.5px solid transparent;
       /* Gradient text */
@@ -286,7 +286,7 @@
       border-radius: 50%;
       /* Gradient border at rest */
       background:
-        linear-gradient(#FAFAFA, #F2F0F7) padding-box,
+        linear-gradient(#EDE9F5, #E4DFF0) padding-box,
         var(--grad-brand) border-box;
       border: 1.5px solid transparent;
       color: var(--clr-electric-indigo);
@@ -333,8 +333,8 @@
   <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden;">
     <defs>
       <linearGradient id="grad-brand" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%"   stop-color="#6D00E6"/>
-        <stop offset="100%" stop-color="#BE00FF"/>
+        <stop offset="0%"   stop-color="#5500B8"/>
+        <stop offset="100%" stop-color="#9500CC"/>
       </linearGradient>
     </defs>
   </svg>
@@ -373,17 +373,17 @@
         </svg>
         <span class="contact-label">+61 435 211 051</span>
       </a>
-      <a href="mailto:hello@shadowit.com.au" class="contact-item">
+      <a href="/cdn-cgi/l/email-protection#d1b9b4bdbdbe91a2b9b0b5bea6b8a5ffb2bebcffb0a4" class="contact-item">
         <!-- Email icon: stroked with brand gradient -->
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="url(#grad-brand)" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
           <polyline points="22,6 12,13 2,6"/>
-          <span class="contact-label">hello@shadowit.com.au</span>
         </svg>
+        <span class="contact-label"><span class="__cf_email__" data-cfemail="ef878a838380af9c878e8b8098869bc18c8082c18e9a">[email&#160;protected]</span></span>
       </a>
     </div>
 
     <a href="https://www.linkedin.com/company/shadowit" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Follow Shadow IT on LinkedIn">
       <!-- LinkedIn icon: filled with brand gradient at rest, white on hover (via CSS) -->
       <svg width="16" height="16" viewBox="0 0 24 24" fill="url(#grad-brand)" aria-hidden="true">
-        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2
+        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555
