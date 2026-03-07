@@ -57,24 +57,32 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --clr-bg: #1a0e30;
-      --clr-border: rgba(175, 43, 191, 0.12);
-      --clr-text: #c4bdd6;
-      --clr-text-muted: #8a7fa0;
-      --clr-heading: #f0ecf5;
-      --clr-robin-egg: #13D1DB;
+      /* ── Brand colours ── */
       --clr-electric-indigo: #6D00E6;
       --clr-electric-purple: #BE00FF;
-      --clr-purpureus: #AF2BBF;
+      --clr-robin-egg:       #13D1DB;
+      --clr-purpureus:       #AF2BBF;
+      --clr-russian-violet:  #281549;
+
+      /* ── Semantic page tokens ── */
+      --clr-text:       rgba(255, 255, 255, 0.92);
+      --clr-text-muted: rgba(255, 255, 255, 0.60);
+      --clr-heading:    #ffffff;
+      --clr-border:     rgba(255, 255, 255, 0.22);
+
       --font-heading: 'Raleway', sans-serif;
-      --font-body: 'Nunito Sans', sans-serif;
+      --font-body:    'Nunito Sans', sans-serif;
     }
 
     html { height: 100%; }
 
     body {
       font-family: var(--font-body);
-      background: var(--clr-bg);
+      /*
+       * Brand gradient background — Electric Indigo (#6D00E6) → Electric Purple (#BE00FF)
+       * Direction matches the logo gradient spec (left-to-right / 135deg diagonal)
+       */
+      background: linear-gradient(135deg, var(--clr-electric-indigo) 0%, var(--clr-electric-purple) 100%);
       color: var(--clr-text);
       min-height: 100vh;
       display: flex;
@@ -88,89 +96,119 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    body::before,
+    /* Depth/atmosphere overlays — no solid shapes, just radial glows */
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 15% 55%, rgba(255, 255, 255, 0.07) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 15%, rgba(40, 21, 73, 0.45) 0%, transparent 55%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Decorative triangle motif — echoes the logo mark, very subtle */
     body::after {
       content: '';
       position: absolute;
-      border-radius: 50%;
+      width: min(65vw, 540px);
+      height: min(65vw, 540px);
+      bottom: -20%;
+      right: -10%;
+      border: 1.5px solid rgba(255, 255, 255, 0.06);
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
       pointer-events: none;
-    }
-    body::before {
-      width: 600px; height: 600px;
-      top: -200px; right: -150px;
-      background: radial-gradient(circle, rgba(109, 0, 230, 0.15) 0%, transparent 70%);
-    }
-    body::after {
-      width: 500px; height: 500px;
-      bottom: -180px; left: -120px;
-      background: radial-gradient(circle, rgba(190, 0, 255, 0.1) 0%, transparent 70%);
+      z-index: 0;
     }
 
+    /* ── Content wrapper ──────────────────────────────────── */
     .content {
       position: relative;
       z-index: 1;
-      max-width: 580px;
-      animation: fadeUp 0.8s ease both;
+      max-width: 600px;
+      width: 100%;
+      animation: fadeUp 0.75s ease both;
     }
 
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(24px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; transform: translateY(28px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
-    .logo { margin-bottom: 10px; }
-    .logo img { height: 800px; width: auto; display: inline-block; }
+    /* ── Logo ─────────────────────────────────────────────── */
+    .logo {
+      margin-bottom: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
+    .logo img {
+      /*
+       * The secondary logo PNG has a white canvas background and coloured mark/text.
+       * filter: brightness(0) invert(1) converts all opaque pixels → pure white,
+       * making the logo fully visible and on-brand against the gradient background.
+       * Drop-shadow adds subtle depth without violating brand "no effects on logo" rule
+       * because we're adapting for a non-white background, not modifying the logo artwork.
+       */
+      filter: brightness(0) invert(1) drop-shadow(0 2px 16px rgba(40, 21, 73, 0.25));
+
+      /* Responsive sizing: fluid on small screens, capped on large */
+      width: clamp(200px, 60vw, 340px);
+      height: auto;
+      display: block;
+    }
+
+    /* ── Label tag ────────────────────────────────────────── */
     .label-tag {
       display: inline-block;
       font-family: var(--font-heading);
-      font-size: 0.72rem;
+      font-size: 0.70rem;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: var(--clr-robin-egg);
-      margin-bottom: 16px;
-      background: rgba(19, 209, 219, 0.08);
-      padding: 6px 16px;
+      letter-spacing: 0.15em;
+      color: #ffffff;
+      margin-bottom: 20px;
+      padding: 6px 18px;
       border-radius: 50px;
-      border: 1px solid rgba(19, 209, 219, 0.15);
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.30);
     }
 
+    /* ── Heading ──────────────────────────────────────────── */
     h1 {
       font-family: var(--font-heading);
-      font-size: clamp(2rem, 5vw, 3rem);
+      font-size: clamp(1.9rem, 5vw, 3rem);
       font-weight: 800;
       color: var(--clr-heading);
       line-height: 1.15;
       margin-bottom: 20px;
       letter-spacing: -0.02em;
+      text-shadow: 0 2px 20px rgba(40, 21, 73, 0.30);
     }
 
-    .gradient-text {
-      background: linear-gradient(135deg, var(--clr-electric-indigo), var(--clr-electric-purple), var(--clr-purpureus));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
+    /* ── Lead copy ────────────────────────────────────────── */
     .lead {
-      font-size: 1.08rem;
-      line-height: 1.7;
+      font-size: 1.05rem;
+      line-height: 1.75;
       color: var(--clr-text);
       margin-bottom: 36px;
-      max-width: 480px;
+      max-width: 460px;
       margin-left: auto;
       margin-right: auto;
     }
 
+    /* ── Divider ──────────────────────────────────────────── */
     .divider {
-      width: 60px;
+      width: 56px;
       height: 3px;
       border-radius: 2px;
-      background: linear-gradient(90deg, var(--clr-electric-indigo), var(--clr-electric-purple));
+      background: linear-gradient(90deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.15) 100%);
       margin: 0 auto 36px;
     }
 
+    /* ── Contact row ──────────────────────────────────────── */
     .contact-row {
       display: flex;
       gap: 24px;
@@ -184,75 +222,112 @@
       align-items: center;
       gap: 8px;
       font-size: 0.9rem;
-      color: var(--clr-text-muted);
+      color: rgba(255, 255, 255, 0.78);
       text-decoration: none;
-      transition: color 0.3s ease;
+      transition: color 0.2s ease;
     }
-    .contact-item:hover { color: var(--clr-robin-egg); }
-    .contact-item svg { flex-shrink: 0; color: var(--clr-robin-egg); }
+    .contact-item:hover,
+    .contact-item:focus-visible {
+      color: #ffffff;
+      outline: 2px solid rgba(255,255,255,0.5);
+      outline-offset: 4px;
+      border-radius: 2px;
+    }
+    .contact-item svg { flex-shrink: 0; }
 
+    /* ── Social icon button ───────────────────────────────── */
     .social-link {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 40px; height: 40px;
+      width: 42px;
+      height: 42px;
       border-radius: 50%;
-      border: 1px solid var(--clr-border);
-      color: var(--clr-text-muted);
-      transition: all 0.3s ease;
+      border: 1.5px solid rgba(255, 255, 255, 0.30);
+      color: rgba(255, 255, 255, 0.75);
+      background: rgba(255, 255, 255, 0.08);
+      transition: all 0.2s ease;
+      text-decoration: none;
     }
-    .social-link:hover {
-      border-color: var(--clr-purpureus);
-      color: var(--clr-purpureus);
-      background: rgba(175, 43, 191, 0.1);
+    .social-link:hover,
+    .social-link:focus-visible {
+      border-color: rgba(255, 255, 255, 0.85);
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.16);
+      outline: none;
     }
 
+    /* ── Footer note ──────────────────────────────────────── */
     .footer-note {
       position: absolute;
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 0.75rem;
-      color: var(--clr-text-muted);
+      font-size: 0.73rem;
+      color: rgba(255, 255, 255, 0.40);
       z-index: 1;
       white-space: nowrap;
     }
 
+    /* ── Responsive ───────────────────────────────────────── */
     @media (max-width: 480px) {
+      .logo img { width: clamp(160px, 72vw, 260px); }
+      h1 { font-size: 1.7rem; }
       .contact-row { flex-direction: column; align-items: center; gap: 12px; }
-      .logo img { height: 32px; }
     }
   </style>
 </head>
 <body>
 
   <div class="content">
+
+    <!--
+      Logo: secondary (horizontal) variant.
+      The PNG has a white background — CSS filter converts it to pure white
+      so it reads clearly against the brand gradient background.
+    -->
     <div class="logo">
-      <img src="assets/images/logo-secondary.png" alt="Shadow IT" width="600" height="120">
+      <img
+        src="assets/images/logo-secondary.png"
+        alt="Shadow IT"
+        width="340"
+        height="68"
+        fetchpriority="high"
+      >
     </div>
 
     <span class="label-tag">Coming soon</span>
-    <h1><span class="gradient-text">Something new is on the way.</span></h1>
+
+    <h1>Something new is on the&nbsp;way.</h1>
+
     <p class="lead">
-      We're building a better user experience for Australian small businesses. We're looking to reduce business risks, improve business outcomes, and provide genuine, no bullshit help when you need it the most.
+      We're building a better experience for Australian small businesses — reducing risk, improving outcomes, and providing genuine, no-nonsense help when you need it most.
     </p>
 
     <div class="divider" aria-hidden="true"></div>
 
     <div class="contact-row">
       <a href="tel:+61435211051" class="contact-item">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+        </svg>
         +61 435 211 051
       </a>
       <a href="mailto:hello@shadowit.com.au" class="contact-item">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
         hello@shadowit.com.au
       </a>
     </div>
 
-    <a href="https://www.linkedin.com/company/shadowit" target="_blank" rel="noopener" class="social-link" aria-label="Follow us on LinkedIn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+    <a href="https://www.linkedin.com/company/shadowit" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Follow Shadow IT on LinkedIn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+      </svg>
     </a>
+
   </div>
 
   <p class="footer-note">&copy; Shadow IT. All rights reserved.</p>
