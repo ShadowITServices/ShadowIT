@@ -144,7 +144,7 @@
     .content {
       position: relative;
       z-index: 1;
-      max-width: 600px;
+      max-width: 780px;
       width: 100%;
       animation: fadeUp 0.75s ease both;
     }
@@ -206,17 +206,17 @@
     /* ── Heading — gradient fill ──────────────────────────── */
     h1 {
       font-family: var(--font-heading);
-      font-size: clamp(1.9rem, 5vw, 3rem);
+      font-size: clamp(1.4rem, 3.8vw, 2.75rem);
       font-weight: 800;
       line-height: 1.15;
+      white-space: nowrap;
       margin-bottom: 20px;
       letter-spacing: -0.02em;
-      /* Brand gradient text */
       background: var(--grad-brand);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      color: var(--clr-electric-indigo); /* fallback */
+      color: var(--clr-electric-indigo);
     }
 
     /* ── Lead copy ────────────────────────────────────────── */
@@ -322,7 +322,8 @@
     /* ── Responsive ───────────────────────────────────────── */
     @media (max-width: 480px) {
       .logo img { width: clamp(160px, 72vw, 260px); }
-      h1 { font-size: 1.7rem; }
+      h1 { font-size: 1.5rem; white-space: normal; }
+      .content { max-width: 100%; }
       .contact-row { flex-direction: column; align-items: center; gap: 12px; }
     }
   </style>
