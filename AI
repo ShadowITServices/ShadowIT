@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Responsible Use of AI — Shadow IT | Managing the Unseen</title>
+  <meta name="description" content="Shadow IT's commitment to the ethical, transparent, and responsible use of artificial intelligence in delivering IT consulting, managed services, and cybersecurity solutions.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Responsible Use of AI — Shadow IT">
+  <meta property="og:description" content="How Shadow IT uses artificial intelligence responsibly and ethically across our services.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://shadowit.com.au/ai-policy">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- Main stylesheet -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+
+  <!-- ═══════════════════════════════════════════════════════
+       Microsoft Clarity — Async tracking
+       Update the project ID below (data-project-id / the "xxxx" string)
+       when your Clarity project is provisioned.
+       ═══════════════════════════════════════════════════════ -->
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window,document,"clarity","script",
+      "REPLACE_WITH_CLARITY_PROJECT_ID" /* ← your Clarity project ID */
+    );
+  </script>
+  <!-- End Microsoft Clarity -->
+
+  <!-- Page-specific styles for legal/prose content -->
+  <link rel="stylesheet" href="/assets/css/legal.css">
+</head>
+
+<body>
+
+  <!-- ════════════════════════════════════════════════════════
+       HEADER
+       ════════════════════════════════════════════════════════ -->
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a href="/" class="logo" aria-label="Shadow IT homepage">
+        <img src="/assets/images/logo-secondary.png" alt="Shadow IT" class="logo-img" width="200" height="40">
+      </a>
+
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <ul class="nav-list">
+          <li><a href="/#services" class="nav-link">Services</a></li>
+          <li><a href="/#about" class="nav-link">About</a></li>
+          <li><a href="/#resources" class="nav-link">Resources</a></li>
+          <li><a href="/contact" class="nav-link btn-nav">Contact&nbsp;&rarr;</a></li>
+        </ul>
+      </nav>
+
+      <button class="mobile-toggle" aria-label="Open menu" aria-expanded="false" id="mobile-open">
+        <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="22" y2="7"/>
+          <line x1="4" y1="13" x2="22" y2="13"/>
+          <line x1="4" y1="19" x2="22" y2="19"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile overlay & panel -->
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  <div class="mobile-panel" id="mobile-panel">
+    <button class="mobile-close" aria-label="Close menu" id="mobile-close">&times;</button>
+    <ul class="mobile-nav-list">
+      <li><a href="/#services">Services</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#resources">Resources</a></li>
+      <li><a href="/contact" class="btn-primary" style="margin-top:var(--space-sm);text-align:center;">Contact&nbsp;&rarr;</a></li>
+    </ul>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       MAIN CONTENT
+       ════════════════════════════════════════════════════════ -->
+  <main>
+
+    <!-- Legal hero -->
+    <section class="legal-hero">
+      <div class="container">
+        <div class="label-tag"><span>Our Commitment</span></div>
+        <h1>Responsible Use <span class="gradient-text">of AI</span></h1>
+        <span class="legal-effective">Last updated: 1 March 2025</span>
+      </div>
+    </section>
+
+    <!-- Policy body -->
+    <section class="section" style="padding-top:0;">
+      <div class="container legal-content">
+
+        <!-- Table of contents -->
+        <nav class="toc-card" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#our-position">Our position on AI</a></li>
+            <li><a href="#guiding-principles">Guiding principles</a></li>
+            <li><a href="#how-we-use-ai">How we use AI in our services</a></li>
+            <li><a href="#where-we-dont">Where we do not use AI</a></li>
+            <li><a href="#human-oversight">Human oversight and accountability</a></li>
+            <li><a href="#data-and-privacy">Data handling and privacy</a></li>
+            <li><a href="#bias-and-fairness">Bias, fairness, and inclusivity</a></li>
+            <li><a href="#transparency">Transparency and disclosure</a></li>
+            <li><a href="#third-party-tools">Third-party AI tools and vendors</a></li>
+            <li><a href="#security">AI and cybersecurity</a></li>
+            <li><a href="#staff-training">Staff training and competency</a></li>
+            <li><a href="#continuous-improvement">Continuous improvement</a></li>
+            <li><a href="#australian-context">Australian regulatory context</a></li>
+            <li><a href="#client-rights">Your rights and choices</a></li>
+            <li><a href="#contact-us">Contact us</a></li>
+          </ol>
+        </nav>
+
+        <!-- 1 ──────────────────────────────────────────── -->
+        <h2 id="our-position">1. Our position on AI</h2>
+        <p>Shadow IT recognises that artificial intelligence is reshaping the technology landscape. As a managed services provider and cybersecurity consultancy, we work at the intersection of innovation and risk — and we believe AI should be adopted thoughtfully, not recklessly.</p>
+        <p>This page outlines how we approach AI across our business: the tools we use, the boundaries we set, and the commitments we make to our clients. We publish this openly because transparency is one of our core values, and because we believe every business engaging with AI — including ours — should be able to explain exactly how it is being used.</p>
+        <p>Our goal is simple: to harness AI where it genuinely improves outcomes for our clients, while never compromising on the security, privacy, or trust that underpins everything we do.</p>
+
+        <!-- 2 ──────────────────────────────────────────── -->
+        <h2 id="guiding-principles">2. Guiding principles</h2>
+        <p>Our use of AI is governed by the following principles, which align with our brand values of agile partnerships, transparency, and inventive resilience:</p>
+        <ul>
+          <li><strong>Human-first:</strong> AI augments our team's expertise — it does not replace human judgement, especially in decisions that affect client security, data, or business operations.</li>
+          <li><strong>Transparency:</strong> We will always tell you when AI is being used in work we deliver to you. No hidden automation, no undisclosed outputs.</li>
+          <li><strong>Proportionality:</strong> We use AI only where it provides a measurable benefit. We do not adopt AI tools for novelty or marketing appeal.</li>
+          <li><strong>Privacy by design:</strong> Client data is never used to train third-party AI models. We select tools and configure workflows to protect your information at every stage.</li>
+          <li><strong>Accountability:</strong> A qualified human is always responsible for the work we deliver, regardless of whether AI assisted in producing it.</li>
+          <li><strong>Continuous evaluation:</strong> We regularly review the AI tools we use, the risks they introduce, and whether they still meet our standards.</li>
+        </ul>
+
+        <!-- 3 ──────────────────────────────────────────── -->
+        <h2 id="how-we-use-ai">3. How we use AI in our services</h2>
+        <p>We may use AI-assisted tools in the following areas of our operations:</p>
+
+        <h3>3.1 Internal productivity</h3>
+        <p>AI tools may assist our team with drafting documentation, summarising technical research, generating code snippets, or accelerating routine administrative tasks. All outputs are reviewed and refined by our staff before being delivered or actioned.</p>
+
+        <h3>3.2 Cybersecurity and threat detection</h3>
+        <p>Some of the security platforms and monitoring tools we deploy on behalf of clients incorporate machine learning and AI-driven analytics. These tools help identify anomalous behaviour, prioritise alerts, and accelerate incident response. Human analysts always assess and act on findings — automated systems do not make unilateral security decisions on our clients' behalf.</p>
+
+        <h3>3.3 Client communications and content</h3>
+        <p>We may use AI to assist in drafting client-facing materials such as reports, proposals, or educational content. In all cases, the final output is shaped, verified, and approved by a member of our team who takes responsibility for its accuracy.</p>
+
+        <h3>3.4 Service improvement and analytics</h3>
+        <p>We may use anonymised, aggregated data and AI-powered analytics tools to identify patterns that help us improve service delivery, response times, and client outcomes. This analysis never involves personally identifiable client data unless explicitly consented to and described in our <a href="/privacy">Privacy Policy</a>.</p>
+
+        <!-- 4 ──────────────────────────────────────────── -->
+        <h2 id="where-we-dont">4. Where we do not use AI</h2>
+        <p>We have clear boundaries on where AI is not appropriate within our operations:</p>
+        <ul>
+          <li><strong>Final decision-making on security incidents:</strong> Critical security decisions — such as whether to escalate a breach, isolate a system, or notify authorities — are always made by qualified humans.</li>
+          <li><strong>Client-facing advice without review:</strong> We do not send AI-generated recommendations, assessments, or strategic guidance to clients without thorough human review and sign-off.</li>
+          <li><strong>Processing sensitive data through unapproved tools:</strong> Client credentials, financial data, health information, or other sensitive material is never processed through AI tools that lack appropriate security controls and data handling agreements.</li>
+          <li><strong>Automated profiling or scoring of individuals:</strong> We do not use AI to profile, score, or make automated decisions about individuals on behalf of our clients.</li>
+        </ul>
+
+        <!-- 5 ──────────────────────────────────────────── -->
+        <h2 id="human-oversight">5. Human oversight and accountability</h2>
+        <p>Every piece of work delivered by Shadow IT — whether AI-assisted or not — has a named team member accountable for its quality and accuracy. AI is a tool in our workflow, not an autonomous agent.</p>
+        <p>Our approach to human oversight includes:</p>
+        <ul>
+          <li>Mandatory human review of all AI-generated outputs before they reach a client or are actioned in a production environment</li>
+          <li>Clear internal escalation procedures when AI tools produce unexpected, uncertain, or potentially harmful outputs</li>
+          <li>Regular audits of AI-assisted workflows to ensure quality standards are maintained</li>
+          <li>Documentation of where and how AI was used in significant project deliverables, available to clients on request</li>
+        </ul>
+
+        <!-- 6 ──────────────────────────────────────────── -->
+        <h2 id="data-and-privacy">6. Data handling and privacy</h2>
+        <p>Our use of AI is subject to the same rigorous data protection standards described in our <a href="/privacy">Privacy Policy</a>. In addition, we commit to the following AI-specific practices:</p>
+        <ul>
+          <li>We do not upload client data to public or consumer-grade AI services (e.g. free-tier chatbots) without explicit client consent and appropriate data handling agreements</li>
+          <li>Where we use AI platforms that process data externally, we select providers that offer enterprise-grade data protection, do not use customer inputs for model training, and maintain compliance with relevant privacy legislation</li>
+          <li>We maintain an internal register of approved AI tools, including their data handling policies and any sub-processors involved</li>
+          <li>Client data used in AI-assisted analysis is minimised to what is strictly necessary and is de-identified wherever feasible</li>
+        </ul>
+
+        <!-- 7 ──────────────────────────────────────────── -->
+        <h2 id="bias-and-fairness">7. Bias, fairness, and inclusivity</h2>
+        <p>We recognise that AI systems can reflect and amplify biases present in their training data. To mitigate this risk within our operations:</p>
+        <ul>
+          <li>We critically evaluate AI outputs for accuracy, fairness, and appropriateness before use</li>
+          <li>We do not rely on AI for decisions that could disproportionately affect individuals or groups based on protected characteristics</li>
+          <li>We prioritise AI tools from vendors that publicly document their efforts to address bias in model development</li>
+          <li>We encourage our team to flag and report any instances where AI outputs appear biased, inaccurate, or culturally insensitive</li>
+        </ul>
+
+        <!-- 8 ──────────────────────────────────────────── -->
+        <h2 id="transparency">8. Transparency and disclosure</h2>
+        <p>We believe clients deserve to know when AI is involved in the services they receive. Our transparency commitments include:</p>
+        <ul>
+          <li>Disclosing to clients when AI tools have played a material role in producing deliverables, reports, or recommendations</li>
+          <li>Making this policy publicly available and keeping it up to date as our practices evolve</li>
+          <li>Answering client questions about our AI usage openly and without deflection</li>
+          <li>Never misrepresenting AI-generated work as entirely human-produced</li>
+        </ul>
+
+        <!-- 9 ──────────────────────────────────────────── -->
+        <h2 id="third-party-tools">9. Third-party AI tools and vendors</h2>
+        <p>We carefully evaluate any third-party AI tool before incorporating it into our workflows. Our assessment criteria include:</p>
+        <ul>
+          <li><strong>Data handling:</strong> Does the vendor retain, log, or use input data to train models? We require clear contractual assurances that client data is not used for model improvement.</li>
+          <li><strong>Security posture:</strong> Does the platform meet enterprise security standards, including encryption in transit and at rest, access controls, and incident response processes?</li>
+          <li><strong>Compliance:</strong> Is the vendor compliant with relevant Australian and international privacy legislation?</li>
+          <li><strong>Transparency:</strong> Does the vendor provide clear documentation about how their AI models work, their limitations, and known risks?</li>
+          <li><strong>Data residency:</strong> Where is data processed and stored? We prefer providers that offer Australian or geographically appropriate data residency options where available.</li>
+        </ul>
+        <p>We maintain an internal register of approved AI tools and review it at least quarterly. Tools that fail to meet our standards are removed from approved use.</p>
+
+        <!-- 10 ─────────────────────────────────────────── -->
+        <h2 id="security">10. AI and cybersecurity</h2>
+        <p>As a cybersecurity-focused consultancy, we are acutely aware that AI introduces both opportunities and risks in the security landscape. Our position is:</p>
+        <ul>
+          <li><strong>Defensive AI:</strong> We embrace AI-enhanced security tools that help us detect threats faster, analyse patterns at scale, and protect client environments more effectively. These tools complement — never replace — our human security analysts.</li>
+          <li><strong>Adversarial awareness:</strong> We recognise that threat actors are also leveraging AI. We incorporate AI-driven threat intelligence into our security assessments and advise clients on emerging AI-related risks such as deepfakes, AI-assisted phishing, and automated vulnerability exploitation.</li>
+          <li><strong>Secure AI adoption guidance:</strong> When clients seek to adopt AI tools within their own organisations, we provide guidance on doing so securely — including data loss prevention, access controls, acceptable use policies, and vendor risk assessments.</li>
+        </ul>
+
+        <!-- 11 ─────────────────────────────────────────── -->
+        <h2 id="staff-training">11. Staff training and competency</h2>
+        <p>We invest in ensuring our team understands both the capabilities and limitations of AI:</p>
+        <ul>
+          <li>All team members who use AI tools in their work receive training on responsible use, data handling requirements, and the boundaries set by this policy</li>
+          <li>We maintain internal guidelines on which AI tools are approved, how they may be used, and what types of data may be processed through them</li>
+          <li>Staff are encouraged to stay informed about developments in AI ethics, regulation, and best practice through ongoing professional development</li>
+        </ul>
+
+        <!-- 12 ─────────────────────────────────────────── -->
+        <h2 id="continuous-improvement">12. Continuous improvement</h2>
+        <p>AI technology and the regulatory landscape around it are evolving rapidly. We commit to:</p>
+        <ul>
+          <li>Reviewing this policy at least annually, or sooner if significant changes occur in our AI usage, the tools we rely on, or relevant legislation</li>
+          <li>Monitoring developments in Australian AI governance, including any frameworks or mandatory standards introduced by the Australian Government</li>
+          <li>Seeking feedback from clients on how our use of AI affects their experience and adjusting our practices accordingly</li>
+          <li>Participating in industry discussions on responsible AI adoption within the MSP and cybersecurity community</li>
+        </ul>
+
+        <!-- 13 ─────────────────────────────────────────── -->
+        <h2 id="australian-context">13. Australian regulatory context</h2>
+        <p>As at the date of this policy, Australia does not have standalone AI-specific legislation. However, our use of AI is governed by existing laws including:</p>
+        <ul>
+          <li>The <strong>Australian Privacy Act 1988</strong> (Cth) and Australian Privacy Principles, which apply to how personal information is collected and handled — including by AI systems</li>
+          <li>The <strong>Australian Consumer Law</strong>, which prohibits misleading or deceptive conduct — relevant to how AI outputs are represented to clients</li>
+          <li>Sector-specific obligations that may apply to our clients (e.g. healthcare, financial services, government), which we factor into how AI is used when delivering services in those contexts</li>
+        </ul>
+        <p>We actively monitor the Australian Government's evolving approach to AI governance, including the voluntary AI Ethics Framework and any future mandatory guardrails, and will update our practices as the regulatory environment develops.</p>
+
+        <!-- 14 ─────────────────────────────────────────── -->
+        <h2 id="client-rights">14. Your rights and choices</h2>
+        <p>As a Shadow IT client, you have the right to:</p>
+        <ul>
+          <li><strong>Ask</strong> whether AI was used in any work we have delivered to you</li>
+          <li><strong>Request</strong> that specific deliverables be produced without AI assistance, where feasible</li>
+          <li><strong>Understand</strong> which AI tools were involved and how your data was handled during the process</li>
+          <li><strong>Opt out</strong> of AI-assisted service delivery for your account, subject to discussion about any impact on scope or timelines</li>
+          <li><strong>Raise concerns</strong> about AI-related practices at any time — we welcome the conversation</li>
+        </ul>
+        <p>We will never penalise a client for exercising these rights. If you prefer a fully human-delivered engagement, we are happy to accommodate that wherever possible.</p>
+
+        <!-- 15 ─────────────────────────────────────────── -->
+        <h2 id="contact-us">15. Contact us</h2>
+        <p>If you have any questions about how Shadow IT uses artificial intelligence, or if you would like to discuss AI practices as they relate to your engagement with us, please reach out:</p>
+        <p>
+          <strong>Shadow IT</strong><br>
+          Regional NSW, Australia<br>
+          Email: <a href="mailto:hello@shadowit.com.au">hello@shadowit.com.au</a><br>
+          Web: <a href="https://shadowit.com.au/contact">shadowit.com.au/contact</a>
+        </p>
+        <p>We are always happy to talk through our approach in more detail. Responsible AI adoption is an ongoing journey, and we value open dialogue with our clients and partners.</p>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         CTA SECTION
+         ════════════════════════════════════════════════════ -->
+    <section class="cta-section">
+      <div class="cta-glow"></div>
+      <div class="container">
+        <div class="label-tag"><span>Let's talk</span></div>
+        <h2>Want to know more about our AI practices?</h2>
+        <p>We believe in open conversations about how technology is used. Reach out any time.</p>
+        <div class="cta-btns">
+          <a href="/contact" class="btn-primary">Contact us&nbsp;&rarr;</a>
+          <a href="/" class="btn-ghost">Back to home</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════
+       FOOTER
+       ════════════════════════════════════════════════════════ -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+
+        <!-- Brand column -->
+        <div class="footer-brand">
+          <a href="/" aria-label="Shadow IT — Home">
+            <img src="/assets/images/ShadowIT__Secondary_Logo__Full_Colour__RGB01.png"
+                 alt="Shadow IT logo"
+                 class="logo-img"
+                 width="180" height="36"
+                 loading="lazy">
+          </a>
+          <p>Managing the unseen. Advanced IT solutions, cybersecurity, and consulting for Australian businesses.</p>
+        </div>
+
+        <!-- Services -->
+        <div class="footer-col">
+          <h3>Services</h3>
+          <a href="/#services">Managed IT</a>
+          <a href="/#services">Cloud Solutions</a>
+          <a href="/#services">Cybersecurity</a>
+          <a href="/#services">Consulting</a>
+        </div>
+
+        <!-- Company -->
+        <div class="footer-col">
+          <h3>Company</h3>
+          <a href="/#about">About</a>
+          <a href="/#resources">Resources</a>
+          <a href="/contact">Contact</a>
+        </div>
+
+        <!-- Legal -->
+        <div class="footer-col">
+          <h3>Legal</h3>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+          <a href="/ai-policy" aria-current="page">Responsible AI</a>
+          <p class="footer-note">Regional NSW, Australia</p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>&copy; 2025 Shadow IT. All rights reserved.</span>
+        <div class="footer-social">
+          <a href="https://linkedin.com" aria-label="LinkedIn" rel="noopener noreferrer" target="_blank">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ════════════════════════════════════════════════════════
+       SCRIPTS
+       ════════════════════════════════════════════════════════ -->
+  <script>
+    /* Header scroll shadow */
+    const header = document.getElementById('site-header');
+    window.addEventListener('scroll', () => {
+      header.classList.toggle('scrolled', window.scrollY > 10);
+    }, { passive: true });
+
+    /* Mobile nav */
+    const openBtn   = document.getElementById('mobile-open');
+    const closeBtn  = document.getElementById('mobile-close');
+    const overlay   = document.getElementById('mobile-overlay');
+    const panel     = document.getElementById('mobile-panel');
+
+    function openMobile()  { overlay.classList.add('open'); panel.classList.add('open'); openBtn.setAttribute('aria-expanded', 'true'); }
+    function closeMobile() { overlay.classList.remove('open'); panel.classList.remove('open'); openBtn.setAttribute('aria-expanded', 'false'); }
+
+    openBtn.addEventListener('click', openMobile);
+    closeBtn.addEventListener('click', closeMobile);
+    overlay.addEventListener('click', closeMobile);
+
+    /* Close mobile nav on link click */
+    panel.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMobile));
+
+    /* Smooth scroll for TOC links */
+    document.querySelectorAll('.toc-card a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          const offset = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 68;
+          window.scrollTo({ top: target.offsetTop - offset - 16, behavior: 'smooth' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
