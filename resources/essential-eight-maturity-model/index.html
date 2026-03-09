@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Essential Eight Maturity Model Explained — Shadow IT Blog</title>
+  <meta name="description" content="The ACSC Essential Eight framework explained for Australian SMBs. Understand maturity levels, build a roadmap, and strengthen your cyber defence posture.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="The Essential Eight Maturity Model Explained for Australian Businesses">
+  <meta property="og:description" content="A practical breakdown of the ACSC Essential Eight mitigation strategies and maturity levels.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://shadowit.com.au/blog/essential-eight-maturity-model/">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <link rel="stylesheet" href="/assets/css/blog.css">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Microsoft Clarity — Analytics
+       ═══════════════════════════════════════════════════════════ -->
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window,document,"clarity","script","YOUR_CLARITY_PROJECT_ID");
+  </script>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+</head>
+<body>
+
+  <!-- Reading progress bar -->
+  <div class="reading-progress" id="reading-progress"></div>
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a href="/" class="logo" aria-label="Shadow IT home">
+        <img src="/assets/images/logo.png" alt="Shadow IT" class="logo-img">
+      </a>
+      <nav class="desktop-nav" aria-label="Main navigation">
+        <ul class="nav-list">
+          <li><a href="/" class="nav-link">Home</a></li>
+          <li><a href="/services/" class="nav-link">Services</a></li>
+          <li><a href="/about/" class="nav-link">About</a></li>
+          <li><a href="/blog/" class="nav-link active">Blog</a></li>
+          <li><a href="/contact/" class="btn-nav nav-link">Contact</a></li>
+        </ul>
+      </nav>
+      <button class="mobile-toggle" aria-label="Open menu" id="menu-toggle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile nav -->
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  <aside class="mobile-panel" id="mobile-panel">
+    <button class="mobile-close" id="mobile-close">&times;</button>
+    <nav>
+      <ul class="mobile-nav-list">
+        <li><a href="/">Home</a></li>
+        <li><a href="/services/">Services</a></li>
+        <li><a href="/about/">About</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/contact/" class="btn-primary" style="margin-top:var(--space-sm);text-align:center;">Contact</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main>
+    <!-- ── Post Hero ─────────────────────────────────────────── -->
+    <section class="post-single-hero">
+      <div class="hero-bg-glow"></div>
+      <div class="container post-hero-content">
+        <a href="/blog/" class="label-tag" style="margin-bottom: var(--space-md);"><span>&larr; Back to Blog</span></a>
+        <span class="post-tag">Cybersecurity</span>
+        <h1>The Essential Eight Maturity Model Explained for Australian Businesses</h1>
+        <div class="post-meta" style="justify-content: center;">
+          <span class="post-meta-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            12 February 2026
+          </span>
+          <span class="post-meta-divider"></span>
+          <span class="post-meta-item">8 min read</span>
+          <span class="post-meta-divider"></span>
+          <span class="post-meta-item">Last updated: 10 Mar 2026</span>
+        </div>
+        <div class="post-author-bar">
+          <div class="post-author-avatar">BD</div>
+          <div class="post-author-info">
+            <strong>Beau Dean</strong>
+            <span>IT Consultant, Shadow IT</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cover image -->
+    <div class="container">
+      <div class="post-single-cover">
+        <img src="/assets/images/icon-monitor-lock.png" alt="" width="120" height="120" loading="lazy">
+      </div>
+    </div>
+
+    <!-- ── Post body + sidebar ───────────────────────────────── -->
+    <section class="section" style="padding-top: 0;">
+      <div class="container">
+        <div class="post-single-layout">
+
+          <!-- Article content -->
+          <article class="post-content" id="post-content">
+
+            <h2 id="what-is-essential-eight">What Is the Essential Eight?</h2>
+            <p>The Essential Eight is a set of baseline mitigation strategies published by the Australian Cyber Security Centre (ACSC). Originally designed for government agencies, it has become the de facto cybersecurity framework for organisations of all sizes across Australia — particularly those handling sensitive client data or operating under regulatory requirements.</p>
+            <p>Rather than trying to address every possible threat, the Essential Eight focuses on the eight most effective controls that prevent the vast majority of cyber intrusions. Think of it as the 80/20 rule applied to cybersecurity: a concentrated set of actions that deliver disproportionate protection.</p>
+
+            <div class="callout-box">
+              <h4>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                Key Takeaway
+              </h4>
+              <p>The Essential Eight isn't a compliance checkbox — it's a practical, prioritised approach to reducing your organisation's attack surface. Most Australian SMBs should be aiming for at least Maturity Level One across all eight strategies.</p>
+            </div>
+
+            <h2 id="eight-strategies">The Eight Mitigation Strategies</h2>
+            <p>Each strategy addresses a specific vector that attackers commonly exploit. Together, they form a layered defence that's far more resilient than any single tool or product.</p>
+
+            <h3 id="application-control">1. Application Control</h3>
+            <p>Only approved applications should be allowed to execute on your systems. This prevents malware, ransomware, and unauthorised software from running — even if an employee accidentally downloads something malicious. At its core, application control works on a whitelist model: if it's not on the approved list, it doesn't run.</p>
+
+            <h3 id="patch-applications">2. Patch Applications</h3>
+            <p>Known vulnerabilities in applications like web browsers, Microsoft Office, PDF readers, and Java are among the most exploited attack vectors. Patching these within 48 hours of a critical vulnerability being identified (or within two weeks for non-critical updates) dramatically reduces your exposure.</p>
+
+            <h3 id="configure-macros">3. Configure Microsoft Office Macro Settings</h3>
+            <p>Macros remain a popular delivery mechanism for malware. The Essential Eight recommends blocking macros from the internet, only allowing vetted macros in trusted locations, and ensuring users can't simply click "Enable Content" on an untrusted document.</p>
+
+            <h3 id="user-hardening">4. User Application Hardening</h3>
+            <p>This involves disabling unnecessary features in everyday applications — things like Flash, Java in browsers, and advertisement blocking. The fewer features exposed, the smaller the attack surface available to threat actors.</p>
+
+            <h3 id="restrict-admin">5. Restrict Administrative Privileges</h3>
+            <p>Admin accounts are high-value targets. The Essential Eight calls for limiting who has administrative access, using separate accounts for admin tasks, and regularly revalidating that those privileges are still needed. This is one of the most impactful controls you can implement.</p>
+
+            <h3 id="patch-os">6. Patch Operating Systems</h3>
+            <p>Just as applications need patching, so do the operating systems they run on. Unpatched Windows, macOS, or Linux systems are sitting targets. The ACSC recommends patching critical OS vulnerabilities within 48 hours and replacing end-of-life operating systems entirely.</p>
+
+            <h3 id="mfa">7. Multi-Factor Authentication (MFA)</h3>
+            <p>Passwords alone aren't enough. MFA adds a second verification step — typically a code from an authenticator app or a hardware token — that makes stolen credentials far less useful to an attacker. The Essential Eight recommends MFA for all users accessing important data and systems, not just administrators.</p>
+
+            <h3 id="backups">8. Regular Backups</h3>
+            <p>When prevention fails, recovery matters. Regular, tested backups of critical data and system configurations ensure that a ransomware attack or hardware failure doesn't become a business-ending event. The key word here is <em>tested</em> — backups that haven't been verified through a recovery drill are backups you can't trust.</p>
+
+            <h2 id="maturity-levels">Understanding Maturity Levels</h2>
+            <p>The ACSC defines four maturity levels (Zero through Three) for each of the eight strategies. These levels reflect how thoroughly each control has been implemented.</p>
+
+            <blockquote>
+              <p>Maturity Level Zero means the strategy hasn't been implemented at all, or implementation is so incomplete that it's essentially ineffective. This is where many organisations start — and where the risk is highest.</p>
+            </blockquote>
+
+            <p><strong>Maturity Level One</strong> is the baseline. It represents a partial implementation that addresses the most common attack techniques. For most Australian SMBs, reaching Level One across all eight strategies is the first realistic and high-impact goal.</p>
+
+            <p><strong>Maturity Level Two</strong> builds on that foundation, addressing more sophisticated adversaries and tightening controls. It's where organisations with higher risk profiles — such as those in finance, healthcare, or government supply chains — should aim.</p>
+
+            <p><strong>Maturity Level Three</strong> represents comprehensive implementation designed to resist advanced persistent threats. It's the target for critical infrastructure and high-security environments.</p>
+
+            <h2 id="getting-started">Getting Started: A Practical Roadmap</h2>
+            <p>Reaching even Maturity Level One doesn't happen overnight, but it doesn't have to be overwhelming either. Here's a sensible approach for an SMB with limited internal IT resources:</p>
+
+            <ol>
+              <li><strong>Assess your current state.</strong> Map where you sit against each of the eight strategies. A gap analysis gives you a clear picture of your starting point.</li>
+              <li><strong>Prioritise quick wins.</strong> MFA, regular backups, and restricting admin privileges often deliver the fastest security improvement with the least disruption.</li>
+              <li><strong>Address patching.</strong> Set up automated patching for both applications and operating systems. This is ongoing work, not a one-off project.</li>
+              <li><strong>Tackle the harder controls.</strong> Application control and macro hardening require more planning but offer significant protection against malware and ransomware.</li>
+              <li><strong>Document and review.</strong> Cyber security posture isn't static. Schedule quarterly reviews to ensure controls remain effective as your environment changes.</li>
+            </ol>
+
+            <div class="callout-box">
+              <h4>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                How Shadow IT Helps
+              </h4>
+              <p>We work with Australian SMBs to assess their Essential Eight posture, build a practical remediation roadmap, and implement controls in a way that doesn't disrupt day-to-day operations. If you're unsure where to start, our free security posture review is designed exactly for that.</p>
+            </div>
+
+            <h2 id="conclusion">Conclusion</h2>
+            <p>The Essential Eight isn't about perfection — it's about making meaningful, measurable progress toward reducing your organisation's cyber risk. For most Australian businesses, reaching Maturity Level One is both achievable and transformative. The threat landscape isn't slowing down, but with the right framework and a trusted partner, your defences don't have to lag behind.</p>
+
+            <!-- Post footer -->
+            <div class="post-footer-bar">
+              <div class="post-tags">
+                <span class="tag-pill">Essential Eight</span>
+                <span class="tag-pill">ACSC</span>
+                <span class="tag-pill">Compliance</span>
+                <span class="tag-pill">SMB</span>
+              </div>
+              <div class="post-share">
+                Share
+                <button class="share-btn" aria-label="Share on LinkedIn">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+                </button>
+                <button class="share-btn" aria-label="Share via email">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                </button>
+                <button class="share-btn" aria-label="Copy link" id="copy-link-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </button>
+              </div>
+            </div>
+
+          </article>
+
+          <!-- Sidebar: TOC + related -->
+          <aside>
+            <div class="sidebar-widget toc-widget">
+              <h3>In This Article</h3>
+              <nav class="toc-list" aria-label="Table of contents">
+                <a href="#what-is-essential-eight" class="toc-link">What Is the Essential Eight?</a>
+                <a href="#eight-strategies" class="toc-link">The Eight Mitigation Strategies</a>
+                <a href="#application-control" class="toc-link toc-h3">Application Control</a>
+                <a href="#patch-applications" class="toc-link toc-h3">Patch Applications</a>
+                <a href="#configure-macros" class="toc-link toc-h3">Office Macro Settings</a>
+                <a href="#user-hardening" class="toc-link toc-h3">User App Hardening</a>
+                <a href="#restrict-admin" class="toc-link toc-h3">Restrict Admin Privileges</a>
+                <a href="#patch-os" class="toc-link toc-h3">Patch Operating Systems</a>
+                <a href="#mfa" class="toc-link toc-h3">Multi-Factor Authentication</a>
+                <a href="#backups" class="toc-link toc-h3">Regular Backups</a>
+                <a href="#maturity-levels" class="toc-link">Understanding Maturity Levels</a>
+                <a href="#getting-started" class="toc-link">Getting Started: A Roadmap</a>
+                <a href="#conclusion" class="toc-link">Conclusion</a>
+              </nav>
+            </div>
+
+            <!-- Newsletter -->
+            <div class="sidebar-widget newsletter-widget" style="margin-top: var(--space-md);">
+              <h3>Stay Informed</h3>
+              <p>Monthly cybersecurity tips for Australian SMBs. No jargon.</p>
+              <div class="newsletter-form">
+                <input type="email" class="newsletter-input" placeholder="you@company.com.au" aria-label="Email for newsletter">
+                <button class="newsletter-btn" type="button">Subscribe
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+            </div>
+          </aside>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Related posts ─────────────────────────────────────── -->
+    <section class="related-posts section" style="background: #fff;">
+      <div class="container">
+        <div class="section-header-center">
+          <div class="label-tag"><span>Keep Reading</span></div>
+          <h2>Related Articles</h2>
+        </div>
+        <div class="related-grid">
+          <article class="post-card">
+            <div class="post-card-thumb">
+              <img src="/assets/images/icon-bug.png" alt="" width="64" height="64" loading="lazy">
+            </div>
+            <div class="post-card-body">
+              <span class="post-tag">Cybersecurity</span>
+              <h3><a href="/blog/phishing-awareness-training/">Phishing Attacks Are Getting Smarter — How to Train Your Team</a></h3>
+              <p class="post-excerpt">AI-driven phishing is harder to spot than ever. We cover the latest tactics and awareness training that works.</p>
+              <a href="/blog/phishing-awareness-training/" class="post-read-more">
+                Read more
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </a>
+            </div>
+          </article>
+          <article class="post-card">
+            <div class="post-card-thumb">
+              <img src="/assets/images/icon-folder-lock.png" alt="" width="64" height="64" loading="lazy">
+            </div>
+            <div class="post-card-body">
+              <span class="post-tag">Cybersecurity</span>
+              <h3><a href="/blog/backup-disaster-recovery/">Your Backup &amp; DR Plan: Don't Wait for Ransomware</a></h3>
+              <p class="post-excerpt">The 3-2-1 backup strategy and why testing your recovery plan is non-negotiable.</p>
+              <a href="/blog/backup-disaster-recovery/" class="post-read-more">
+                Read more
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </a>
+            </div>
+          </article>
+          <article class="post-card">
+            <div class="post-card-thumb">
+              <img src="/assets/images/icon-phone-lock.png" alt="" width="64" height="64" loading="lazy">
+            </div>
+            <div class="post-card-body">
+              <span class="post-tag">Strategy</span>
+              <h3><a href="/blog/remote-work-security-checklist/">Remote Work Security Checklist for Hybrid Teams</a></h3>
+              <p class="post-excerpt">Keep devices, data, and identities secure across every location.</p>
+              <a href="/blog/remote-work-security-checklist/" class="post-read-more">
+                Read more
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CTA ───────────────────────────────────────────────── -->
+    <section class="cta-section">
+      <div class="cta-glow"></div>
+      <div class="container">
+        <div class="label-tag"><span>Free Security Review</span></div>
+        <h2>Not Sure Where You Stand?</h2>
+        <p>Book a complimentary Essential Eight posture review with our team and get a clear picture of your current cyber resilience.</p>
+        <div class="cta-btns">
+          <a href="/contact/" class="btn-primary">Book Your Review</a>
+          <a href="/services/" class="btn-ghost">Our Services</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="/" class="logo"><img src="/assets/images/logo.png" alt="Shadow IT" class="logo-img"></a>
+          <p>Managing the unseen. Cybersecurity and managed IT services for proactive Australian businesses.</p>
+        </div>
+        <div class="footer-col">
+          <h3>Services</h3>
+          <a href="/services/">Managed IT</a>
+          <a href="/services/">Cybersecurity</a>
+          <a href="/services/">Cloud Solutions</a>
+          <a href="/services/">Consulting</a>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <a href="/about/">About Us</a>
+          <a href="/blog/">Blog</a>
+          <a href="/contact/">Contact</a>
+        </div>
+        <div class="footer-col">
+          <h3>Contact</h3>
+          <a href="mailto:hello@shadowit.com.au">hello@shadowit.com.au</a>
+          <a href="tel:+61000000000">1300 SHADOW</a>
+          <span class="footer-note">Regional NSW, Australia</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2026 Shadow IT. All rights reserved.</span>
+        <div class="footer-social">
+          <a href="#" aria-label="LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/assets/js/blog.js" defer></script>
+</body>
+</html>

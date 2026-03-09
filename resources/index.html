@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blog &mdash; Shadow IT | Cybersecurity &amp; Managed IT Insights</title>
+  <meta name="description" content="Expert insights on cybersecurity, cloud security, managed IT, and digital strategy for Australian SMBs. Stay informed with Shadow IT.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Blog — Shadow IT">
+  <meta property="og:description" content="Expert insights on cybersecurity, cloud, and managed IT for Australian SMBs.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://shadowit.com.au/blog/">
+  <meta property="og:site_name" content="Shadow IT">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@600;700;800&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- Styles: main site + blog extension -->
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <link rel="stylesheet" href="/assets/css/blog.css">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Microsoft Clarity — Analytics
+       Update the project ID below (data-project-id / clarity key)
+       Docs: https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-setup
+       ═══════════════════════════════════════════════════════════ -->
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window,document,"clarity","script","YOUR_CLARITY_PROJECT_ID");
+    /* ▲ Replace YOUR_CLARITY_PROJECT_ID with your real Clarity key */
+  </script>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a href="/" class="logo" aria-label="Shadow IT home">
+        <img src="/assets/images/logo.png" alt="Shadow IT" class="logo-img">
+      </a>
+
+      <nav class="desktop-nav" aria-label="Main navigation">
+        <ul class="nav-list">
+          <li><a href="/" class="nav-link">Home</a></li>
+          <li><a href="/services/" class="nav-link">Services</a></li>
+          <li><a href="/about/" class="nav-link">About</a></li>
+          <li><a href="/blog/" class="nav-link active">Blog</a></li>
+          <li><a href="/contact/" class="btn-nav nav-link">Contact</a></li>
+        </ul>
+      </nav>
+
+      <button class="mobile-toggle" aria-label="Open menu" aria-expanded="false" id="menu-toggle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile nav overlay -->
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  <aside class="mobile-panel" id="mobile-panel" aria-label="Mobile navigation">
+    <button class="mobile-close" aria-label="Close menu" id="mobile-close">&times;</button>
+    <nav>
+      <ul class="mobile-nav-list">
+        <li><a href="/">Home</a></li>
+        <li><a href="/services/">Services</a></li>
+        <li><a href="/about/">About</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/contact/" class="btn-primary" style="margin-top: var(--space-sm); text-align:center;">Contact</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main>
+    <!-- ── Blog Hero ───────────────────────────────────────── -->
+    <section class="blog-hero">
+      <div class="hero-bg-glow"></div>
+      <div class="container blog-hero-content">
+        <div class="label-tag"><span>Insights &amp; Resources</span></div>
+        <h1>The Shadow IT <span class="gradient-text">Knowledge Base</span></h1>
+        <p class="hero-lead">Practical advice on cybersecurity, cloud strategy, and managed IT — written for Australian business owners who want clarity, not jargon.</p>
+
+        <!-- Search -->
+        <div class="blog-search-wrap">
+          <svg class="blog-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="search" class="blog-search" id="blog-search" placeholder="Search articles..." aria-label="Search blog articles">
+        </div>
+
+        <!-- Categories -->
+        <div class="blog-categories" id="category-filters">
+          <button class="cat-btn active" data-category="all">All</button>
+          <button class="cat-btn" data-category="cybersecurity">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Cybersecurity
+          </button>
+          <button class="cat-btn" data-category="cloud">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Cloud
+          </button>
+          <button class="cat-btn" data-category="managed-it">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            Managed IT
+          </button>
+          <button class="cat-btn" data-category="strategy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Strategy
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Blog content ──────────────────────────────────────── -->
+    <section class="section" style="padding-top: 0;">
+      <div class="container">
+        <div class="blog-layout">
+          <div class="blog-main">
+
+            <!-- Featured post -->
+            <article class="featured-post reveal" data-category="cybersecurity" data-title="essential eight maturity model explained australian businesses">
+              <div class="featured-thumb">
+                <span class="featured-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  Featured
+                </span>
+                <img src="/assets/images/icon-monitor-lock.png" alt="" width="100" height="100" loading="lazy">
+              </div>
+              <div class="featured-body">
+                <div class="post-meta">
+                  <span class="post-tag">Cybersecurity</span>
+                  <span class="post-meta-divider"></span>
+                  <span class="post-meta-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    12 Feb 2026
+                  </span>
+                  <span class="post-meta-divider"></span>
+                  <span class="post-meta-item">8 min read</span>
+                </div>
+                <h2><a href="/blog/essential-eight-maturity-model/">The Essential Eight Maturity Model Explained for Australian Businesses</a></h2>
+                <p class="post-excerpt">The ACSC's Essential Eight framework remains the gold standard for cyber defence in Australia. We break down each mitigation strategy, what maturity levels mean in practice, and how to build a realistic roadmap for your organisation.</p>
+                <a href="/blog/essential-eight-maturity-model/" class="post-read-more">
+                  Read article
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </a>
+              </div>
+            </article>
+
+            <!-- Post grid -->
+            <div class="posts-grid" id="posts-grid">
+
+              <!-- Post 1 -->
+              <article class="post-card reveal" data-category="cloud" data-title="migrating microsoft 365 without the downtime practical guide">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-cloud-security.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Cloud</span>
+                  <h3><a href="/blog/microsoft-365-migration-guide/">Migrating to Microsoft 365 Without the Downtime: A Practical Guide</a></h3>
+                  <p class="post-excerpt">Planning a Microsoft 365 migration? Here's how to avoid the common pitfalls that lead to lost emails, broken workflows, and frustrated staff.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      5 Feb 2026
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">6 min</span>
+                  </div>
+                  <a href="/blog/microsoft-365-migration-guide/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 2 -->
+              <article class="post-card reveal" style="--delay: 0.1s" data-category="cybersecurity" data-title="phishing attacks getting smarter how train your team">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-bug.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Cybersecurity</span>
+                  <h3><a href="/blog/phishing-awareness-training/">Phishing Attacks Are Getting Smarter — How to Train Your Team</a></h3>
+                  <p class="post-excerpt">AI-driven phishing is harder to spot than ever. We cover the latest tactics and the awareness training that actually works for regional teams.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      28 Jan 2026
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">5 min</span>
+                  </div>
+                  <a href="/blog/phishing-awareness-training/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 3 -->
+              <article class="post-card reveal" style="--delay: 0.2s" data-category="managed-it" data-title="what expect from managed service provider smb guide">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-servers.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Managed IT</span>
+                  <h3><a href="/blog/what-to-expect-from-msp/">What to Expect from a Managed Service Provider: An SMB Guide</a></h3>
+                  <p class="post-excerpt">Not all MSPs are equal. Here's what to look for, what questions to ask, and how to tell if your provider is genuinely proactive or just reactive.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      20 Jan 2026
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">7 min</span>
+                  </div>
+                  <a href="/blog/what-to-expect-from-msp/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 4 -->
+              <article class="post-card reveal" style="--delay: 0.3s" data-category="strategy" data-title="building it roadmap small business budget priorities">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-rocket.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Strategy</span>
+                  <h3><a href="/blog/it-roadmap-small-business/">Building an IT Roadmap for Your Small Business on a Real Budget</a></h3>
+                  <p class="post-excerpt">Technology investment doesn't have to be all-or-nothing. Learn how to prioritise upgrades, align spending with goals, and plan for the next 12 months.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      14 Jan 2026
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">6 min</span>
+                  </div>
+                  <a href="/blog/it-roadmap-small-business/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 5 -->
+              <article class="post-card reveal" data-category="cybersecurity" data-title="backup disaster recovery plan dont wait ransomware">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-folder-lock.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Cybersecurity</span>
+                  <h3><a href="/blog/backup-disaster-recovery/">Your Backup &amp; Disaster Recovery Plan: Don't Wait for Ransomware</a></h3>
+                  <p class="post-excerpt">Ransomware attacks are rising across regional Australia. We explain the 3-2-1 backup strategy and why testing your recovery plan is non-negotiable.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      6 Jan 2026
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">5 min</span>
+                  </div>
+                  <a href="/blog/backup-disaster-recovery/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 6 -->
+              <article class="post-card reveal" style="--delay: 0.1s" data-category="cloud" data-title="cloud cost blowout control azure spending">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-cloud-lock.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Cloud</span>
+                  <h3><a href="/blog/cloud-cost-management/">Cloud Cost Blowout? How to Control Your Azure Spending</a></h3>
+                  <p class="post-excerpt">Unmanaged cloud environments can drain budgets fast. Here's how to right-size resources, set alerts, and avoid the most common billing surprises.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      28 Dec 2025
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">5 min</span>
+                  </div>
+                  <a href="/blog/cloud-cost-management/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 7 -->
+              <article class="post-card reveal" style="--delay: 0.2s" data-category="managed-it" data-title="network monitoring why matters before things break">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-network.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Managed IT</span>
+                  <h3><a href="/blog/network-monitoring-matters/">Network Monitoring: Why It Matters Before Things Break</a></h3>
+                  <p class="post-excerpt">Proactive monitoring catches failing hardware, bandwidth bottlenecks, and security anomalies before they become expensive outages.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      18 Dec 2025
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">4 min</span>
+                  </div>
+                  <a href="/blog/network-monitoring-matters/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+              <!-- Post 8 -->
+              <article class="post-card reveal" style="--delay: 0.3s" data-category="strategy" data-title="remote work security checklist hybrid teams regional">
+                <div class="post-card-thumb">
+                  <img src="/assets/images/icon-phone-lock.png" alt="" width="64" height="64" loading="lazy">
+                </div>
+                <div class="post-card-body">
+                  <span class="post-tag">Strategy</span>
+                  <h3><a href="/blog/remote-work-security-checklist/">Remote Work Security Checklist for Hybrid Teams</a></h3>
+                  <p class="post-excerpt">Your team's working from home, the café, and the client site. Here's how to keep devices, data, and identities secure across every location.</p>
+                  <div class="post-meta">
+                    <span class="post-meta-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                      10 Dec 2025
+                    </span>
+                    <span class="post-meta-divider"></span>
+                    <span class="post-meta-item">5 min</span>
+                  </div>
+                  <a href="/blog/remote-work-security-checklist/" class="post-read-more">
+                    Read more
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  </a>
+                </div>
+              </article>
+
+            </div><!-- /posts-grid -->
+
+            <!-- No results message (hidden by default) -->
+            <div class="no-results" id="no-results" style="display: none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></svg>
+              <h3>No articles found</h3>
+              <p>Try a different search term or browse all categories.</p>
+            </div>
+
+            <!-- Pagination -->
+            <nav class="blog-pagination" id="blog-pagination" aria-label="Blog pagination">
+              <button class="page-btn disabled" aria-label="Previous page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <button class="page-btn active">1</button>
+              <button class="page-btn">2</button>
+              <button class="page-btn">3</button>
+              <button class="page-btn" aria-label="Next page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </nav>
+
+          </div><!-- /blog-main -->
+
+          <!-- ── Sidebar ───────────────────────────────────── -->
+          <aside class="blog-sidebar">
+
+            <!-- Popular Posts -->
+            <div class="sidebar-widget">
+              <h3>Popular Articles</h3>
+              <div class="popular-list">
+                <div class="popular-item">
+                  <span class="popular-num">1</span>
+                  <div class="popular-info">
+                    <h4><a href="/blog/essential-eight-maturity-model/">The Essential Eight Maturity Model Explained</a></h4>
+                    <div class="post-meta">
+                      <span class="post-meta-item">8 min read</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="popular-item">
+                  <span class="popular-num">2</span>
+                  <div class="popular-info">
+                    <h4><a href="/blog/phishing-awareness-training/">Phishing Attacks Are Getting Smarter</a></h4>
+                    <div class="post-meta">
+                      <span class="post-meta-item">5 min read</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="popular-item">
+                  <span class="popular-num">3</span>
+                  <div class="popular-info">
+                    <h4><a href="/blog/backup-disaster-recovery/">Don't Wait for Ransomware</a></h4>
+                    <div class="post-meta">
+                      <span class="post-meta-item">5 min read</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="popular-item">
+                  <span class="popular-num">4</span>
+                  <div class="popular-info">
+                    <h4><a href="/blog/microsoft-365-migration-guide/">M365 Migration Without Downtime</a></h4>
+                    <div class="post-meta">
+                      <span class="post-meta-item">6 min read</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tags -->
+            <div class="sidebar-widget">
+              <h3>Topics</h3>
+              <div class="tag-cloud">
+                <span class="tag-pill" data-tag="essential-eight">Essential Eight</span>
+                <span class="tag-pill" data-tag="phishing">Phishing</span>
+                <span class="tag-pill" data-tag="microsoft-365">Microsoft 365</span>
+                <span class="tag-pill" data-tag="ransomware">Ransomware</span>
+                <span class="tag-pill" data-tag="azure">Azure</span>
+                <span class="tag-pill" data-tag="mfa">MFA</span>
+                <span class="tag-pill" data-tag="backup">Backup &amp; DR</span>
+                <span class="tag-pill" data-tag="compliance">Compliance</span>
+                <span class="tag-pill" data-tag="networking">Networking</span>
+                <span class="tag-pill" data-tag="remote-work">Remote Work</span>
+                <span class="tag-pill" data-tag="smb">SMB</span>
+                <span class="tag-pill" data-tag="governance">Governance</span>
+              </div>
+            </div>
+
+            <!-- Newsletter -->
+            <div class="sidebar-widget newsletter-widget">
+              <h3>Stay Informed</h3>
+              <p>Get monthly cybersecurity tips and IT insights delivered to your inbox. No spam, no jargon — just practical advice.</p>
+              <div class="newsletter-form">
+                <input type="email" class="newsletter-input" placeholder="you@company.com.au" aria-label="Email address for newsletter">
+                <button class="newsletter-btn" type="button">
+                  Subscribe
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+                <span class="newsletter-note">Unsubscribe anytime. We respect your privacy.</span>
+              </div>
+            </div>
+
+          </aside><!-- /blog-sidebar -->
+        </div><!-- /blog-layout -->
+      </div>
+    </section>
+
+    <!-- ── CTA ───────────────────────────────────────────────── -->
+    <section class="cta-section">
+      <div class="cta-glow"></div>
+      <div class="container">
+        <div class="label-tag"><span>Ready to Talk?</span></div>
+        <h2>Need Help With Your IT Security?</h2>
+        <p>Book a no-obligation consultation and let's discuss how Shadow IT can strengthen your business technology.</p>
+        <div class="cta-btns">
+          <a href="/contact/" class="btn-primary">Book a Consultation</a>
+          <a href="/services/" class="btn-ghost">View Services</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="/" class="logo" aria-label="Shadow IT home">
+            <img src="/assets/images/logo.png" alt="Shadow IT" class="logo-img">
+          </a>
+          <p>Managing the unseen. Cybersecurity and managed IT services for proactive Australian businesses.</p>
+        </div>
+        <div class="footer-col">
+          <h3>Services</h3>
+          <a href="/services/">Managed IT</a>
+          <a href="/services/">Cybersecurity</a>
+          <a href="/services/">Cloud Solutions</a>
+          <a href="/services/">Consulting</a>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <a href="/about/">About Us</a>
+          <a href="/blog/">Blog</a>
+          <a href="/contact/">Contact</a>
+        </div>
+        <div class="footer-col">
+          <h3>Contact</h3>
+          <a href="mailto:hello@shadowit.com.au">hello@shadowit.com.au</a>
+          <a href="tel:+61000000000">1300 SHADOW</a>
+          <span class="footer-note">Regional NSW, Australia</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2026 Shadow IT. All rights reserved.</span>
+        <div class="footer-social">
+          <a href="#" aria-label="LinkedIn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45zM22.23 0H1.77A1.75 1.75 0 0 0 0 1.73v20.54A1.75 1.75 0 0 0 1.77 24h20.46A1.75 1.75 0 0 0 24 22.27V1.73A1.75 1.75 0 0 0 22.23 0z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── JS ──────────────────────────────────────────────────── -->
+  <script src="/assets/js/blog.js" defer></script>
+</body>
+</html>
