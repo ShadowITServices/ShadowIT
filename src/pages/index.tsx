@@ -17,8 +17,7 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className="hero__subtitle">
-          Proactive cybersecurity and managed IT for Australian businesses — we
-          handle the threats lurking in the dark, so you don&apos;t have to.
+          Beau Dean is playing with possabilities... in whatever form that comes.
         </p>
         <div className={styles.buttons}>
           <Link
