@@ -11,35 +11,29 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Agile Partnerships',
+    title: 'Happy Dino',
     Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
     description: (
       <>
-        We engage dynamically, adapting to your unique needs. Flexible,
-        responsive and collaborative — a partnership tailored to your business,
-        not a one-size-fits-all support desk.
+        Happy marshmellow dino.
       </>
     ),
   },
   {
-    title: 'Transparency',
+    title: 'Website in-progress',
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        We play in the grey space, so you don&apos;t have to. Clear
-        communication and honest advice keep you informed and confident at every
-        step — no jargon, no surprises.
+        Nothing to see here.
       </>
     ),
   },
   {
-    title: 'Inventive Resilience',
+    title: 'Did you know?',
     Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
     description: (
       <>
-        We turn obstacles into opportunities. Constantly evolving with the tech
-        landscape, we keep your security and infrastructure at the forefront of
-        innovation — ready for today and tomorrow.
+        With Beau, more screens = happier Beau.
       </>
     ),
   },
