@@ -16,12 +16,15 @@ function HomepageHeader() {
         <Heading as="h1" className="hero__title">
           {siteConfig.title}
         </Heading>
-        <p className="hero__subtitle">{siteConfig.tagline}</p>
+        <p className="hero__subtitle">
+          Proactive cybersecurity and managed IT for Australian businesses — we
+          handle the threats lurking in the dark, so you don&apos;t have to.
+        </p>
         <div className={styles.buttons}>
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Docusaurus Tutorial - 5min ⏱️
+            Book a consultation
           </Link>
         </div>
       </div>
@@ -33,8 +36,8 @@ export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title={`${siteConfig.title} — ${siteConfig.tagline}`}
+      description="Shadow IT delivers proactive cybersecurity and managed IT services for Australian businesses. We manage the unseen so you can focus on growth.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

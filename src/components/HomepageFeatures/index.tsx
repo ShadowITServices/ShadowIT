@@ -11,32 +11,35 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
+    title: 'Agile Partnerships',
     Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        We engage dynamically, adapting to your unique needs. Flexible,
+        responsive and collaborative — a partnership tailored to your business,
+        not a one-size-fits-all support desk.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
+    title: 'Transparency',
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        We play in the grey space, so you don&apos;t have to. Clear
+        communication and honest advice keep you informed and confident at every
+        step — no jargon, no surprises.
       </>
     ),
   },
   {
-    title: 'Powered by React',
+    title: 'Inventive Resilience',
     Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        We turn obstacles into opportunities. Constantly evolving with the tech
+        landscape, we keep your security and infrastructure at the forefront of
+        innovation — ready for today and tomorrow.
       </>
     ),
   },

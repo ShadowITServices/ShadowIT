@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Shadow IT',
-  tagline: 'Manging the Unseen',
+  tagline: 'Managing the Unseen',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -33,7 +33,22 @@ const config: Config = {
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
+    localeConfigs: {
+      en: {
+        htmlLang: 'en-AU', // Australian English for an Albury–Wodonga based MSP
+      },
+    },
   },
+
+  // Load the brand heading font (Raleway) from Google Fonts, with preconnect
+  // so it doesn't block render. Avenir (body) is licensed and falls back in CSS.
+  stylesheets: [
+    {href: 'https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap', rel: 'stylesheet'},
+  ],
+  headTags: [
+    {tagName: 'link', attributes: {rel: 'preconnect', href: 'https://fonts.googleapis.com'}},
+    {tagName: 'link', attributes: {rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous'}},
+  ],
 
   presets: [
     [
@@ -44,7 +59,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/ShadowITServices/ShadowIT/tree/main/',
         },
         blog: {
           showReadingTime: true,
@@ -55,7 +70,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/ShadowITServices/ShadowIT/tree/main/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -71,13 +86,20 @@ const config: Config = {
   themeConfig: {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
+    metadata: [
+      {
+        name: 'description',
+        content:
+          'Shadow IT — proactive cybersecurity and managed IT services for Australian businesses. We manage the unseen so you can focus on growth.',
+      },
+    ],
     colorMode: {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'ShadowIT',
+      title: 'Shadow IT',
       logo: {
-        alt: 'My Site Logo',
+        alt: 'Shadow IT logo',
         src: 'img/logo.svg',
       },
       items: [
@@ -85,11 +107,11 @@ const config: Config = {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
-          label: 'Tutorial',
+          label: 'Docs',
         },
         {to: '/blog', label: 'Blog', position: 'left'},
         {
-          href: 'https://github.com/facebook/docusaurus',
+          href: 'https://github.com/ShadowITServices/ShadowIT',
           label: 'GitHub',
           position: 'right',
         },
@@ -99,46 +121,46 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Docs',
+          title: 'Services',
           items: [
             {
-              label: 'Tutorial',
+              label: 'Docs',
               to: '/docs/intro',
             },
-          ],
-        },
-        {
-          title: 'Community',
-          items: [
-            {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-            },
-            {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
-            },
-            {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
-            },
-          ],
-        },
-        {
-          title: 'More',
-          items: [
             {
               label: 'Blog',
               to: '/blog',
             },
+          ],
+        },
+        {
+          title: 'Company',
+          items: [
+            {
+              label: 'Managing the Unseen',
+              to: '/docs/intro',
+            },
+            {
+              label: 'Contact',
+              href: 'mailto:hello@shadowit.com.au',
+            },
+          ],
+        },
+        {
+          title: 'Connect',
+          items: [
+            {
+              label: 'Website',
+              href: 'https://www.shadowit.com.au',
+            },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/ShadowITServices/ShadowIT',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Shadow IT. Managing the Unseen.`,
     },
     prism: {
       theme: prismThemes.github,

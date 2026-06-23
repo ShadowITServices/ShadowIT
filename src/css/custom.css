@@ -1,30 +1,98 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * Shadow IT — global theme
+ * Brand Guidelines V1.0 (Feb 2024)
+ * Any CSS here is global. Built on Infima (Docusaurus classic theme).
  */
 
-/* You can override the default Infima variables here. */
+/* ---------------------------------------------------------------------------
+ * Typography — Raleway (headings) loaded via Google Fonts in docusaurus.config.
+ * Avenir is the brand body font (licensed, not web-served); we fall back to a
+ * close humanist sans stack so body copy stays on-brand everywhere.
+ * ------------------------------------------------------------------------- */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --brand-font-heading: 'Raleway', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --brand-font-body: 'Avenir Next', 'Avenir', 'Nunito Sans', system-ui,
+    -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* --- Brand palette (exact hex from brand guide) --- */
+  --brand-electric-indigo: #6d00e6; /* gradient colour 1 */
+  --brand-electric-purple: #be00ff; /* gradient colour 2 */
+  --brand-purpureus: #af2bbf;
+  --brand-russian-violet: #281549;
+  --brand-tufts-blue: #3290e7;
+  --brand-robin-egg: #13d1db;
+  --brand-white: #ffffff;
+
+  /* Signature logo gradient */
+  --brand-gradient: linear-gradient(
+    135deg,
+    var(--brand-electric-indigo) 0%,
+    var(--brand-electric-purple) 100%
+  );
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
+/* Apply brand fonts */
+html {
+  --ifm-font-family-base: var(--brand-font-body);
+  --ifm-heading-font-family: var(--brand-font-heading);
+  --ifm-heading-font-weight: 700; /* Raleway Bold for headers */
+}
+
+/* ---------------------------------------------------------------------------
+ * Light mode — Purpureus primary
+ * ------------------------------------------------------------------------- */
+:root {
+  --ifm-color-primary: #af2bbf;
+  --ifm-color-primary-dark: #9424a2;
+  --ifm-color-primary-darker: #892295;
+  --ifm-color-primary-darkest: #6e1b78;
+  --ifm-color-primary-light: #c23bd3;
+  --ifm-color-primary-lighter: #c647d6;
+  --ifm-color-primary-lightest: #cf64dc;
+
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(40, 21, 73, 0.1);
+
+  --ifm-navbar-link-hover-color: var(--brand-purpureus);
+}
+
+/* ---------------------------------------------------------------------------
+ * Dark mode — lightened Purpureus for AA contrast on dark surfaces.
+ * Russian Violet sets the background tone per the brand's "shadow" identity.
+ * ------------------------------------------------------------------------- */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ifm-color-primary: #c44fd4;
+  --ifm-color-primary-dark: #ba32cd;
+  --ifm-color-primary-darker: #af2fc1;
+  --ifm-color-primary-darkest: #9528a4;
+  --ifm-color-primary-light: #ce6cdb;
+  --ifm-color-primary-lighter: #d278de;
+  --ifm-color-primary-lightest: #db95e5;
+
+  --ifm-background-color: #1a0e30;
+  --ifm-background-surface-color: #281549; /* Russian Violet */
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.12);
+}
+
+/* ---------------------------------------------------------------------------
+ * Accents
+ * ------------------------------------------------------------------------- */
+
+/* Hero uses the signature gradient rather than a flat primary fill */
+.hero--primary {
+  --ifm-hero-background-color: transparent;
+  background: var(--brand-gradient);
+  color: var(--brand-white);
+}
+
+.hero--primary .hero__title,
+.hero--primary .hero__subtitle {
+  color: var(--brand-white);
+}
+
+/* Primary buttons pick up the brand white-on-violet for a stronger read */
+.hero--primary .button.button--secondary {
+  --ifm-button-background-color: var(--brand-white);
+  color: var(--brand-russian-violet);
+  border-color: var(--brand-white);
 }
