@@ -17,7 +17,7 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className="hero__subtitle">
-          Beau is contemplating the universe...
+          Beau is contemplating the universe.
         </p>
         <div className={styles.buttons}>
           <Link
