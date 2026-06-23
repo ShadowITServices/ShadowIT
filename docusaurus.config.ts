@@ -23,7 +23,7 @@ const config: Config = {
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'ShadowITServices', // Usually your GitHub org/user name.
-  projectName: 'Shadow IT', // Usually your repo name.
+  projectName: 'ShadowIT', // Usually your repo name.
 
   onBrokenLinks: 'throw',
 
