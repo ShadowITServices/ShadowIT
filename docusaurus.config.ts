@@ -139,8 +139,8 @@ const config: Config = {
           title: 'Company',
           items: [
             {
-              label: 'Managing the Unseen',
-              to: '/docs/intro',
+              label: 'AI Policy',
+              to: '/ai-policy',
             },
             {
               label: 'Contact',
@@ -154,6 +154,10 @@ const config: Config = {
             {
               label: 'Website',
               href: 'https://www.shadowit.com.au',
+            },
+            {
+              label: 'LinkedIn',
+              href: 'https://www.linkedin.com/in/beaudean/',
             },
             {
               label: 'GitHub',

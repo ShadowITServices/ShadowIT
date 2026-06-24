@@ -16,6 +16,20 @@
   }
 }
 
+.heroLogoHeading {
+  margin-bottom: 1.5rem;
+}
+
+/* Render the dark wordmark as a solid white silhouette so it reads on the
+   brand purple gradient (brand "white-on-violet" hero treatment). */
+.heroLogo {
+  display: block;
+  width: min(440px, 80%);
+  height: auto;
+  margin: 0 auto;
+  filter: brightness(0) invert(1);
+}
+
 .heroLede {
   max-width: 40rem;
   margin: 0 auto 2rem;

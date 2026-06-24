@@ -2,6 +2,7 @@ import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import Heading from '@theme/Heading';
@@ -13,8 +14,17 @@ function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <Heading as="h1" className="hero__title">
-          {siteConfig.title}
+        {/* Logo replaces the text title. It's rendered white via CSS filter so
+            the wordmark reads cleanly on the brand purple gradient. The h1 stays
+            for SEO/a11y, with the company name carried by the img alt text. */}
+        <Heading as="h1" className={styles.heroLogoHeading}>
+          <img
+            src={useBaseUrl('/img/logo.png')}
+            alt={siteConfig.title}
+            className={styles.heroLogo}
+            width={2639}
+            height={609}
+          />
         </Heading>
         <p className="hero__subtitle">{siteConfig.tagline}</p>
         <p className={styles.heroLede}>
