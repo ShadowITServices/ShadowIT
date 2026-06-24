@@ -23,7 +23,7 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Book a consultation
+            Click to learn
           </Link>
         </div>
       </div>
@@ -36,7 +36,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={`${siteConfig.title} — ${siteConfig.tagline}`}
-      description="Shadow IT delivers proactive cybersecurity and managed IT services for Australian businesses. We manage the unseen so you can focus on growth.">
+      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />
