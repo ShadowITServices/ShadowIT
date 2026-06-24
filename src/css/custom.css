@@ -118,13 +118,13 @@ html {
  * on mobile it centres above the text instead of floating.
  * ------------------------------------------------------------------------- */
 .aboutPortrait {
-  float: right;
+  float: left;
   width: clamp(160px, 22vw, 240px);
   height: auto;
   aspect-ratio: 1 / 1;
   object-fit: cover;
   border-radius: 12px;
-  margin: 0.25rem 0 1rem 1.75rem;
+  margin: 0.25rem 1.75rem 1rem 0;
   box-shadow: 0 6px 20px rgba(40, 21, 73, 0.25);
 }
 
