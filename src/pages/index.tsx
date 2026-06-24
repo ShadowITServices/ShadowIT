@@ -16,14 +16,21 @@ function HomepageHeader() {
         <Heading as="h1" className="hero__title">
           {siteConfig.title}
         </Heading>
-        <p className="hero__subtitle">
-          Beau is contemplating the universe.
+        <p className="hero__subtitle">{siteConfig.tagline}</p>
+        <p className={styles.heroLede}>
+          Managed IT, security, and governance for businesses in regional
+          Australia — written up, documented, and shared by Beau Dean.
         </p>
         <div className={styles.buttons}>
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Click to learn
+            Explore the Docs
+          </Link>
+          <Link
+            className="button button--outline button--secondary button--lg"
+            to="/blog">
+            Read the Blog
           </Link>
         </div>
       </div>

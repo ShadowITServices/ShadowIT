@@ -11,29 +11,34 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Happy Dino',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: 'Security & Governance',
+    Svg: require('@site/static/img/feature_security.svg').default,
     description: (
       <>
-        Happy marshmellow dino.
+        Practical, layered protection for small and mid-sized businesses —
+        identity, endpoints, and data hardened against everyday threats, with
+        governance that stands up to scrutiny.
       </>
     ),
   },
   {
-    title: 'Website in-progress',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: 'Managed Microsoft 365',
+    Svg: require('@site/static/img/feature_cloud.svg').default,
     description: (
       <>
-        Nothing to see here.
+        Microsoft 365 and cloud workloads configured, monitored, and maintained
+        to best practice — so the platform stays fast, secure, and out of your
+        way.
       </>
     ),
   },
   {
-    title: 'Did you know?',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    title: 'Managing the Unseen',
+    Svg: require('@site/static/img/feature_monitor.svg').default,
     description: (
       <>
-        With Beau, more screens = happier Beau.
+        Proactive monitoring and clear communication that surface the risks and
+        work happening behind the scenes — no jargon, no surprises.
       </>
     ),
   },

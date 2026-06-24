@@ -97,10 +97,11 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Shadow IT',
+      // Title intentionally omitted — logo.png is a full wordmark that already
+      // contains the "SHADOWIT" company name, so a text title would duplicate it.
       logo: {
-        alt: 'Shadow IT logo',
-        src: 'img/logo.svg',
+        alt: 'Shadow IT',
+        src: 'img/logo.png',
       },
       items: [
         {

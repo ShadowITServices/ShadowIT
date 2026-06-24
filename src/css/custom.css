@@ -96,3 +96,22 @@ html {
   color: var(--brand-russian-violet);
   border-color: var(--brand-white);
 }
+
+/* Ghost/outline hero button: white outline on the gradient, fills on hover */
+.hero--primary .button.button--outline.button--secondary {
+  --ifm-button-background-color: transparent;
+  color: var(--brand-white);
+  border-color: var(--brand-white);
+}
+.hero--primary .button.button--outline.button--secondary:hover {
+  --ifm-button-background-color: var(--brand-white);
+  color: var(--brand-russian-violet);
+}
+
+/* Navbar wordmark logo — logo.png is a wide ~4.3:1 wordmark; size for legibility */
+.navbar__logo {
+  height: 2rem;
+}
+.navbar__logo img {
+  width: auto;
+}
