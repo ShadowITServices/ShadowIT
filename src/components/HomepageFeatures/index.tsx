@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
+import Link from '@docusaurus/Link';
 import Heading from '@theme/Heading';
 import styles from './styles.module.css';
 
@@ -7,53 +8,60 @@ type FeatureItem = {
   title: string;
   Svg: React.ComponentType<React.ComponentProps<'svg'>>;
   description: ReactNode;
+  to: string;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Security & Governance',
-    Svg: require('@site/static/img/feature_security.svg').default,
+    title: 'Open Docs',
+    Svg: require('@site/static/img/feature_docs.svg').default,
     description: (
       <>
-        Practical, layered protection for small and mid-sized businesses —
-        identity, endpoints, and data hardened against everyday threats, with
-        governance that stands up to scrutiny.
+        Open-source, non-paywalled documentation — runbooks, guides, and
+        how-tos on Microsoft 365 and security. No sign-up, no paywall, just the
+        knowledge.
       </>
     ),
+    to: '/docs/intro',
   },
   {
-    title: 'Managed Microsoft 365',
-    Svg: require('@site/static/img/feature_cloud.svg').default,
+    title: 'The Blog',
+    Svg: require('@site/static/img/feature_blog.svg').default,
     description: (
       <>
-        Microsoft 365 and cloud workloads configured, monitored, and maintained
-        to best practice — so the platform stays fast, secure, and out of your
-        way.
+        A professional blog where I work through what I'm learning across
+        Microsoft 365, cybersecurity, and the craft of IT professionalism.
       </>
     ),
+    to: '/blog',
   },
   {
-    title: 'Managing the Unseen',
-    Svg: require('@site/static/img/feature_monitor.svg').default,
+    title: 'About Beau',
+    Svg: require('@site/static/img/feature_about.svg').default,
     description: (
       <>
-        Proactive monitoring and clear communication that surface the risks and
-        work happening behind the scenes — no jargon, no surprises.
+        A decade-plus across managed services, education, and healthcare — the
+        person and the professional standards behind Shadow IT.
       </>
     ),
+    to: '/about',
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({title, Svg, description, to}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
-      </div>
-      <div className="text--center padding-horiz--md">
-        <Heading as="h3">{title}</Heading>
-        <p>{description}</p>
-      </div>
+      <Link to={to} className={styles.featureCard}>
+        <div className="text--center">
+          <Svg className={styles.featureSvg} role="img" />
+        </div>
+        <div className="text--center padding-horiz--md">
+          <Heading as="h3" className={styles.featureTitle}>
+            {title}
+          </Heading>
+          <p className={styles.featureText}>{description}</p>
+        </div>
+      </Link>
     </div>
   );
 }

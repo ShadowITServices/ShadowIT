@@ -1,12 +1,43 @@
 .features {
   display: flex;
   align-items: center;
-  padding: 2rem 0;
+  padding: clamp(1rem, 3vh, 2rem) 0;
   width: 100%;
 }
 
+/* Fluid icon: scales with viewport height so the page can fit without scroll,
+   clamped so it never gets tiny or oversized. */
 .featureSvg {
-  height: 160px;
-  width: 160px;
+  height: clamp(72px, 13vh, 150px);
+  width: clamp(72px, 13vh, 150px);
   color: var(--ifm-color-primary);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+/* Whole card is a link; keep it looking like content, not a button. */
+.featureCard {
+  display: block;
+  padding: 0.5rem 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
+}
+.featureCard:hover {
+  text-decoration: none;
+  color: inherit;
+}
+.featureCard:hover .featureSvg {
+  transform: translateY(-4px);
+  color: var(--ifm-color-primary-light);
+}
+
+.featureTitle {
+  margin-bottom: 0.4rem;
+  font-size: clamp(1.1rem, 1rem + 0.5vh, 1.5rem);
+}
+
+.featureText {
+  margin-bottom: 0;
+  font-size: clamp(0.85rem, 0.8rem + 0.3vh, 1rem);
+  line-height: 1.5;
 }

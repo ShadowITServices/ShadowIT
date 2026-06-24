@@ -112,11 +112,6 @@ const config: Config = {
         },
         {to: '/blog', label: 'Blog', position: 'left'},
         {to: '/about', label: 'About', position: 'left'},
-        {
-          href: 'https://github.com/ShadowITServices/ShadowIT',
-          label: 'GitHub',
-          position: 'right',
-        },
       ],
     },
     footer: {
@@ -141,6 +136,10 @@ const config: Config = {
             {
               label: 'AI Policy',
               to: '/ai-policy',
+            },
+            {
+              label: 'Privacy Policy',
+              to: '/privacy-policy',
             },
             {
               label: 'Contact',

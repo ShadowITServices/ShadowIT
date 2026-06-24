@@ -90,22 +90,19 @@ html {
   color: var(--brand-white);
 }
 
-/* Primary buttons pick up the brand white-on-violet for a stronger read */
+/* Hero buttons: ghost style at rest — transparent with a white outline and
+   white text on the gradient — filling solid white on hover/focus. This keeps
+   "Explore the Docs" from reading as a white block until the user hovers. */
 .hero--primary .button.button--secondary {
-  --ifm-button-background-color: var(--brand-white);
-  color: var(--brand-russian-violet);
-  border-color: var(--brand-white);
-}
-
-/* Ghost/outline hero button: white outline on the gradient, fills on hover */
-.hero--primary .button.button--outline.button--secondary {
   --ifm-button-background-color: transparent;
   color: var(--brand-white);
   border-color: var(--brand-white);
 }
-.hero--primary .button.button--outline.button--secondary:hover {
+.hero--primary .button.button--secondary:hover,
+.hero--primary .button.button--secondary:focus {
   --ifm-button-background-color: var(--brand-white);
   color: var(--brand-russian-violet);
+  border-color: var(--brand-white);
 }
 
 /* Navbar wordmark logo — logo.png is a wide ~4.3:1 wordmark; size for legibility */
@@ -114,4 +111,27 @@ html {
 }
 .navbar__logo img {
   width: auto;
+}
+
+/* ---------------------------------------------------------------------------
+ * About page — floated portrait. Text wraps around the photo on wider screens;
+ * on mobile it centres above the text instead of floating.
+ * ------------------------------------------------------------------------- */
+.aboutPortrait {
+  float: right;
+  width: clamp(160px, 22vw, 240px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 12px;
+  margin: 0.25rem 0 1rem 1.75rem;
+  box-shadow: 0 6px 20px rgba(40, 21, 73, 0.25);
+}
+
+@media screen and (max-width: 768px) {
+  .aboutPortrait {
+    float: none;
+    display: block;
+    margin: 0 auto 1.25rem;
+  }
 }

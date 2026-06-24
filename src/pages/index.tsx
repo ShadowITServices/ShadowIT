@@ -53,9 +53,10 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={`${siteConfig.title} — ${siteConfig.tagline}`}
-      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean.">
+      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean."
+      wrapperClassName={styles.homeFit}>
       <HomepageHeader />
-      <main>
+      <main className={styles.homeMain}>
         <HomepageFeatures />
       </main>
     </Layout>

@@ -1,40 +1,56 @@
 /**
  * CSS files with the .module.css suffix will be treated as CSS modules
  * and scoped locally.
+ *
+ * Homepage "fit-to-viewport" layout: the hero and feature cards share the space
+ * between the navbar and footer, scaling fluidly with clamp()/vh so the page
+ * fits without scrolling on typical landscape resolutions. On very short or
+ * mobile-portrait viewports it falls back to normal scrolling (see media query)
+ * rather than clipping content.
  */
 
+/* main-wrapper on the homepage: stack hero + features as a flex column so the
+   features block can grow to fill the leftover height and stay centred. */
+.homeFit {
+  display: flex;
+  flex-direction: column;
+}
+
+.homeMain {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
 .heroBanner {
-  padding: 4rem 0;
+  padding: clamp(1.5rem, 5vh, 4rem) 0;
   text-align: center;
   position: relative;
   overflow: hidden;
-}
-
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 2rem;
-  }
+  flex: 0 0 auto;
 }
 
 .heroLogoHeading {
-  margin-bottom: 1.5rem;
+  margin-bottom: clamp(0.75rem, 2vh, 1.5rem);
 }
 
 /* Render the dark wordmark as a solid white silhouette so it reads on the
    brand purple gradient (brand "white-on-violet" hero treatment). */
 .heroLogo {
   display: block;
-  width: min(440px, 80%);
+  width: clamp(220px, 32vw, 440px);
+  max-height: 14vh;
   height: auto;
   margin: 0 auto;
+  object-fit: contain;
   filter: brightness(0) invert(1);
 }
 
 .heroLede {
   max-width: 40rem;
-  margin: 0 auto 2rem;
-  font-size: 1.15rem;
-  line-height: 1.6;
+  margin: 0 auto clamp(1rem, 2.5vh, 2rem);
+  font-size: clamp(0.95rem, 0.9rem + 0.4vh, 1.15rem);
+  line-height: 1.5;
   opacity: 0.95;
 }
 
@@ -44,4 +60,26 @@
   justify-content: center;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+/* Short viewports (e.g. small laptops in landscape): trim the lede to help the
+   page fit without scrolling. */
+@media screen and (max-height: 640px) {
+  .heroLede {
+    display: none;
+  }
+}
+
+/* Mobile-portrait / narrow screens: abandon the fit-to-viewport constraint and
+   let the page scroll normally so nothing is clipped. */
+@media screen and (max-width: 768px) {
+  .homeFit {
+    display: block;
+  }
+  .homeMain {
+    display: block;
+  }
+  .heroBanner {
+    padding: 2rem 1rem;
+  }
 }
