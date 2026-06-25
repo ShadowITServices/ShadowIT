@@ -108,8 +108,12 @@ const config: Config = {
           title: 'Services',
           items: [
             {
-              label: 'How I work',
+              label: 'Services',
               to: '/services',
+            },
+            {
+              label: 'About',
+              to: '/about',
             },
             {
               label: 'Docs',
@@ -121,7 +125,7 @@ const config: Config = {
           title: 'Company',
           items: [
             {
-              label: 'AI Policy',
+              label: 'AI Usage Policy',
               to: '/ai-policy',
             },
             {
@@ -152,7 +156,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Shadow IT. Managing the Unseen.`,
+      copyright: `Copyright © 2023–${new Date().getFullYear()} Shadow IT.`,
     },
     prism: {
       theme: prismThemes.github,

@@ -211,3 +211,37 @@ html {
   --ifm-background-color: #f4f0e6;          /* body / page background — bone */
   --ifm-background-surface-color: #faf7f0;  /* navbar, cards, code: lighter bone */
 }
+
+/* ---------------------------------------------------------------------------
+ * Footer — compact and centred. The default footer is very tall; trim the
+ * vertical padding and inter-row spacing, and centre the three columns as a
+ * group with centred text rather than left-aligning across the full width.
+ * ------------------------------------------------------------------------- */
+.footer {
+  --ifm-footer-padding-vertical: 1.5rem;
+}
+
+.footer__links {
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.footer .col.footer__col {
+  flex: 0 1 auto;
+  min-width: 160px;
+  margin-bottom: 0;
+  text-align: center;
+}
+
+.footer__title {
+  margin-bottom: 0.5rem;
+}
+
+.footer__item {
+  line-height: 1.5;
+}
+
+.footer__copyright {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
