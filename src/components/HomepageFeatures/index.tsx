@@ -25,17 +25,6 @@ const FeatureList: FeatureItem[] = [
     to: '/docs/intro',
   },
   {
-    title: 'The Blog',
-    Svg: require('@site/static/img/feature_blog.svg').default,
-    description: (
-      <>
-        A professional blog where I work through what I'm learning across
-        Microsoft 365, cybersecurity, and the craft of IT professionalism.
-      </>
-    ),
-    to: '/blog',
-  },
-  {
     title: 'About Beau',
     Svg: require('@site/static/img/feature_about.svg').default,
     description: (
