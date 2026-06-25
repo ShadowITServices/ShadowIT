@@ -201,3 +201,13 @@ html {
     margin-bottom: 0.75rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Light-mode page tint — a soft "bone" off-white instead of pure white, so the
+ * pages are easier on the eyes. Raised surfaces (navbar, cards, code blocks)
+ * sit a shade lighter than the body for a subtle lift. Dark mode is unchanged.
+ * ------------------------------------------------------------------------- */
+:root {
+  --ifm-background-color: #f4f0e6;          /* body / page background — bone */
+  --ifm-background-surface-color: #faf7f0;  /* navbar, cards, code: lighter bone */
+}
