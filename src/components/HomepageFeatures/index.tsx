@@ -9,12 +9,15 @@ type FeatureItem = {
   Svg: React.ComponentType<React.ComponentProps<'svg'>>;
   description: ReactNode;
   to: string;
+  cta: string;
 };
 
 const FeatureList: FeatureItem[] = [
   {
     title: 'Open Docs',
     Svg: require('@site/static/img/feature_docs.svg').default,
+    to: '/docs/intro',
+    cta: 'Browse the docs',
     description: (
       <>
         Open-source, non-paywalled documentation — runbooks, guides, and
@@ -22,45 +25,50 @@ const FeatureList: FeatureItem[] = [
         knowledge.
       </>
     ),
-    to: '/docs/intro',
   },
   {
     title: 'About Beau',
     Svg: require('@site/static/img/feature_about.svg').default,
+    to: '/about',
+    cta: 'Meet Beau',
     description: (
       <>
         A decade-plus across managed services, education, and healthcare — the
         person and the professional standards behind Shadow IT.
       </>
     ),
-    to: '/about',
   },
   {
     title: 'How I work',
     Svg: require('@site/static/img/feature_monitor.svg').default,
+    to: '/services',
+    cta: 'See the process',
     description: (
       <>
         Project by project — scoping, solution design, implementation, and
         hand-off, at my availability. No price list, no packages.
       </>
     ),
-    to: '/services',
   },
 ];
 
-function Feature({title, Svg, description, to}: FeatureItem) {
+function Feature({title, Svg, description, to, cta}: FeatureItem) {
   return (
-    <div className={clsx('col col--4')}>
+    <div className={clsx('col col--4', styles.featureCol)}>
       <Link to={to} className={styles.featureCard}>
-        <div className="text--center">
+        <span className={styles.featureIcon}>
           <Svg className={styles.featureSvg} role="img" />
-        </div>
-        <div className="text--center padding-horiz--md">
-          <Heading as="h3" className={styles.featureTitle}>
-            {title}
-          </Heading>
-          <p className={styles.featureText}>{description}</p>
-        </div>
+        </span>
+        <Heading as="h3" className={styles.featureTitle}>
+          {title}
+        </Heading>
+        <p className={styles.featureText}>{description}</p>
+        <span className={styles.featureCta}>
+          {cta}
+          <span aria-hidden="true" className={styles.featureArrow}>
+            →
+          </span>
+        </span>
       </Link>
     </div>
   );
@@ -70,7 +78,17 @@ export default function HomepageFeatures(): ReactNode {
   return (
     <section className={styles.features}>
       <div className="container">
-        <div className="row">
+        <div className={styles.header}>
+          <p className={styles.eyebrow}>Start here</p>
+          <Heading as="h2" className={styles.headingTitle}>
+            Three ways in
+          </Heading>
+          <p className={styles.headingSub}>
+            Open documentation, the person behind it, and how an engagement
+            runs — pick wherever you'd like to begin.
+          </p>
+        </div>
+        <div className={clsx('row', styles.cardRow)}>
           {FeatureList.map((props, idx) => (
             <Feature key={idx} {...props} />
           ))}

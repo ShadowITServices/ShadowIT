@@ -1,43 +1,129 @@
 .features {
   display: flex;
   align-items: center;
-  padding: clamp(1rem, 3vh, 2rem) 0;
+  padding: clamp(2rem, 6vh, 4rem) 0;
   width: 100%;
 }
 
-/* Fluid icon: scales with viewport height so the page can fit without scroll,
-   clamped so it never gets tiny or oversized. */
+/* --- Section header --------------------------------------------------- */
+.header {
+  text-align: center;
+  max-width: 40rem;
+  margin: 0 auto clamp(1.75rem, 4vh, 3rem);
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  font-family: var(--brand-font-heading);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+}
+
+.headingTitle {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.6rem, 1.2rem + 1.6vh, 2.25rem);
+}
+
+.headingSub {
+  margin: 0;
+  font-size: clamp(0.95rem, 0.9rem + 0.3vh, 1.1rem);
+  line-height: 1.55;
+  opacity: 0.85;
+}
+
+/* --- Cards ------------------------------------------------------------ */
+.cardRow {
+  align-items: stretch; /* equal-height cards */
+}
+
+.featureCol {
+  display: flex;
+}
+
+.featureCard {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: clamp(1.5rem, 3vh, 2rem);
+  color: inherit;
+  text-decoration: none;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(40, 21, 73, 0.06);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.featureCard:hover {
+  color: inherit;
+  text-decoration: none;
+  transform: translateY(-6px);
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 14px 30px rgba(40, 21, 73, 0.16);
+}
+
+.featureIcon {
+  display: grid;
+  place-items: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  margin-bottom: 1.1rem;
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(109, 0, 230, 0.12),
+    rgba(190, 0, 255, 0.12)
+  );
+}
+
 .featureSvg {
-  height: clamp(72px, 13vh, 150px);
-  width: clamp(72px, 13vh, 150px);
+  width: 2.5rem;
+  height: 2.5rem;
   color: var(--ifm-color-primary);
   transition: transform 0.2s ease, color 0.2s ease;
 }
 
-/* Whole card is a link; keep it looking like content, not a button. */
-.featureCard {
-  display: block;
-  padding: 0.5rem 0;
-  color: inherit;
-  text-decoration: none;
-  border-radius: 12px;
-}
-.featureCard:hover {
-  text-decoration: none;
-  color: inherit;
-}
 .featureCard:hover .featureSvg {
-  transform: translateY(-4px);
+  transform: translateY(-2px) scale(1.05);
   color: var(--ifm-color-primary-light);
 }
 
 .featureTitle {
-  margin-bottom: 0.4rem;
-  font-size: clamp(1.1rem, 1rem + 0.5vh, 1.5rem);
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.15rem, 1rem + 0.5vh, 1.4rem);
 }
 
 .featureText {
-  margin-bottom: 0;
-  font-size: clamp(0.85rem, 0.8rem + 0.3vh, 1rem);
-  line-height: 1.5;
+  margin: 0 0 1.25rem;
+  font-size: clamp(0.88rem, 0.84rem + 0.2vh, 1rem);
+  line-height: 1.55;
+  opacity: 0.9;
+}
+
+/* Pin the CTA to the bottom so cards of different copy length stay aligned. */
+.featureCta {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+}
+
+.featureArrow {
+  transition: transform 0.2s ease;
+}
+
+.featureCard:hover .featureArrow {
+  transform: translateX(4px);
+}
+
+/* Stack with spacing on narrower screens. */
+@media screen and (max-width: 996px) {
+  .featureCol {
+    margin-bottom: 1rem;
+  }
 }
