@@ -54,6 +54,12 @@ html {
   --docusaurus-highlighted-code-line-bg: rgba(40, 21, 73, 0.1);
 
   --ifm-navbar-link-hover-color: var(--brand-purpureus);
+
+  /* Soft "bone" off-white page tint (light mode). Defined here — before the
+     dark-mode block below — so [data-theme='dark'] cleanly overrides it and
+     dark mode keeps its dark background. */
+  --ifm-background-color: #f4f0e6;          /* body / page background */
+  --ifm-background-surface-color: #faf7f0;  /* navbar, cards, code blocks */
 }
 
 /* ---------------------------------------------------------------------------
@@ -202,15 +208,6 @@ html {
   }
 }
 
-/* ---------------------------------------------------------------------------
- * Light-mode page tint — a soft "bone" off-white instead of pure white, so the
- * pages are easier on the eyes. Raised surfaces (navbar, cards, code blocks)
- * sit a shade lighter than the body for a subtle lift. Dark mode is unchanged.
- * ------------------------------------------------------------------------- */
-:root {
-  --ifm-background-color: #f4f0e6;          /* body / page background — bone */
-  --ifm-background-surface-color: #faf7f0;  /* navbar, cards, code: lighter bone */
-}
 /* ---------------------------------------------------------------------------
  * Footer — slim, polished, three centred columns. Infima's default .col has a
  * 100% flex-basis, which makes the footer columns stack and the footer very
