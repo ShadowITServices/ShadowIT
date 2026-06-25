@@ -262,3 +262,11 @@ html {
     row-gap: 0.75rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Dark mode — render the dark wordmark navbar logo as white so it reads on the
+ * dark navbar. Mirrors the hero's white-logo treatment (index.module.css).
+ * ------------------------------------------------------------------------- */
+[data-theme='dark'] .navbar__logo img {
+  filter: brightness(0) invert(1);
+}
