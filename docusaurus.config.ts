@@ -69,6 +69,23 @@ const config: Config = {
     ],
   ],
 
+  // Offline/local full-text search (static-hosting friendly; no backend/API key).
+  // Adds a search box to the navbar automatically; a second one is injected at
+  // the top of the docs sidebar via src/theme/DocSidebar/Desktop/Content.
+  themes: [
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: true,
+        indexDocs: true,
+        indexBlog: false,
+        docsRouteBasePath: '/docs',
+        highlightSearchTermsOnTargetPage: true,
+        searchResultLimits: 8,
+      },
+    ],
+  ],
+
   themeConfig: {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',

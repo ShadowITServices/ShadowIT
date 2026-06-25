@@ -270,3 +270,19 @@ html {
 [data-theme='dark'] .navbar__logo img {
   filter: brightness(0) invert(1);
 }
+
+/* ---------------------------------------------------------------------------
+ * Docs sidebar — keep it frozen in view while the page scrolls. Docusaurus
+ * makes the sidebar sticky by default; this reinforces it (with !important so
+ * nothing can override it), pins it under the sticky navbar, and lets it scroll
+ * internally if the menu is taller than the viewport. Desktop only — on mobile
+ * the sidebar is a drawer.
+ * ------------------------------------------------------------------------- */
+@media (min-width: 997px) {
+  .theme-doc-sidebar-container > div {
+    position: sticky !important;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+}
