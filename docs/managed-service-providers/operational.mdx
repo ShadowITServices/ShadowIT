@@ -1,0 +1,74 @@
+---
+title: Operational
+sidebar_label: Operational
+sidebar_position: 3
+description: The repeatable delivery layer for MSPs — standardised runbooks, monitoring and alerting thresholds, multi-tenant patch and backup cadence, Microsoft 365 / Entra hardening, ticket-handling SOPs, and escalation paths.
+---
+
+# Managed Service Providers — Operational
+
+*Altitude: days. The repeatable delivery layer — and where the shared canonical
+library pays off most.*
+
+This is the engine room: the day-to-day, tenant-by-tenant execution that *is* the
+service your clients pay for. For an MSP the operational watchword is **consistency at
+scale** — the same runbook, the same threshold, the same cadence on every tenant, so
+quality doesn't depend on which engineer happened to pick up the ticket.
+
+:::tip One source of truth
+The actual configs, scripts, and step-by-step runbooks referenced below live once in
+the **[Technical Library](/docs/technical-library/)**. This page is the MSP lens —
+*how you operate the library across many tenants.* The internal IT team's Operational
+page references the very same canonical content; maintaining it in one place is what
+stops two hundred tenants' baselines from quietly drifting apart.
+:::
+
+## Standardised runbooks
+
+Every recurring task — onboarding a user, hardening a new tenant, responding to a
+phishing report — should have a runbook that any engineer can follow to the same
+result. Runbooks are how you turn individual expertise into a service. Author them
+once in the [Technical Library](/docs/technical-library) and treat improvements as
+changes to the canonical version, not local notes that never make it back.
+
+## Monitoring and alerting thresholds
+
+Monitoring is only as good as its signal-to-noise ratio. Alert thresholds tuned too
+tight bury real incidents in noise and train engineers to ignore alerts; too loose and
+you miss what matters. Standardise thresholds across tenants so an alert means the same
+thing everywhere, and review them regularly against what actually turned into
+incidents.
+
+## Patch management cadence
+
+Across a fleet, patching is a cadence, not a task: a defined schedule, testing rings
+so a bad patch doesn't hit every client at once, and evidence of compliance you can put
+in a client report. See the canonical
+[Patch Management runbook](/docs/technical-library/patch-management) for the procedure;
+the operational discipline is applying it on the same rhythm to every tenant.
+
+## Backup verification routines
+
+Backups that aren't verified are a liability dressed as a safeguard. Operationally that
+means a routine of regular **test restores**, not just "backups completed" reports —
+and capturing the evidence so you can demonstrate a working RPO/RTO to the client (and
+their insurer). The procedure lives in
+[Backup & Disaster Recovery](/docs/technical-library/backup-and-dr).
+
+## Multi-tenant Microsoft 365 / Entra hardening
+
+Hardening identity is the highest-value security work you do, and across many tenants
+it has to be templated and consistent. The canonical baseline —  MFA, Conditional
+Access, privileged access, and the rest — lives in
+[MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening). The MSP-
+specific operational concern is deploying it uniformly and detecting when a tenant has
+drifted off baseline (often because someone made a "quick exception" that never got
+reverted).
+
+## Ticket-handling SOPs and escalation paths
+
+Consistent ticket handling — triage, prioritisation, communication, and documentation
+— is the client's lived experience of your service. Clear SOPs and well-defined
+escalation paths mean issues get to the right person quickly and nothing falls through
+the gaps between shifts or tiers. This is unglamorous and it is the difference between
+a service clients trust and one they tolerate.

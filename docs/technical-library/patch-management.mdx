@@ -1,0 +1,75 @@
+---
+title: Patch Management
+sidebar_label: Patch Management
+sidebar_position: 3
+description: Canonical runbook for a defensible patch-management cadence — prioritising by risk, testing rings, timeframes aligned to the Essential Eight, and capturing evidence of compliance.
+---
+
+# Patch Management
+
+*Canonical runbook. Audience-neutral. Referenced by the Operational pages for
+[MSPs](/docs/managed-service-providers/operational) and
+[Internal IT Teams](/docs/internal-it-teams/operational).*
+
+Unpatched systems are the most common way attackers get in. Patching isn't a heroic
+event; it's a **cadence** — a repeatable rhythm with clear timeframes, testing to avoid
+self-inflicted outages, and evidence you can show a client, an auditor, or an insurer.
+
+## Prioritise by risk, not by date alone
+
+Not all patches are equal. Prioritise by exploitability and exposure:
+
+- **Critical / actively exploited** vulnerabilities on internet-facing systems are the
+  top priority — these are what get organisations breached.
+- **Internet-facing services and applications** generally take precedence over internal-
+  only systems.
+- Severity ratings (CVSS) inform but don't dictate priority; a "high" being actively
+  exploited in the wild outranks a "critical" that isn't.
+
+## Target timeframes
+
+The Essential Eight sets defensible benchmarks. As a baseline aligned to its higher
+maturity levels:
+
+- **Internet-facing services:** patch critical vulnerabilities within **48 hours** of a
+  patch (or mitigation) being available.
+- **Operating systems and applications on workstations/servers:** patch within **two
+  weeks**, or **48 hours** where the vulnerability is being actively exploited.
+- **Replace unsupported (end-of-life) software** that no longer receives security
+  updates — an unpatchable system is a permanent open door.
+
+Set your own committed timeframes against these and hold to them; the point is a
+*defensible, documented* cadence, not perfection.
+
+## Testing rings
+
+Patching that breaks production is its own kind of incident. Stage deployments through
+**rings** so problems surface on a small population first:
+
+1. **Pilot ring** — IT and a small set of tolerant users. Catch breakage here.
+2. **Broad ring** — the general population, once the pilot is clean.
+3. **Critical/sensitive systems** — last, with a tested rollback path.
+
+For an MSP this maps onto tenant tiers; for an internal team, onto device groups. Either
+way, never deploy a patch everywhere at once.
+
+## Evidence and reporting
+
+A patch cycle isn't done until it's evidenced. Capture and retain:
+
+- **Compliance percentage** — proportion of devices/servers up to date against your
+  target timeframe.
+- **Exceptions** — what's unpatched, why, and the compensating control or remediation
+  plan.
+- **Trend over time** — so you can show posture is maintained, not just occasionally
+  achieved.
+
+This evidence is what turns "we patch regularly" into something a board, an auditor, or
+an insurer can actually rely on.
+
+## Mapping
+
+This runbook implements **Essential Eight: Patch applications** and **Patch operating
+systems** — two of the eight mitigation strategies. See the
+[Essential Eight Baseline](/docs/technical-library/essential-eight-baseline) for how it
+fits the wider model.

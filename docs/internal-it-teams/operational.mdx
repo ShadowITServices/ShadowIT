@@ -1,0 +1,75 @@
+---
+title: Operational
+sidebar_label: Operational
+sidebar_position: 3
+description: Hands-on run-state for internal IT — detailed runbooks and SOPs, patch and vulnerability management, backup and DR testing, identity administration (Entra ID, Conditional Access, PIM), endpoint and M365 hardening, monitoring, and incident response.
+---
+
+# Internal IT Teams — Operational
+
+*Altitude: days. The deepest technical content in the repository — hands-on
+run-state for the people who own the consequences.*
+
+This is where the work actually happens. For an internal team the operational layer is
+the daily craft of keeping one organisation running, secure, and recoverable. There's no
+service-margin abstraction here — just direct ownership of whether the systems work, the
+data is safe, and the lights stay on.
+
+:::tip Shared canonical content
+The configs, scripts, and step-by-step procedures referenced below are the same
+canonical content an MSP delivers — maintained once in the
+**[Technical Library](/docs/technical-library/)** so there's a single source of truth.
+This page is the internal-team lens: you own and operate the library directly for your
+own organisation, in greater depth than any other reader.
+:::
+
+## Detailed runbooks and SOPs
+
+Document the recurring operational tasks — joiner/mover/leaver, restores, hardening a
+new device — as runbooks precise enough that they survive staff turnover and stress.
+Internal runbooks tend to run deeper than an MSP's because you carry edge cases and
+institutional quirks no template anticipates. Author the reusable core in the
+[Technical Library](/docs/technical-library) and keep org-specific detail alongside it.
+
+## Patch and vulnerability management
+
+Beyond routine patching, an internal team owns true **vulnerability management**:
+knowing your exposure, prioritising by real risk, and remediating on a defensible
+cadence. See the canonical
+[Patch Management runbook](/docs/technical-library/patch-management); operationally you
+also own the harder judgement calls about risk-based prioritisation and the legacy
+systems that can't simply be patched.
+
+## Backup and DR execution and testing
+
+You don't just run backups — you own recoverability, which is only proven by **testing
+restores** and rehearsing disaster-recovery scenarios against your agreed RTO and RPO.
+The discovery that a backup has been silently failing is one every IT professional wants
+to make in a test, never in a real incident. Procedure:
+[Backup & Disaster Recovery](/docs/technical-library/backup-and-dr).
+
+## Identity and access administration
+
+Identity is the new perimeter, and administering it is core operational work:
+**Entra ID** user and group lifecycle, **Conditional Access** policy management, and
+**Privileged Identity Management (PIM)** for just-in-time elevation of admin rights.
+Done well, this is the highest-leverage security work you do. The hardening baseline is
+in [MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening); operationally
+you own the day-to-day administration, the access reviews, and the exceptions.
+
+## Endpoint and Microsoft 365 hardening
+
+Maintaining hardened configurations across endpoints and the Microsoft 365 estate —
+device compliance, attack-surface reduction, secure service configuration — is ongoing
+work, not a one-time project. Configurations drift, new features ship, and threats
+evolve. The canonical baselines live in the
+[Technical Library](/docs/technical-library); your job is keeping the real estate
+aligned to them and catching drift early.
+
+## Monitoring, logging and incident response
+
+Finally, you own detection and response: meaningful **monitoring and logging** so you
+can see what's happening, and the practised ability to **execute incident response** when
+something goes wrong — contain, investigate, recover, and learn. For an internal team
+this is deeply hands-on and deeply consequential: when an incident hits, you're not
+escalating to a provider, you *are* the response. Rehearse it before you need it.

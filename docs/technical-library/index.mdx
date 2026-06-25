@@ -1,0 +1,60 @@
+---
+title: Technical Library
+sidebar_label: Overview
+sidebar_position: 1
+slug: /technical-library/
+description: The canonical technical layer for the Shadow IT repository — a single source of truth for hardening baselines, runbooks, and scripts that the audience Operational and Tactical pages reference rather than duplicate.
+---
+
+# Technical Library
+
+This is the **canonical technical layer** of the repository — the one place the actual
+configs, hardening baselines, runbooks, and scripts live. It is deliberately
+audience-neutral. There's no Business-Owner, MSP, or Internal-IT framing here; there's
+just the correct, current way to do the thing.
+
+## Why this exists
+
+Three audiences each have an Operational tier, and their underlying technical procedures
+are nearly identical — an MSP hardening a tenant's Microsoft 365 and an internal team
+hardening their own follow substantially the same steps. If that content were written
+out in every audience section, the same MFA baseline would live in three places and the
+three copies would inevitably **drift**: different versions, different exceptions,
+different responses to the same CVE.
+
+Maintaining it once, here, keeps a single source of truth for exactly the things that
+change most often. The audience pages act as **lenses** — they add the context, framing,
+and decision-ownership appropriate to each reader and then point here for the procedure.
+
+## How to use it
+
+- **Operational pages** link here for the step-by-step procedures. If you're doing the
+  work, this is your reference.
+- **Tactical pages** link here when planning deployment and standards.
+- **Business Owner pages** rarely touch this layer at all — by design. Owners need
+  outcomes and interpretation, not configs.
+
+When a baseline changes — a new control, a version bump, a revised CVE response — it gets
+updated **here, once**, and every audience page that references it is automatically
+current.
+
+## In this library
+
+The starter set below is the foundation. It will grow over time, but each page aims to
+be a complete, usable reference rather than a stub:
+
+- **[MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening)** — identity
+  is the modern perimeter; this is the baseline for securing it.
+- **[Patch Management](/docs/technical-library/patch-management)** — a defensible
+  patching cadence with evidence.
+- **[Backup & Disaster Recovery](/docs/technical-library/backup-and-dr)** — recoverability
+  you can actually prove.
+- **[Essential Eight Baseline](/docs/technical-library/essential-eight-baseline)** — the
+  ASD/ACSC mitigation strategies and how the rest of this library maps to them.
+
+:::note A living layer
+These baselines reflect good practice at the time of writing and assume a typical
+Australian SMB Microsoft 365 environment. Always validate against your own context and
+the current vendor and ACSC guidance before applying. Corrections and improvements are
+welcome — [get in touch](mailto:hello@shadowit.com.au).
+:::

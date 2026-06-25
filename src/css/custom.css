@@ -152,8 +152,7 @@ html {
   border: 1px solid var(--ifm-color-emphasis-200);
   border-radius: 12px;
   background: var(--ifm-background-surface-color);
-  transition: border-color 0.2s ease, transform 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .serviceStep:hover {
@@ -188,7 +187,11 @@ html {
   margin-bottom: 0;
 }
 
-/* On narrow screens, drop the badge above the heading so copy isn't crammed. */
+/* Narrow screens: drop the badge above the heading so copy isn't crammed. */
+.serviceStepNarrow {
+  display: none;
+}
+
 @media screen and (max-width: 480px) {
   .serviceStep {
     padding: 1.25rem;

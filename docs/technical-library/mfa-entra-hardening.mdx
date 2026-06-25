@@ -1,0 +1,85 @@
+---
+title: MFA & Entra ID Hardening
+sidebar_label: MFA & Entra ID Hardening
+sidebar_position: 2
+description: Canonical baseline for hardening identity in Microsoft Entra ID — multi-factor authentication, Conditional Access, privileged access with PIM, and legacy authentication. Referenced by the Operational pages across all audiences.
+---
+
+# MFA & Entra ID Hardening
+
+*Canonical baseline. Audience-neutral. Referenced by the Operational pages for
+[MSPs](/docs/managed-service-providers/operational) and
+[Internal IT Teams](/docs/internal-it-teams/operational).*
+
+Identity is the modern security perimeter. For a cloud-first Microsoft 365 organisation,
+compromise almost always starts with a compromised identity, which makes hardening
+Entra ID the single highest-leverage security work available. This page is the baseline
+to deploy and hold every environment to.
+
+:::warning Validate before you deploy
+These are baseline recommendations for a typical Australian SMB Microsoft 365 tenant.
+Conditional Access in particular can lock you out if misapplied. Always pilot with a test
+group, configure break-glass accounts first, and validate against current Microsoft
+guidance.
+:::
+
+## Break-glass accounts first
+
+Before tightening anything, create **two cloud-only emergency-access ("break-glass")
+accounts**, excluded from Conditional Access policies, with long random passphrases
+stored securely offline, and monitored for any sign-in. These are your way back in if a
+policy or a federated identity provider locks everyone out. Configure these *before* you
+deploy the policies below.
+
+## Multi-factor authentication
+
+MFA is non-negotiable and is increasingly a precondition of cyber insurance. The baseline:
+
+- Require **phishing-resistant MFA** where possible — passkeys/FIDO2 or
+  certificate-based — and at minimum the Microsoft Authenticator app with number
+  matching. Avoid SMS as a primary factor; it's vulnerable to SIM-swap and interception.
+- Enforce MFA for **all users**, not just admins. Attackers pivot through standard
+  accounts.
+- Roll out via Conditional Access (below) rather than per-user MFA or relying solely on
+  Security Defaults, so you get consistent, reportable control.
+
+## Conditional Access baseline
+
+Conditional Access is where the identity perimeter is actually enforced. A sensible
+starting policy set:
+
+- **Require MFA for all users, all cloud apps.** This is the cornerstone policy.
+- **Block legacy authentication.** Legacy protocols (POP, IMAP, SMTP AUTH, older Office
+  clients) can't enforce MFA and are a favourite attacker path. Block them, after
+  checking for dependencies.
+- **Require compliant or hybrid-joined devices** for access to sensitive applications,
+  so access is tied to managed, healthy endpoints.
+- **Risk-based policies** (with Entra ID P2): require MFA or block on sign-in/user risk
+  detected by Identity Protection.
+- Consider **location and session controls** appropriate to your business — for example,
+  blocking or challenging sign-ins from regions you never operate in.
+
+Deploy every policy in **report-only mode** first, review the impact in the sign-in logs,
+then enforce.
+
+## Privileged access
+
+Standing administrative access is a standing risk. Harden it:
+
+- Apply the **principle of least privilege** — grant the narrowest role that does the
+  job, not Global Administrator by default.
+- Use **Privileged Identity Management (PIM)** for just-in-time, time-bound, approved
+  elevation, so admin rights are activated only when needed and every activation is
+  logged.
+- Keep the number of **Global Administrators** small (Microsoft suggests a handful), all
+  MFA-enforced and reviewed.
+- Run regular **access reviews** so privilege that's no longer needed is removed.
+
+## What "good" looks like
+
+A hardened tenant has MFA enforced for everyone via Conditional Access, legacy
+authentication blocked, admin access minimised and brokered through PIM, break-glass
+accounts in place and monitored, and the whole configuration documented so drift is
+detectable. Map this baseline to **Essential Eight: Multi-factor authentication** and
+**Restrict administrative privileges** — see the
+[Essential Eight Baseline](/docs/technical-library/essential-eight-baseline).

@@ -1,47 +1,84 @@
 ---
-sidebar_position: 1
+title: Introduction
+sidebar_label: Introduction
+description: How the Shadow IT documentation is organised — an IT best-practice repository structured by audience (who owns the decision and the risk) and by altitude (Strategy, Tactical, Operational).
 ---
 
-# Tutorial Intro
+# Introduction
 
-Let's discover **Docusaurus in less than 5 minutes**.
+Welcome to the Shadow IT documentation — an open, non-paywalled body of knowledge
+on Microsoft 365, cybersecurity, and IT governance, written for businesses in
+regional Australia and anyone running IT to a professional standard.
 
-## Getting Started
+This isn't a product manual or a sales brochure. It's a reference library: the
+runbooks, baselines, and decision frameworks I'd want a client, a peer, or my
+future self to have. The hard part of a library this size isn't writing it — it's
+organising it so you can find the one page that's actually written for *you*.
 
-Get started by **creating a new site**.
+## How the sidebar is organised
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+The menu on the left is built on a single idea: **the core distinction isn't what
+the technology is — it's who owns the decision and who carries the risk.** The same
+control (say, multi-factor authentication) reads completely differently depending
+on whether you're signing the cheque, delivering it as a service, or configuring it
+at 2am during an incident.
 
-### What you'll need
+So the documentation is split first by **audience**, then by **altitude**.
 
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+### Pick your audience
 
-## Generate a new site
+There are three top-level sections, one for each kind of reader:
 
-Generate a new Docusaurus site using the **classic template**.
+- **[Business Owners](/docs/business-owners/strategy)** — You're accountable to a
+  board or to yourself. You read in the language of risk, cost, and continuity, not
+  CVEs. These pages frame technology as a business decision: outcomes and dollars,
+  not configuration.
+- **[Managed Service Providers](/docs/managed-service-providers/strategy)** — You
+  deliver IT as a service to many clients. Everything here is framed through
+  multi-tenancy, repeatability, margin, and liability transfer.
+- **[Internal IT Teams](/docs/internal-it-teams/strategy)** — You execute and own
+  the outcome for a single organisation. The framing is accountability, depth, and
+  institutional knowledge — full ownership of the consequences.
 
-The classic template will automatically be added to your project after you run the command:
+### Then pick your altitude
 
-```bash
-npm init docusaurus@latest my-website classic
-```
+Inside each audience, the content is split into three tiers that map to
+**time-horizon and altitude**:
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
+- **Strategy** — *years.* Direction-setting. Where the money goes, what risk you're
+  willing to carry, and how technology serves the wider goal.
+- **Tactical** — *quarters.* Turning strategy into plans, projects, standards, and
+  procurement. The bridge between intent and execution.
+- **Operational** — *days.* The hands-on run-state: runbooks, configs, cadences,
+  and the work that keeps everything running and defensible.
 
-The command also installs all necessary dependencies you need to run Docusaurus.
+Read top-to-bottom if you're new, or jump straight to your tier if you know what
+you're after.
 
-## Start your site
+## The Technical Library — one source of truth
 
-Run the development server:
+Three audiences times three tiers is nine sections, and the honest risk is
+duplication: an MSP's Operational runbook for hardening Microsoft 365 is nearly
+identical to an internal IT team's. Maintain that config in three places and the
+three copies *will* drift — different versions, different CVE responses, different
+"current" baselines.
 
-```bash
-cd my-website
-npm run start
-```
+To avoid that, the actual technical content — the hardening baselines, runbooks,
+and scripts that change over time — lives once, in the
+**[Technical Library](/docs/technical-library/)**. It's audience-neutral and
+authoritative. The Operational pages (and, to a lesser extent, the Tactical pages)
+*reference* it rather than repeating it. Business Owner pages almost never touch it;
+they're context and interpretation.
 
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
+Think of the nine audience pages as **lenses** over a single canonical core. The
+lens gives you the framing appropriate to your seat; the library gives you the one
+true version of the thing that drifts.
 
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
+## A note on currency
 
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+Security guidance and Australian regulation both move. Where these pages cite
+specific obligations — the Privacy Act, the Essential Eight, APRA standards — they
+were accurate at the time of writing, but you should treat them as a starting point
+for your own due diligence, not as legal or compliance advice. If you spot
+something out of date or wrong, [tell me](mailto:hello@shadowit.com.au) — that's how
+a living repository stays honest.

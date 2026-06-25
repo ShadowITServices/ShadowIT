@@ -1,0 +1,75 @@
+---
+title: Essential Eight Baseline
+sidebar_label: Essential Eight Baseline
+sidebar_position: 5
+description: The ASD/ACSC Essential Eight mitigation strategies and maturity model, and how the rest of the Shadow IT Technical Library maps to them. The anchor for security maturity across all three audiences.
+---
+
+# Essential Eight Baseline
+
+*Canonical reference. Audience-neutral. The security-maturity anchor referenced from
+every audience's Strategy and Tactical tiers.*
+
+The **Essential Eight** is a set of eight baseline mitigation strategies published by the
+Australian Signals Directorate (ASD) through the Australian Cyber Security Centre (ACSC).
+It's the de facto security baseline for Australian organisations — and because it's
+measurable, it doubles as a shared language between technicians, management, and boards.
+
+:::note Currency
+The Essential Eight Maturity Model is maintained by the ACSC and updated periodically
+(most recently a significant revision in November 2023). Always work from the current
+version at [cyber.gov.au](https://www.cyber.gov.au/business-government/asds-cyber-security-frameworks/essential-eight).
+The summary below is an orientation, not a substitute for the official model.
+:::
+
+## The eight mitigation strategies
+
+1. **Application control** — allow only approved applications to execute, preventing
+   malicious code from running.
+2. **Patch applications** — keep applications current; remediate vulnerabilities
+   quickly. (See [Patch Management](/docs/technical-library/patch-management).)
+3. **Configure Microsoft Office macro settings** — block macros from the internet and
+   limit their use, closing a common malware vector.
+4. **User application hardening** — harden browsers and applications (e.g. block Flash,
+   ads, and Java where unnecessary) to reduce attack surface.
+5. **Restrict administrative privileges** — limit and control admin rights so a
+   compromised account does less damage. (See
+   [MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening).)
+6. **Patch operating systems** — keep operating systems current and replace
+   end-of-life systems. (See [Patch Management](/docs/technical-library/patch-management).)
+7. **Multi-factor authentication** — verify identity with more than a password. (See
+   [MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening).)
+8. **Regular backups** — maintain and test backups so you can recover from an incident.
+   (See [Backup & Disaster Recovery](/docs/technical-library/backup-and-dr).)
+
+## The maturity model
+
+The model defines **four maturity levels**, and an organisation's maturity is assessed
+across all eight strategies together:
+
+- **Maturity Level Zero** — not aligned with the intent of the strategy; meaningful
+  weaknesses exist.
+- **Maturity Level One** — basic protection against opportunistic, unsophisticated
+  attacks.
+- **Maturity Level Two** — protection against more capable adversaries using better tools
+  and techniques.
+- **Maturity Level Three** — protection against adaptive, highly capable, targeted
+  adversaries.
+
+The ACSC recommends implementing **all eight strategies to the same maturity level**
+before moving the whole set up — uneven implementation leaves exploitable gaps. Choose a
+target level proportionate to your threat profile and risk appetite.
+
+## How to use this baseline
+
+- **Business Owners** — treat your Essential Eight maturity as a board-level metric: pick
+  a target level, fund the gap as a project, and report on it. (See
+  [Business Owners — Strategy](/docs/business-owners/strategy) and
+  [Tactical](/docs/business-owners/tactical).)
+- **MSPs** — productise Essential Eight uplift as a defined, repeatable offering. (See
+  [MSP — Strategy](/docs/managed-service-providers/strategy).)
+- **Internal IT** — run it as an internal program with an owner, a roadmap, and ongoing
+  reporting. (See [Internal IT — Strategy](/docs/internal-it-teams/strategy).)
+
+The other pages in this library are the concrete implementations of individual
+strategies. This page is the map that ties them together.

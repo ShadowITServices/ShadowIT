@@ -1,0 +1,77 @@
+---
+title: Tactical
+sidebar_label: Tactical
+sidebar_position: 2
+description: Standardisation and onboarding for MSPs — client onboarding playbooks, per-tenant baseline templates, RMM/PSA tooling strategy, documentation standards, consistent security baselines, fleet change management, and SLAs deliverable at scale.
+---
+
+# Managed Service Providers — Tactical
+
+*Altitude: quarters. This is where a service strategy becomes repeatable delivery —
+playbooks, templates, and tooling applied the same way every time.*
+
+The managed model only works if delivery is **standardised, documented, and
+repeatable.** Tactical work for an MSP is the engineering of consistency: building the
+templates and playbooks once so that every client gets the same quality without every
+engineer reinventing it.
+
+## Client onboarding playbooks
+
+Onboarding is the highest-leverage process in an MSP. A new client brought on through
+a disciplined playbook starts profitable and low-risk; one onboarded ad hoc generates
+tickets and surprises for years. A good onboarding playbook captures the environment,
+documents everything, deploys your standard baselines, and verifies security posture
+*before* you accept ownership — so you're not silently inheriting someone else's
+unpatched, un-MFA'd mess and the liability that comes with it.
+
+## Baseline configuration templates, applied per tenant
+
+The heart of standardisation is a set of **baseline templates** — the standard way you
+configure Microsoft 365, Entra ID, endpoints, and security controls — that you apply
+consistently to every tenant. The canonical version of these baselines lives in the
+[Technical Library](/docs/technical-library); the tactical work is maintaining the
+*deployment* mechanism that pushes them per tenant and detects drift. Define the
+baseline once, deploy it everywhere, and you've converted a recurring engineering
+problem into a one-time design decision.
+
+## RMM and PSA tooling strategy
+
+Your **RMM** (remote monitoring and management) and **PSA** (professional services
+automation) tools are the backbone of delivery — and, as noted in
+[Strategy](/docs/managed-service-providers/strategy), your single biggest security
+exposure. Tactical decisions here include how you standardise monitoring across
+tenants, how you integrate RMM and PSA so tickets and assets stay in sync, and — non-
+negotiably — how you secure administrative access to these platforms (MFA, least
+privilege, and tight conditional access on every admin account).
+
+## Documentation standards
+
+Undocumented knowledge is unscalable and a key-person risk. Adopting a documentation
+platform (such as **IT Glue** or **Hudu**) and, more importantly, enforcing a
+*standard* for what gets documented and how, is what lets any engineer pick up any
+client and deliver consistently. The discipline matters more than the tool: a
+beautiful platform full of stale, inconsistent entries is worse than useless because
+it's trusted.
+
+## Security baselines, deployed consistently
+
+Strategy decided that security is a product; tactics make it real by ensuring your
+agreed baseline is actually deployed to every tenant that bought it — and that you can
+*prove* it. Inconsistent security deployment is both a delivery failure and a
+liability: the gap between "we offer Essential Eight uplift" and "this specific tenant
+is actually at Level 2" is exactly where post-incident disputes happen.
+
+## Change management across a fleet
+
+A change that's safe on one tenant can be catastrophic across two hundred. Fleet-wide
+change management — staged rollouts, testing rings, and the ability to pause or roll
+back — is what separates a mature MSP from one that takes all its clients down with a
+single bad update. Build the rings before you need them.
+
+## SLA design that's deliverable at scale
+
+It's easy to promise a one-hour response; it's hard to deliver it across your whole
+book on a Friday afternoon. Tactical SLA design means setting commitments you can
+actually meet at scale, with the staffing, automation, and escalation paths to back
+them — and tiering them so premium response is a premium product, not a default you
+quietly fail to honour.

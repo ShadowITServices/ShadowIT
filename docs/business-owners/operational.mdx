@@ -1,0 +1,69 @@
+---
+title: Operational
+sidebar_label: Operational
+sidebar_position: 3
+description: What "good" looks like day-to-day from the owner's seat — reading a monthly IT report, recognising red flags, incident-response expectations, and understanding the RTO/RPO you're paying for.
+---
+
+# Business Owners — Operational
+
+*Altitude: days. You're not doing the work — you're recognising whether it's being
+done well.*
+
+This is the shortest of your three pages by design. As an owner you shouldn't be in
+the operational weeds; you should be able to glance at the right signals and know
+whether things are healthy. The skill here is **informed oversight** — reading the
+dashboard, not driving the car.
+
+## Reading a monthly IT report
+
+A good monthly report tells a story even a non-technical reader can follow. Look for:
+
+- **Patching evidence** — what percentage of devices and servers are up to date, and
+  how quickly critical patches were applied.
+- **Backup *testing*** — not just "backups ran," but proof that a restore was
+  actually tested. Untested backups are a guess, not a safety net.
+- **Security posture** — MFA coverage, any blocked threats, and movement on your
+  Essential Eight maturity.
+- **Tickets and trends** — volumes, response times against SLA, and recurring issues
+  that hint at a deeper problem.
+
+If your report is just a list of closed tickets with no evidence of the above, ask
+for better. You're paying for an outcome, not activity.
+
+## Red flags worth acting on
+
+Some signals warrant an immediate conversation:
+
+- **No patching evidence** — unpatched systems are the single most common entry
+  point for attackers.
+- **No backup testing** — the moment you discover an untested backup has failed is
+  the worst possible moment.
+- **No MFA** — passwords alone are no longer a defensible control. Its absence is a
+  red flag for your insurer too.
+- **Silence** — a provider who only contacts you to invoice isn't managing your risk;
+  they're reacting to it.
+
+## Incident-response expectations
+
+You should know *before* an incident what happens during one: who you call, how
+quickly they respond, who decides what, and how you'll be kept informed. If your
+business would suffer from a week offline, that expectation needs to be agreed and
+documented now — not negotiated in the middle of a crisis. The technical playbook
+sits in the [Technical Library](/docs/technical-library); your job is to know it
+exists and to have tested that the phone gets answered.
+
+## Knowing the RTO and RPO you're paying for
+
+Two numbers cut through most of the jargon around backups and continuity:
+
+- **RTO (Recovery Time Objective)** — how long until you're back up after a failure.
+- **RPO (Recovery Point Objective)** — how much data you can afford to lose,
+  measured in time (an hour of work? a day?).
+
+These are **business decisions priced as technical ones.** A four-hour RTO costs more
+than a two-day RTO — and that's fine, as long as the number you're paying for matches
+what your business can actually tolerate. If you don't know your RTO and RPO, you
+don't yet know what level of protection you've bought. Ask, confirm it's been
+*tested*, and make sure it matches the risk appetite you set in
+[Strategy](/docs/business-owners/strategy).
