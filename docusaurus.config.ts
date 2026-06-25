@@ -124,7 +124,7 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Services',
+          title: 'Site Map',
           items: [
             {
               label: 'Services',
@@ -151,10 +151,6 @@ const config: Config = {
               label: 'Privacy Policy',
               to: '/privacy-policy',
             },
-            {
-              label: 'Contact',
-              href: 'mailto:hello@shadowit.com.au',
-            },
           ],
         },
         {
@@ -169,8 +165,8 @@ const config: Config = {
               href: 'https://www.linkedin.com/in/beaudean/',
             },
             {
-              label: 'GitHub',
-              href: 'https://github.com/ShadowITServices/ShadowIT',
+              label: 'Contact',
+              href: 'mailto:hello@shadowit.com.au',
             },
           ],
         },

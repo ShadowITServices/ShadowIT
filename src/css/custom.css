@@ -295,3 +295,23 @@ html {
 [class*='searchHint_'] {
   text-transform: uppercase;
 }
+
+/* ---------------------------------------------------------------------------
+ * Homepage single-viewport lock — fit hero + cards + footer in one screen with
+ * no scroll. Scoped to the homepage via :has() + the stable `.homepage-fit`
+ * class on the main wrapper, so every other page scrolls normally. Desktop only
+ * (>=769px); phones fall back to normal scrolling (see index.module.css).
+ * ------------------------------------------------------------------------- */
+@media screen and (min-width: 769px) {
+  #__docusaurus:has(.main-wrapper.homepage-fit) {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .main-wrapper.homepage-fit {
+    flex: 1 1 auto;
+    min-height: 0;     /* let the wrapper shrink below its content size */
+    overflow: hidden;  /* clip instead of forcing a page scrollbar */
+  }
+}

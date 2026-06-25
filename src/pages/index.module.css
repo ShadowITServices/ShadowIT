@@ -1,16 +1,9 @@
 /**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- *
- * Homepage "fit-to-viewport" layout: the hero and feature cards share the space
- * between the navbar and footer, scaling fluidly with clamp()/vh so the page
- * fits without scrolling on typical landscape resolutions. On very short or
- * mobile-portrait viewports it falls back to normal scrolling (see media query)
- * rather than clipping content.
+ * Homepage single-viewport layout. The page is locked to one screen (no scroll)
+ * on desktop via the global `.homepage-fit` rules in custom.css; here we keep
+ * the hero compact and let the feature block flex to fill the remaining height.
  */
 
-/* main-wrapper on the homepage: stack hero + features as a flex column so the
-   features block can grow to fill the leftover height and stay centred. */
 .homeFit {
   display: flex;
   flex-direction: column;
@@ -18,22 +11,21 @@
 
 .homeMain {
   flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   align-items: center;
 }
 
 /* --- Hero ------------------------------------------------------------- */
 .heroBanner {
-  padding: clamp(2.5rem, 8vh, 6rem) 0;
+  padding: clamp(1rem, 3.5vh, 2.5rem) 0;
   text-align: center;
   position: relative;
   overflow: hidden;
   flex: 0 0 auto;
 }
 
-/* Subtle dot-grid + soft centre glow layered over the gradient so the hero
-   reads with depth rather than a flat fill. Theme-independent (the hero is the
-   brand gradient in both light and dark). */
+/* Subtle dot-grid + soft centre glow over the gradient for depth. */
 .heroBanner::before {
   content: '';
   position: absolute;
@@ -46,7 +38,6 @@
   z-index: 0;
 }
 
-/* Keep all hero content above the decorative layers. */
 .heroBanner :global(.container) {
   position: relative;
   z-index: 1;
@@ -55,7 +46,7 @@
 /* Radar pulse rings, centred behind the logo. */
 .heroRings {
   position: absolute;
-  top: 42%;
+  top: 45%;
   left: 50%;
   width: 1px;
   height: 1px;
@@ -97,15 +88,14 @@
 }
 
 .heroLogoHeading {
-  margin-bottom: clamp(0.75rem, 2vh, 1.5rem);
+  margin-bottom: clamp(0.5rem, 1.5vh, 1rem);
 }
 
-/* Render the dark wordmark as a solid white silhouette so it reads on the
-   brand purple gradient (brand "white-on-violet" hero treatment). */
+/* Dark wordmark rendered as a white silhouette on the brand gradient. */
 .heroLogo {
   display: block;
-  width: clamp(220px, 32vw, 440px);
-  max-height: 14vh;
+  width: clamp(200px, 28vw, 400px);
+  max-height: 11vh;
   height: auto;
   margin: 0 auto;
   object-fit: contain;
@@ -116,18 +106,17 @@
   margin: 0;
   font-family: var(--brand-font-heading);
   font-weight: 600;
-  font-size: clamp(1rem, 0.9rem + 0.8vh, 1.5rem);
+  font-size: clamp(0.95rem, 0.85rem + 0.7vh, 1.4rem);
   letter-spacing: 0.08em;
   color: var(--brand-white);
   opacity: 0.9;
 }
 
-/* Short gradient accent under the tagline. */
 .heroDivider {
   display: block;
   width: 64px;
   height: 3px;
-  margin: clamp(0.75rem, 2vh, 1.25rem) auto 0;
+  margin: clamp(0.6rem, 1.5vh, 1rem) auto 0;
   border-radius: 3px;
   background: linear-gradient(
     90deg,
@@ -137,60 +126,16 @@
   );
 }
 
-/* Animated "Explore" scroll cue that replaces the (now redundant) CTA buttons. */
-.scrollCue {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: clamp(1.5rem, 4vh, 2.75rem);
-  color: var(--brand-white);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  text-decoration: none;
-  opacity: 0.85;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.scrollCue:hover,
-.scrollCue:focus {
-  color: var(--brand-white);
-  text-decoration: none;
-  opacity: 1;
-}
-
-.scrollChevron {
-  font-size: 1.25rem;
-  line-height: 1;
-  animation: heroBounce 2s ease-in-out infinite;
-}
-
-@keyframes heroBounce {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(6px);
-  }
-}
-
-/* Respect users who prefer reduced motion: hold the rings faint and still,
-   and stop the chevron bounce. */
 @media (prefers-reduced-motion: reduce) {
   .heroRings span {
     animation: none;
     opacity: 0.16;
   }
-  .scrollChevron {
-    animation: none;
-  }
 }
 
-/* Mobile-portrait / narrow screens: abandon the fit-to-viewport constraint and
-   let the page scroll normally so nothing is clipped. */
+/* Mobile-portrait / narrow screens: allow normal scrolling (can't fit a full
+   hero + cards + footer on a phone). The desktop lock in custom.css is gated to
+   min-width: 769px, matching this breakpoint. */
 @media screen and (max-width: 768px) {
   .homeFit {
     display: block;
@@ -199,6 +144,6 @@
     display: block;
   }
   .heroBanner {
-    padding: 3rem 1rem;
+    padding: 2.5rem 1rem;
   }
 }

@@ -33,15 +33,6 @@ function HomepageHeader() {
         </Heading>
         <p className={styles.heroTagline}>{siteConfig.tagline}</p>
         <span className={styles.heroDivider} aria-hidden="true" />
-        <a
-          className={styles.scrollCue}
-          href="#explore"
-          aria-label="Scroll down to explore">
-          Explore
-          <span className={styles.scrollChevron} aria-hidden="true">
-            ↓
-          </span>
-        </a>
       </div>
     </header>
   );
@@ -53,9 +44,9 @@ export default function Home(): ReactNode {
     <Layout
       title={`${siteConfig.title} — ${siteConfig.tagline}`}
       description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean."
-      wrapperClassName={styles.homeFit}>
+      wrapperClassName={clsx(styles.homeFit, 'homepage-fit')}>
       <HomepageHeader />
-      <main id="explore" className={styles.homeMain}>
+      <main className={styles.homeMain}>
         <HomepageFeatures />
       </main>
     </Layout>
