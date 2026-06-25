@@ -83,3 +83,8 @@
     padding: 2rem 1rem;
   }
 }
+
+/* Make all three hero CTAs the same width regardless of label length. */
+.buttons :global(.button) {
+  min-width: 11rem;
+}

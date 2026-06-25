@@ -25,20 +25,19 @@ function HomepageHeader() {
             height={609}
           />
         </Heading>
-        <p className="hero__subtitle">{siteConfig.tagline}</p>
-        <p className={styles.heroLede}>
-          Managed IT, security, and governance for businesses in regional
-          Australia — written up, documented, and shared by Beau Dean.
+        {/* Tagline intentionally faded to 25% opacity. */}
+        <p className="hero__subtitle" style={{opacity: 0.25}}>
+          {siteConfig.tagline}
         </p>
         <div className={styles.buttons}>
           <Link className="button button--secondary button--lg" to="/about">
-            About Beau
+            About
           </Link>
           <Link className="button button--secondary button--lg" to="/services">
             Services
           </Link>
           <Link className="button button--secondary button--lg" to="/docs/intro">
-            Visit our Docs
+            Docs
           </Link>
         </div>
       </div>

@@ -70,8 +70,8 @@ const config: Config = {
   ],
 
   // Offline/local full-text search (static-hosting friendly; no backend/API key).
-  // Adds a search box to the navbar automatically; a second one is injected at
-  // the top of the docs sidebar via src/theme/DocSidebar/Desktop/Content.
+  // The navbar search box is positioned explicitly via the {type: 'search'} item
+  // below, so it sits to the left of the colour-mode toggle.
   themes: [
     [
       '@easyops-cn/docusaurus-search-local',
@@ -116,6 +116,8 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
+        // Search sits in the right section, before the colour-mode toggle.
+        {type: 'search', position: 'right'},
       ],
     },
     footer: {

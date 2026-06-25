@@ -286,3 +286,12 @@ html {
     overflow-y: auto;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Search keyboard-shortcut hint — capitalise the keys so it reads "CTRL K"
+ * rather than "ctrl K". Targets the local-search hint <kbd> by stable class
+ * prefix (the suffix is a CSS-module hash that can change between versions).
+ * ------------------------------------------------------------------------- */
+[class*='searchHint_'] {
+  text-transform: uppercase;
+}
