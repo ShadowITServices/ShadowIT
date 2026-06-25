@@ -22,12 +22,78 @@
   align-items: center;
 }
 
+/* --- Hero ------------------------------------------------------------- */
 .heroBanner {
-  padding: clamp(1.5rem, 5vh, 4rem) 0;
+  padding: clamp(2.5rem, 8vh, 6rem) 0;
   text-align: center;
   position: relative;
   overflow: hidden;
   flex: 0 0 auto;
+}
+
+/* Subtle dot-grid + soft centre glow layered over the gradient so the hero
+   reads with depth rather than a flat fill. Theme-independent (the hero is the
+   brand gradient in both light and dark). */
+.heroBanner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.16), transparent 58%),
+    radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Keep all hero content above the decorative layers. */
+.heroBanner :global(.container) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Radar pulse rings, centred behind the logo. */
+.heroRings {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.heroRings span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 240px;
+  height: 240px;
+  margin: -120px 0 0 -120px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  opacity: 0;
+  animation: heroPulse 6s ease-out infinite;
+}
+
+.heroRings span:nth-child(2) {
+  animation-delay: 2s;
+}
+
+.heroRings span:nth-child(3) {
+  animation-delay: 4s;
+}
+
+@keyframes heroPulse {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
 }
 
 .heroLogoHeading {
@@ -46,27 +112,80 @@
   filter: brightness(0) invert(1);
 }
 
-.heroLede {
-  max-width: 40rem;
-  margin: 0 auto clamp(1rem, 2.5vh, 2rem);
-  font-size: clamp(0.95rem, 0.9rem + 0.4vh, 1.15rem);
-  line-height: 1.5;
-  opacity: 0.95;
+.heroTagline {
+  margin: 0;
+  font-family: var(--brand-font-heading);
+  font-weight: 600;
+  font-size: clamp(1rem, 0.9rem + 0.8vh, 1.5rem);
+  letter-spacing: 0.08em;
+  color: var(--brand-white);
+  opacity: 0.9;
 }
 
-.buttons {
-  display: flex;
+/* Short gradient accent under the tagline. */
+.heroDivider {
+  display: block;
+  width: 64px;
+  height: 3px;
+  margin: clamp(0.75rem, 2vh, 1.25rem) auto 0;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.25),
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0.25)
+  );
+}
+
+/* Animated "Explore" scroll cue that replaces the (now redundant) CTA buttons. */
+.scrollCue {
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: clamp(1.5rem, 4vh, 2.75rem);
+  color: var(--brand-white);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-/* Short viewports (e.g. small laptops in landscape): trim the lede to help the
-   page fit without scrolling. */
-@media screen and (max-height: 640px) {
-  .heroLede {
-    display: none;
+.scrollCue:hover,
+.scrollCue:focus {
+  color: var(--brand-white);
+  text-decoration: none;
+  opacity: 1;
+}
+
+.scrollChevron {
+  font-size: 1.25rem;
+  line-height: 1;
+  animation: heroBounce 2s ease-in-out infinite;
+}
+
+@keyframes heroBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* Respect users who prefer reduced motion: hold the rings faint and still,
+   and stop the chevron bounce. */
+@media (prefers-reduced-motion: reduce) {
+  .heroRings span {
+    animation: none;
+    opacity: 0.16;
+  }
+  .scrollChevron {
+    animation: none;
   }
 }
 
@@ -80,11 +199,6 @@
     display: block;
   }
   .heroBanner {
-    padding: 2rem 1rem;
+    padding: 3rem 1rem;
   }
-}
-
-/* Make all three hero CTAs the same width regardless of label length. */
-.buttons :global(.button) {
-  min-width: 11rem;
 }

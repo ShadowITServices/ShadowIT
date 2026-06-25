@@ -1,6 +1,5 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
-import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
@@ -13,6 +12,13 @@ function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
+      {/* Decorative radar rings — echo the "managing the unseen" / monitoring
+          theme. Purely decorative and motion-reduced-safe. */}
+      <div className={styles.heroRings} aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
       <div className="container">
         {/* Logo replaces the text title, rendered white via CSS filter so the
             wordmark reads on the brand purple gradient. The h1 stays for SEO/a11y. */}
@@ -25,21 +31,17 @@ function HomepageHeader() {
             height={609}
           />
         </Heading>
-        {/* Tagline intentionally faded to 25% opacity. */}
-        <p className="hero__subtitle" style={{opacity: 0.25}}>
-          {siteConfig.tagline}
-        </p>
-        <div className={styles.buttons}>
-          <Link className="button button--secondary button--lg" to="/about">
-            About
-          </Link>
-          <Link className="button button--secondary button--lg" to="/services">
-            Services
-          </Link>
-          <Link className="button button--secondary button--lg" to="/docs/intro">
-            Docs
-          </Link>
-        </div>
+        <p className={styles.heroTagline}>{siteConfig.tagline}</p>
+        <span className={styles.heroDivider} aria-hidden="true" />
+        <a
+          className={styles.scrollCue}
+          href="#explore"
+          aria-label="Scroll down to explore">
+          Explore
+          <span className={styles.scrollChevron} aria-hidden="true">
+            ↓
+          </span>
+        </a>
       </div>
     </header>
   );
@@ -53,7 +55,7 @@ export default function Home(): ReactNode {
       description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean."
       wrapperClassName={styles.homeFit}>
       <HomepageHeader />
-      <main className={styles.homeMain}>
+      <main id="explore" className={styles.homeMain}>
         <HomepageFeatures />
       </main>
     </Layout>
