@@ -1,0 +1,135 @@
+---
+title: Exchange Online
+sidebar_label: Exchange Online
+sidebar_position: 3
+description: PowerShell for Exchange Online — auditing mailbox forwarding and inbox rules for exfiltration risk, and producing a mailbox size and type report. Logs to C:\Temp.
+---
+
+# Exchange Online
+
+Mail administration via the **ExchangeOnlineManagement** module. Connect with
+`Connect-ExchangeOnline` (see
+[Overview & Connection](/docs/technical-library/script-repository/microsoft-365/))
+before running.
+
+## Audit mailbox forwarding & inbox rules
+
+Attacker-created forwarding is one of the most common signs of a compromised mailbox.
+This script reports mailbox-level forwarding (`ForwardingSMTPAddress` /
+`ForwardingAddress`) and any inbox rules that forward or redirect externally.
+Read-only; needs **View-Only Recipients** (or Exchange Admin).
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports mailbox forwarding and forwarding/redirecting inbox rules.
+.NOTES
+    Read-only. Connect-ExchangeOnline first.
+    Logs to C:\Temp\EXOForwarding_<timestamp>.log
+#>
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "EXOForwarding_$stamp.log"
+$CsvFile = Join-Path $LogDir "EXOForwarding_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+function Test-ExoConnected {
+    try { Get-OrganizationConfig -ErrorAction Stop | Out-Null; return $true } catch { return $false }
+}
+
+try {
+    if (-not (Test-ExoConnected)) { throw 'Not connected. Run Connect-ExchangeOnline first.' }
+    Write-Log 'Enumerating user mailboxes.'
+    $mailboxes = Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox
+    Write-Log "Checking $($mailboxes.Count) mailbox(es) for forwarding."
+
+    $findings = foreach ($mb in $mailboxes) {
+        # Mailbox-level forwarding
+        if ($mb.ForwardingSMTPAddress -or $mb.ForwardingAddress) {
+            Write-Log "Mailbox forwarding on $($mb.PrimarySmtpAddress) -> $($mb.ForwardingSMTPAddress)$($mb.ForwardingAddress)" -Level WARN
+            [pscustomobject]@{ Mailbox=$mb.PrimarySmtpAddress; Type='MailboxForward'; Detail="$($mb.ForwardingSMTPAddress)$($mb.ForwardingAddress)" }
+        }
+        # Rule-level forwarding/redirect
+        $rules = Get-InboxRule -Mailbox $mb.PrimarySmtpAddress -ErrorAction SilentlyContinue |
+                 Where-Object { $_.ForwardTo -or $_.ForwardAsAttachmentTo -or $_.RedirectTo }
+        foreach ($r in $rules) {
+            $targets = @($r.ForwardTo + $r.ForwardAsAttachmentTo + $r.RedirectTo) -join '; '
+            Write-Log "Inbox rule '$($r.Name)' on $($mb.PrimarySmtpAddress) forwards to: $targets" -Level WARN
+            [pscustomobject]@{ Mailbox=$mb.PrimarySmtpAddress; Type='InboxRule'; Detail="$($r.Name): $targets" }
+        }
+    }
+    $findings | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $($findings.Count) forwarding finding(s). CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## Mailbox size & type report
+
+A capacity and inventory snapshot: mailbox type, item count, and total size, sorted
+largest first. Read-only.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports mailbox type, item count and size for all mailboxes.
+.NOTES
+    Read-only. Connect-ExchangeOnline first.
+    Logs to C:\Temp\EXOMailboxSizes_<timestamp>.log
+#>
+[CmdletBinding()]
+param([int]$Top = 0)  # 0 = all; otherwise return the N largest.
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "EXOMailboxSizes_$stamp.log"
+$CsvFile = Join-Path $LogDir "EXOMailboxSizes_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    Write-Host $line; Add-Content -LiteralPath $LogFile -Value $line }
+
+function ConvertTo-MB {
+    # Exchange size strings look like "1.5 GB (1,610,612,736 bytes)". Pull the bytes.
+    param([string]$SizeString)
+    if ($SizeString -match '\(([\d,]+) bytes\)') { return [math]::Round(([int64]($matches[1] -replace ',','')) / 1MB, 1) }
+    return 0
+}
+
+try {
+    Write-Log 'Enumerating mailboxes and statistics.'
+    $report = Get-Mailbox -ResultSize Unlimited | ForEach-Object {
+        $stats = Get-MailboxStatistics -Identity $_.PrimarySmtpAddress -ErrorAction SilentlyContinue
+        [pscustomobject]@{
+            Mailbox    = $_.PrimarySmtpAddress
+            Type       = $_.RecipientTypeDetails
+            Items      = $stats.ItemCount
+            SizeMB     = ConvertTo-MB $stats.TotalItemSize.Value.ToString()
+        }
+    }
+    $report = $report | Sort-Object SizeMB -Descending
+    if ($Top -gt 0) { $report = $report | Select-Object -First $Top }
+    $report | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $($report.Count) mailbox(es). CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```

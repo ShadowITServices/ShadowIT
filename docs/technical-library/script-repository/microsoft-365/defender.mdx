@@ -1,0 +1,120 @@
+---
+title: Defender
+sidebar_label: Defender
+sidebar_position: 9
+description: PowerShell for Microsoft Defender for Office 365 — reporting Safe Links, Safe Attachments and anti-phishing policy posture, and exporting the tenant Microsoft Secure Score via Graph. Logs to C:\Temp.
+---
+
+# Defender
+
+Microsoft Defender for Office 365 policy reporting uses **Exchange Online**
+(`Connect-ExchangeOnline`); Secure Score uses **Microsoft Graph**. Both pair with the
+[Essential Eight Baseline](/docs/technical-library/essential-eight-baseline).
+
+## Safe Links, Safe Attachments & anti-phishing posture
+
+Summarises whether Defender for Office 365 protection policies exist and are enabled —
+a fast way to confirm core email protections are actually on. Read-only; run after
+`Connect-ExchangeOnline`.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports Defender for Office 365 Safe Links, Safe Attachments and anti-phish policies.
+.NOTES
+    Read-only. Connect-ExchangeOnline first.
+    Logs to C:\Temp\DefenderPosture_<timestamp>.log
+#>
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "DefenderPosture_$stamp.log"
+$CsvFile = Join-Path $LogDir "DefenderPosture_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+function Get-PolicySummary {
+    # Runs a getter safely (these cmdlets need Defender for Office 365 licensing).
+    param([string]$Name, [scriptblock]$Getter)
+    try {
+        $items = & $Getter
+        if (-not $items) { Write-Log "$Name: no policies found." -Level WARN; return @() }
+        $items | ForEach-Object {
+            $enabled = if ($null -ne $_.Enable) { $_.Enable } elseif ($null -ne $_.EnableSafeLinksForEmail) { $_.EnableSafeLinksForEmail } else { 'n/a' }
+            [pscustomobject]@{ Area=$Name; Policy=$_.Name; Enabled=$enabled }
+        }
+    } catch { Write-Log "$Name: not available ($($_.Exception.Message))" -Level WARN; @() }
+}
+
+try {
+    Write-Log 'Collecting Defender for Office 365 policy posture.'
+    $report  = @()
+    $report += Get-PolicySummary -Name 'SafeLinks'        -Getter { Get-SafeLinksPolicy }
+    $report += Get-PolicySummary -Name 'SafeAttachments'  -Getter { Get-SafeAttachmentPolicy }
+    $report += Get-PolicySummary -Name 'AntiPhish'        -Getter { Get-AntiPhishPolicy }
+    $report | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $($report.Count) policy row(s). CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## Export Microsoft Secure Score
+
+Pulls the latest Microsoft Secure Score and its current/maximum points via Graph — a
+single defensible number to trend over time. Read-only; needs `SecurityEvents.Read.All`.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Exports the most recent Microsoft Secure Score from Graph.
+.NOTES
+    Read-only. Connect-MgGraph -Scopes 'SecurityEvents.Read.All'
+    Logs to C:\Temp\SecureScore_<timestamp>.log
+#>
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "SecureScore_$stamp.log"
+$CsvFile = Join-Path $LogDir "SecureScore_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    Write-Host $line; Add-Content -LiteralPath $LogFile -Value $line }
+
+try {
+    if (-not (Get-MgContext)) { throw 'Not connected. Run Connect-MgGraph -Scopes SecurityEvents.Read.All first.' }
+    Write-Log 'Retrieving latest Secure Score.'
+    $uri   = 'https://graph.microsoft.com/v1.0/security/secureScores?$top=1'
+    $resp  = Invoke-MgGraphRequest -Method GET -Uri $uri
+    $score = $resp.value | Select-Object -First 1
+    if (-not $score) { throw 'No Secure Score data returned.' }
+
+    $pct = if ($score.maxScore) { [math]::Round(($score.currentScore / $score.maxScore) * 100, 1) } else { 0 }
+    Write-Log ("Secure Score: {0}/{1} ({2}%) as at {3}" -f $score.currentScore, $score.maxScore, $pct, $score.createdDateTime)
+    [pscustomobject]@{
+        Date = $score.createdDateTime; Current = $score.currentScore; Max = $score.maxScore
+        Percent = $pct; ActiveUsers = $score.activeUserCount
+    } | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```

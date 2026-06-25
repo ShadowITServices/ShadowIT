@@ -1,0 +1,92 @@
+---
+title: Script Repository
+sidebar_label: Script Repository
+sidebar_position: 6
+description: A canonical library of production-grade PowerShell for Windows and Microsoft 365 administration — with shared conventions for logging, error handling, and reusable structure.
+---
+
+# Script Repository
+
+A curated, audience-neutral library of **PowerShell** for administering Windows and
+Microsoft 365. Like the rest of the [Technical Library](/docs/technical-library/),
+this is the single source of truth: the Operational pages reference these scripts
+rather than each audience keeping its own drifting copies.
+
+Every script here follows the same conventions so they're predictable, safe to run,
+and produce evidence you can keep.
+
+## Conventions
+
+All scripts in this repository are written to a common standard:
+
+- **Functional style.** Logic lives in named functions with [approved verbs](https://learn.microsoft.com/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands);
+  the bottom of the script orchestrates them.
+- **`[CmdletBinding()]` and parameters.** Scripts are parameterised, support
+  `-Verbose`/`-Debug`, and where they change state they support `-WhatIf` via
+  `SupportsShouldProcess`.
+- **Fail fast.** `$ErrorActionPreference = 'Stop'` with `try/catch` around the work,
+  so a failure is logged and surfaced rather than silently skipped.
+- **Logging to `C:\Temp`.** Every run writes a timestamped log via the standard
+  `Write-Log` helper below — verbose, greppable, and kept as evidence.
+- **`#Requires`.** Scripts declare their PowerShell version and module dependencies
+  so they fail clearly on the wrong host.
+
+## The standard logging helper
+
+Every script includes a compact version of this so it runs standalone. The canonical
+form:
+
+```powershell
+#Requires -Version 5.1
+[CmdletBinding()]
+param()
+
+# --- Logging setup -------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir ('{0}_{1:yyyyMMdd_HHmmss}.log' -f 'Example', (Get-Date))
+if (-not (Test-Path -LiteralPath $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+}
+
+function Write-Log {
+    <#
+        Writes a timestamped, levelled line to the console and to C:\Temp.
+        DEBUG lines only surface when the script is run with -Verbose.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'DEBUG')][string]$Level = 'INFO'
+    )
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+    switch ($Level) {
+        'ERROR' { Write-Host $line -ForegroundColor Red }
+        'WARN'  { Write-Host $line -ForegroundColor Yellow }
+        'DEBUG' { Write-Verbose $line }
+        default { Write-Host $line -ForegroundColor Gray }
+    }
+    Add-Content -LiteralPath $LogFile -Value $line
+}
+
+Write-Log "Log initialised at $LogFile"
+```
+
+## Running these safely
+
+- **Read before you run.** These are starting points, not turnkey tools for your
+  exact tenant. Review every script against your environment.
+- **Pilot first.** Run read-only/reporting scripts before anything that changes state,
+  and use `-WhatIf` where it's offered.
+- **Least privilege.** Connect with an account that has only the rights the task needs;
+  prefer certificate-based app authentication for anything automated/unattended.
+- **Execution policy.** Sign your scripts where you can; otherwise run with an
+  appropriately scoped `Set-ExecutionPolicy -Scope Process` rather than weakening the
+  machine default.
+
+## Sections
+
+- **[Windows](/docs/technical-library/script-repository/windows)** — endpoint and
+  server administration.
+- **[Microsoft 365](/docs/technical-library/script-repository/microsoft-365/)** —
+  Entra ID, Exchange Online, SharePoint, OneDrive, Teams, Intune, Purview, and Defender.

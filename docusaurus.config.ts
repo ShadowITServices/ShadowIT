@@ -90,14 +90,15 @@ const config: Config = {
         src: 'img/logo.png',
       },
       items: [
+        {to: '/', label: 'Home', position: 'left', activeBaseRegex: '^/$'},
+        {to: '/about', label: 'About', position: 'left'},
+        {to: '/services', label: 'Services', position: 'left'},
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
           label: 'Docs',
         },
-        {to: '/services', label: 'Services', position: 'left'},
-        {to: '/about', label: 'About', position: 'left'},
       ],
     },
     footer: {

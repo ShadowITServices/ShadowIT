@@ -5,7 +5,6 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import ServicesTeaser from '@site/src/components/ServicesTeaser';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
@@ -15,9 +14,8 @@ function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        {/* Logo replaces the text title. It's rendered white via CSS filter so
-            the wordmark reads cleanly on the brand purple gradient. The h1 stays
-            for SEO/a11y, with the company name carried by the img alt text. */}
+        {/* Logo replaces the text title, rendered white via CSS filter so the
+            wordmark reads on the brand purple gradient. The h1 stays for SEO/a11y. */}
         <Heading as="h1" className={styles.heroLogoHeading}>
           <img
             src={useBaseUrl('/img/logo.png')}
@@ -33,10 +31,14 @@ function HomepageHeader() {
           Australia — written up, documented, and shared by Beau Dean.
         </p>
         <div className={styles.buttons}>
-          <Link
-            className="button button--secondary button--lg"
-            to="/docs/intro">
-            Explore the Docs
+          <Link className="button button--secondary button--lg" to="/about">
+            About Beau
+          </Link>
+          <Link className="button button--secondary button--lg" to="/services">
+            Services
+          </Link>
+          <Link className="button button--secondary button--lg" to="/docs/intro">
+            Visit our Docs
           </Link>
         </div>
       </div>
@@ -55,7 +57,6 @@ export default function Home(): ReactNode {
       <main className={styles.homeMain}>
         <HomepageFeatures />
       </main>
-      <ServicesTeaser />
     </Layout>
   );
 }

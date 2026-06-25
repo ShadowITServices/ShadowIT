@@ -35,6 +35,17 @@ const FeatureList: FeatureItem[] = [
     ),
     to: '/about',
   },
+  {
+    title: 'How I work',
+    Svg: require('@site/static/img/feature_monitor.svg').default,
+    description: (
+      <>
+        Project by project — scoping, solution design, implementation, and
+        hand-off, at my availability. No price list, no packages.
+      </>
+    ),
+    to: '/services',
+  },
 ];
 
 function Feature({title, Svg, description, to}: FeatureItem) {

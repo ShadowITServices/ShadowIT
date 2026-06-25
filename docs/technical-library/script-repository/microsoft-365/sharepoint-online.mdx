@@ -1,0 +1,120 @@
+---
+title: SharePoint Online
+sidebar_label: SharePoint Online
+sidebar_position: 4
+description: PowerShell for SharePoint Online — a site inventory and storage report, and an external-sharing audit across the tenant using PnP.PowerShell. Logs to C:\Temp.
+---
+
+# SharePoint Online
+
+Site administration via **PnP.PowerShell**. Connect to your admin URL with
+`Connect-PnPOnline -Url https://contoso-admin.sharepoint.com -Interactive` (see
+[Overview & Connection](/docs/technical-library/script-repository/microsoft-365/)).
+
+## Site inventory & storage report
+
+Lists every site collection with its template, storage used and quota, and last
+content-modified date — useful for capacity planning and spotting abandoned sites.
+Read-only.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports SharePoint Online site inventory and storage.
+.NOTES
+    Read-only. Connect-PnPOnline to the -admin URL first.
+    Logs to C:\Temp\SPOInventory_<timestamp>.log
+#>
+[CmdletBinding()]
+param([int]$StorageWarnPercent = 85)
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "SPOInventory_$stamp.log"
+$CsvFile = Join-Path $LogDir "SPOInventory_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+try {
+    Write-Log 'Retrieving site collections.'
+    $sites = Get-PnPTenantSite -ErrorAction Stop
+    Write-Log "Processing $($sites.Count) site(s)."
+
+    $report = foreach ($s in $sites) {
+        $pctUsed = if ($s.StorageQuota) { [math]::Round(($s.StorageUsageCurrent / $s.StorageQuota) * 100, 1) } else { 0 }
+        if ($pctUsed -ge $StorageWarnPercent) { Write-Log "High storage: $($s.Url) at $pctUsed%" -Level WARN }
+        [pscustomobject]@{
+            Url          = $s.Url
+            Title        = $s.Title
+            Template     = $s.Template
+            UsedMB       = $s.StorageUsageCurrent
+            QuotaMB      = $s.StorageQuota
+            PercentUsed  = $pctUsed
+            LastModified = $s.LastContentModifiedDate
+        }
+    }
+    $report | Sort-Object PercentUsed -Descending | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## External sharing audit
+
+Reports each site's external-sharing capability so you can spot sites more open than
+your policy intends. Read-only — a good companion to the governance discussion in the
+[MSP](/docs/managed-service-providers/operational) and
+[Internal IT](/docs/internal-it-teams/operational) Operational pages.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports the external sharing setting of every site collection.
+.NOTES
+    Read-only. Connect-PnPOnline to the -admin URL first.
+    Logs to C:\Temp\SPOSharingAudit_<timestamp>.log
+#>
+[CmdletBinding()]
+param(
+    # Sharing levels considered "open" and worth flagging.
+    [string[]]$FlagLevels = @('ExternalUserAndGuestSharing', 'ExternalUserSharingOnly')
+)
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "SPOSharingAudit_$stamp.log"
+$CsvFile = Join-Path $LogDir "SPOSharingAudit_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+try {
+    Write-Log 'Auditing external sharing settings.'
+    $sites = Get-PnPTenantSite -ErrorAction Stop
+    $report = foreach ($s in $sites) {
+        $open = $FlagLevels -contains [string]$s.SharingCapability
+        if ($open) { Write-Log "Open sharing: $($s.Url) = $($s.SharingCapability)" -Level WARN }
+        [pscustomobject]@{ Url=$s.Url; Title=$s.Title; SharingCapability=$s.SharingCapability; Flagged=$open }
+    }
+    $report | Sort-Object Flagged -Descending | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $(($report | Where-Object Flagged).Count) site(s) with open sharing. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```

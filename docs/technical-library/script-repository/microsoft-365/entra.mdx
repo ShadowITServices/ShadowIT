@@ -1,0 +1,136 @@
+---
+title: Entra ID
+sidebar_label: Entra ID
+sidebar_position: 2
+description: PowerShell for Microsoft Entra ID — reporting users' MFA/authentication methods and auditing stale or guest accounts via Microsoft Graph. Logs to C:\Temp.
+---
+
+# Entra ID
+
+Identity administration via **Microsoft Graph**. Connect first (see
+[Overview & Connection](/docs/technical-library/script-repository/microsoft-365/)),
+then run. These pair with the
+[MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening) baseline.
+
+## Report users' MFA / authentication methods
+
+Lists every member user and the authentication methods registered against them, so you
+can find accounts relying on weak factors or none at all. Read-only; needs
+`User.Read.All` and `UserAuthenticationMethod.Read.All`.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports registered authentication methods for all member users.
+.NOTES
+    Read-only. Connect-MgGraph -Scopes 'User.Read.All','UserAuthenticationMethod.Read.All'
+    Logs to C:\Temp\EntraAuthMethods_<timestamp>.log
+#>
+[CmdletBinding()]
+param([string]$CsvPath)
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "EntraAuthMethods_$stamp.log"
+if (-not $CsvPath) { $CsvPath = Join-Path $LogDir "EntraAuthMethods_$stamp.csv" }
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+function Get-UserAuthSummary {
+    [CmdletBinding()] param([Parameter(Mandatory)]$User)
+    $methods = Get-MgUserAuthenticationMethod -UserId $User.Id -ErrorAction SilentlyContinue
+    # The method type is the trailing segment of the OData type, e.g. #microsoft.graph.phoneAuthenticationMethod
+    $types = $methods | ForEach-Object { ($_.AdditionalProperties.'@odata.type' -split '\.')[-1] -replace 'AuthenticationMethod$','' }
+    $strong = $types | Where-Object { $_ -in @('fido2','microsoftAuthenticator','windowsHelloForBusiness','passwordless') }
+    [pscustomobject]@{
+        DisplayName = $User.DisplayName
+        UPN         = $User.UserPrincipalName
+        Methods     = ($types | Sort-Object -Unique) -join '; '
+        HasStrong   = [bool]$strong
+    }
+}
+
+try {
+    if (-not (Get-MgContext)) { throw 'Not connected. Run Connect-MgGraph first.' }
+    Write-Log 'Retrieving member users.'
+    $users = Get-MgUser -All -Filter "userType eq 'Member'" -Property Id,DisplayName,UserPrincipalName
+    Write-Log "Processing $($users.Count) user(s)."
+
+    $report = foreach ($u in $users) {
+        $s = Get-UserAuthSummary -User $u
+        if (-not $s.HasStrong) { Write-Log "Weak/no strong auth: $($s.UPN)" -Level WARN }
+        $s
+    }
+    $report | Sort-Object HasStrong, DisplayName | Export-Csv -LiteralPath $CsvPath -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $(($report | Where-Object {-not $_.HasStrong}).Count) user(s) without strong auth. CSV: $CsvPath"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## Audit stale and guest accounts
+
+Finds enabled accounts that haven't signed in for a threshold number of days (default
+90), plus all guest accounts — common offboarding and attack-surface gaps. Read-only;
+needs `User.Read.All` and `AuditLog.Read.All` (for sign-in activity).
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports stale (no recent sign-in) and guest accounts in Entra ID.
+.NOTES
+    Read-only. Connect-MgGraph -Scopes 'User.Read.All','AuditLog.Read.All'
+    Logs to C:\Temp\EntraStaleAccounts_<timestamp>.log
+#>
+[CmdletBinding()]
+param([int]$StaleDays = 90)
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "EntraStaleAccounts_$stamp.log"
+$CsvFile = Join-Path $LogDir "EntraStaleAccounts_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+try {
+    if (-not (Get-MgContext)) { throw 'Not connected. Run Connect-MgGraph first.' }
+    $cutoff = (Get-Date).AddDays(-$StaleDays)
+    Write-Log "Retrieving users; stale threshold = $StaleDays days (before $($cutoff.ToString('yyyy-MM-dd')))."
+
+    $users = Get-MgUser -All -Property Id,DisplayName,UserPrincipalName,UserType,AccountEnabled,SignInActivity
+    $report = foreach ($u in $users) {
+        $last = $u.SignInActivity.LastSignInDateTime
+        $isStale = $u.AccountEnabled -and ($null -eq $last -or $last -lt $cutoff)
+        if ($u.UserType -eq 'Guest' -or $isStale) {
+            $row = [pscustomobject]@{
+                DisplayName = $u.DisplayName; UPN = $u.UserPrincipalName
+                UserType = $u.UserType; Enabled = $u.AccountEnabled
+                LastSignIn = $last; Stale = $isStale
+            }
+            $tag = if ($u.UserType -eq 'Guest') { 'GUEST' } else { 'STALE' }
+            Write-Log "$tag $($u.UserPrincipalName) (last sign-in: $last)" -Level WARN
+            $row
+        }
+    }
+    $report | Sort-Object UserType, LastSignIn | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $($report.Count) account(s) flagged. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```

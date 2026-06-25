@@ -1,0 +1,117 @@
+---
+title: Teams
+sidebar_label: Teams
+sidebar_position: 6
+description: PowerShell for Microsoft Teams — a teams and channels inventory with visibility and owner counts, and an audit of teams that permit guest access. Uses the MicrosoftTeams module. Logs to C:\Temp.
+---
+
+# Teams
+
+Administration via the **MicrosoftTeams** module. Connect with
+`Connect-MicrosoftTeams` (see
+[Overview & Connection](/docs/technical-library/script-repository/microsoft-365/)).
+
+## Teams & channels inventory
+
+Inventories every team with its visibility, member/owner counts, and channel count —
+including a flag for teams with **no owner**, a common governance gap. Read-only.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules MicrosoftTeams
+<#
+.SYNOPSIS
+    Inventories Teams with visibility, owner/member counts and channels.
+.NOTES
+    Read-only. Connect-MicrosoftTeams first.
+    Logs to C:\Temp\TeamsInventory_<timestamp>.log
+#>
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "TeamsInventory_$stamp.log"
+$CsvFile = Join-Path $LogDir "TeamsInventory_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+try {
+    Write-Log 'Retrieving all teams.'
+    $teams = Get-Team
+    Write-Log "Processing $($teams.Count) team(s)."
+
+    $report = foreach ($t in $teams) {
+        $users  = Get-TeamUser -GroupId $t.GroupId
+        $owners = @($users | Where-Object Role -eq 'owner')
+        $chans  = @(Get-TeamChannel -GroupId $t.GroupId)
+        if ($owners.Count -eq 0) { Write-Log "Team with NO owner: $($t.DisplayName)" -Level WARN }
+        [pscustomobject]@{
+            DisplayName = $t.DisplayName
+            Visibility  = $t.Visibility
+            Owners      = $owners.Count
+            Members     = @($users | Where-Object Role -eq 'member').Count
+            Guests      = @($users | Where-Object Role -eq 'guest').Count
+            Channels    = $chans.Count
+            GroupId     = $t.GroupId
+        }
+    }
+    $report | Sort-Object DisplayName | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## Audit teams allowing guest access
+
+Flags teams that contain guest members so external collaboration stays intentional and
+reviewed. Read-only.
+
+```powershell
+#Requires -Version 5.1
+#Requires -Modules MicrosoftTeams
+<#
+.SYNOPSIS
+    Reports teams that contain guest members.
+.NOTES
+    Read-only. Connect-MicrosoftTeams first.
+    Logs to C:\Temp\TeamsGuestAudit_<timestamp>.log
+#>
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "TeamsGuestAudit_$stamp.log"
+$CsvFile = Join-Path $LogDir "TeamsGuestAudit_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+function Write-Log { param($m,$l='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $l, $m
+    if ($l -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line }
+
+try {
+    Write-Log 'Scanning teams for guest members.'
+    $report = foreach ($t in (Get-Team)) {
+        $guests = Get-TeamUser -GroupId $t.GroupId | Where-Object Role -eq 'guest'
+        foreach ($g in $guests) {
+            Write-Log "Guest in '$($t.DisplayName)': $($g.User)" -Level WARN
+            [pscustomobject]@{ Team=$t.DisplayName; GuestUser=$g.User; Name=$g.Name; GroupId=$t.GroupId }
+        }
+    }
+    $report | Sort-Object Team | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Done. $($report.Count) guest membership(s) across teams. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```

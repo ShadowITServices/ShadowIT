@@ -1,0 +1,241 @@
+---
+title: Windows
+sidebar_label: Windows
+sidebar_position: 1
+description: Production-grade PowerShell for Windows endpoint and server administration — system health and inventory reporting, patch/hotfix status, and local administrator auditing. All logging to C:\Temp.
+---
+
+# Windows
+
+Reusable PowerShell for administering Windows endpoints and servers. Each script
+follows the repository [conventions](/docs/technical-library/script-repository): a
+functional structure, `try/catch` error handling, and timestamped logging to
+`C:\Temp`.
+
+## System health & inventory report
+
+Collects a quick health and inventory snapshot — OS, uptime, disk pressure, stopped
+automatic services, and pending-reboot state — and writes both a console summary and a
+CSV to `C:\Temp`. Read-only; safe to run anywhere.
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Produces a Windows health and inventory snapshot.
+.DESCRIPTION
+    Reports OS build, uptime, logical-disk free space, automatic services that are
+    not running, and whether a reboot is pending. Logs to C:\Temp and exports a CSV.
+.NOTES
+    Read-only. Logs to C:\Temp\WinHealth_<timestamp>.log
+#>
+[CmdletBinding()]
+param(
+    [int]$DiskWarnPercent = 15  # Flag volumes with less than this % free.
+)
+
+# --- Logging setup -------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "WinHealth_$stamp.log"
+$CsvFile = Join-Path $LogDir "WinHealth_$stamp.csv"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+
+function Write-Log {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Message,
+          [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+    switch ($Level) {
+        'ERROR' { Write-Host $line -ForegroundColor Red }
+        'WARN'  { Write-Host $line -ForegroundColor Yellow }
+        'DEBUG' { Write-Verbose $line }
+        default { Write-Host $line -ForegroundColor Gray }
+    }
+    Add-Content -LiteralPath $LogFile -Value $line
+}
+
+# --- Functions -----------------------------------------------------------
+function Get-PendingReboot {
+    # Returns $true if any common pending-reboot flag is set.
+    $paths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+    )
+    foreach ($p in $paths) { if (Test-Path -LiteralPath $p) { return $true } }
+    return $false
+}
+
+function Get-HealthSnapshot {
+    [CmdletBinding()]
+    param([int]$WarnPercent)
+
+    Write-Log 'Collecting OS and uptime information.' -Level DEBUG
+    $os      = Get-CimInstance Win32_OperatingSystem
+    $uptime  = (Get-Date) - $os.LastBootUpTime
+
+    Write-Log 'Evaluating logical disks.' -Level DEBUG
+    $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType = 3' | ForEach-Object {
+        $pctFree = if ($_.Size) { [math]::Round(($_.FreeSpace / $_.Size) * 100, 1) } else { 0 }
+        if ($pctFree -lt $WarnPercent) { Write-Log "Low disk $($_.DeviceID) $pctFree% free" -Level WARN }
+        [pscustomobject]@{ Drive = $_.DeviceID; FreeGB = [math]::Round($_.FreeSpace/1GB,1); PercentFree = $pctFree }
+    }
+
+    Write-Log 'Checking stopped automatic services.' -Level DEBUG
+    $stopped = Get-Service | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -ne 'Running' }
+    foreach ($s in $stopped) { Write-Log "Auto service not running: $($s.Name)" -Level WARN }
+
+    [pscustomobject]@{
+        ComputerName  = $env:COMPUTERNAME
+        OS            = $os.Caption
+        Build         = $os.BuildNumber
+        UptimeDays    = [math]::Round($uptime.TotalDays, 1)
+        Disks         = ($disks | ForEach-Object { "$($_.Drive) $($_.PercentFree)%" }) -join '; '
+        StoppedAuto   = $stopped.Count
+        PendingReboot = Get-PendingReboot
+    }
+}
+
+# --- Main ----------------------------------------------------------------
+try {
+    Write-Log "Starting health snapshot on $env:COMPUTERNAME."
+    $report = Get-HealthSnapshot -WarnPercent $DiskWarnPercent
+    $report | Format-List | Out-String | Write-Host
+    $report | Export-Csv -LiteralPath $CsvFile -NoTypeInformation -Encoding UTF8
+    Write-Log "Snapshot complete. CSV: $CsvFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## Windows Update / hotfix status
+
+Reports recently installed hotfixes and, where the optional
+[PSWindowsUpdate](https://www.powershellgallery.com/packages/PSWindowsUpdate) module is
+present, any pending updates. Gives you patch evidence that complements the
+[Patch Management](/docs/technical-library/patch-management) runbook.
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Reports installed and (optionally) pending Windows updates.
+.NOTES
+    Read-only. Logs to C:\Temp\PatchStatus_<timestamp>.log
+#>
+[CmdletBinding()]
+param(
+    [int]$RecentDays = 30  # Window for "recently installed" hotfixes.
+)
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "PatchStatus_$stamp.log"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+
+function Write-Log {
+    param([string]$Message, [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+    if ($Level -eq 'DEBUG') { Write-Verbose $line } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line
+}
+
+function Get-RecentHotfix {
+    param([int]$Days)
+    $cutoff = (Get-Date).AddDays(-$Days)
+    Get-HotFix | Where-Object { $_.InstalledOn -and $_.InstalledOn -ge $cutoff } |
+        Sort-Object InstalledOn -Descending |
+        Select-Object HotFixID, Description, InstalledOn
+}
+
+function Get-PendingUpdate {
+    # Uses PSWindowsUpdate if available; otherwise reports gracefully.
+    if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
+        Import-Module PSWindowsUpdate
+        Write-Log 'Querying Windows Update for pending items.' -Level DEBUG
+        return Get-WindowsUpdate -ErrorAction SilentlyContinue
+    }
+    Write-Log 'PSWindowsUpdate module not installed; skipping pending-update check.' -Level WARN
+    return @()
+}
+
+try {
+    Write-Log "Patch status report on $env:COMPUTERNAME (last $RecentDays days)."
+    $recent = Get-RecentHotfix -Days $RecentDays
+    Write-Log "Found $($recent.Count) hotfix(es) installed in window."
+    $recent | Format-Table -AutoSize | Out-String | Write-Host
+
+    $pending = Get-PendingUpdate
+    if ($pending) {
+        Write-Log "PENDING updates: $($pending.Count)" -Level WARN
+        $pending | Select-Object KB, Title | Format-Table -AutoSize | Out-String | Write-Host
+    }
+    Write-Log "Report complete. Log: $LogFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
+
+## Local administrators audit
+
+Enumerates the members of the local `Administrators` group so you can spot
+unexpected accounts. Read-only — pair it with your joiner/mover/leaver process to keep
+local privilege tight.
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Audits membership of the local Administrators group.
+.NOTES
+    Read-only. Logs to C:\Temp\LocalAdminAudit_<timestamp>.log
+#>
+[CmdletBinding()]
+param(
+    # Accounts you expect to be present; anything else is flagged.
+    [string[]]$ExpectedMembers = @('Administrator', 'Domain Admins')
+)
+
+$ErrorActionPreference = 'Stop'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$LogDir  = 'C:\Temp'
+$LogFile = Join-Path $LogDir "LocalAdminAudit_$stamp.log"
+if (-not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+
+function Write-Log {
+    param([string]$Message, [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level='INFO')
+    $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+    if ($Level -eq 'WARN') { Write-Host $line -ForegroundColor Yellow } else { Write-Host $line }
+    Add-Content -LiteralPath $LogFile -Value $line
+}
+
+function Get-LocalAdminMember {
+    # Get-LocalGroupMember is the modern path; fall back to net localgroup on older hosts.
+    try   { return (Get-LocalGroupMember -Group 'Administrators').Name }
+    catch { return (net localgroup Administrators | Where-Object { $_ -and $_ -notmatch '----|command completed|^Members|^Alias|^Comment' }) }
+}
+
+try {
+    Write-Log "Auditing local Administrators on $env:COMPUTERNAME."
+    $members = Get-LocalAdminMember
+    foreach ($m in $members) {
+        $short = ($m -split '\\')[-1]
+        if ($ExpectedMembers -notcontains $short -and $ExpectedMembers -notcontains $m) {
+            Write-Log "UNEXPECTED local admin: $m" -Level WARN
+        } else {
+            Write-Log "Expected local admin: $m"
+        }
+    }
+    Write-Log "Audit complete ($($members.Count) member(s)). Log: $LogFile"
+}
+catch {
+    Write-Log "FAILED: $($_.Exception.Message)" -Level ERROR
+    throw
+}
+```
