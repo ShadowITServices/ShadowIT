@@ -96,6 +96,7 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
+        {to: '/services', label: 'Services', position: 'left'},
         {to: '/about', label: 'About', position: 'left'},
       ],
     },
@@ -105,6 +106,10 @@ const config: Config = {
         {
           title: 'Services',
           items: [
+            {
+              label: 'How I work',
+              to: '/services',
+            },
             {
               label: 'Docs',
               to: '/docs/intro',

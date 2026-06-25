@@ -135,3 +135,73 @@ html {
     margin: 0 auto 1.25rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Services page — staged process cards. A numbered, gradient-badged sequence
+ * (Scoping -> Solution design -> Implementation -> Hand-off).
+ * ------------------------------------------------------------------------- */
+.servicesSteps {
+  display: grid;
+  gap: 1rem;
+  margin: 2rem 0 2.5rem;
+}
+
+.serviceStep {
+  position: relative;
+  padding: 1.25rem 1.5rem 1.25rem 4.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 12px;
+  background: var(--ifm-background-surface-color);
+  transition: border-color 0.2s ease, transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.serviceStep:hover {
+  border-color: var(--ifm-color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(40, 21, 73, 0.18);
+}
+
+.serviceStepNum {
+  position: absolute;
+  left: 1.25rem;
+  top: 1.4rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--brand-font-heading);
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--brand-white);
+  background: var(--brand-gradient);
+}
+
+.serviceStep h3 {
+  margin-top: 0;
+  margin-bottom: 0.4rem;
+}
+
+.serviceStep p:last-child {
+  margin-bottom: 0;
+}
+
+/* On narrow screens, drop the badge above the heading so copy isn't crammed. */
+@media screen and (max-width: 480px) {
+  .serviceStep {
+    padding: 1.25rem;
+  }
+  .serviceStepNum {
+    position: static;
+    margin-bottom: 0.75rem;
+  }
+}
+m;
+  }
+  .serviceStepNum {
+    position: static;
+    margin-bottom: 0.75rem;
+  }
+}

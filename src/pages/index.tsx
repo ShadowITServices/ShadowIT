@@ -5,6 +5,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import ServicesTeaser from '@site/src/components/ServicesTeaser';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
@@ -54,6 +55,7 @@ export default function Home(): ReactNode {
       <main className={styles.homeMain}>
         <HomepageFeatures />
       </main>
+      <ServicesTeaser />
     </Layout>
   );
 }
