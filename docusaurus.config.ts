@@ -60,6 +60,18 @@ const config: Config = {
           // Remove this to remove the "edit this page" links.
           editUrl:
             'https://github.com/ShadowITServices/ShadowIT/tree/main/',
+          // Exclude the leftover default Docusaurus tutorial scaffolding from the
+          // build entirely — no routes/URLs and not indexed by search. The files
+          // stay in the repo for reference. The first four globs preserve
+          // Docusaurus's default exclusions (overriding `exclude` replaces them).
+          exclude: [
+            '**/_*.{js,jsx,ts,tsx,md,mdx}',
+            '**/_*/**',
+            '**/*.test.{js,jsx,ts,tsx}',
+            '**/__tests__/**',
+            'tutorial-basics/**',
+            'tutorial-extras/**',
+          ],
         },
         blog: false,
         theme: {
