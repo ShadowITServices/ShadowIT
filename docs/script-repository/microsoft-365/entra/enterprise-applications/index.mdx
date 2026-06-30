@@ -1,0 +1,18 @@
+---
+title: Enterprise Applications
+sidebar_label: Enterprise Applications
+description: Scripts for auditing and managing Entra ID enterprise applications (service principals) — including stale-app review.
+---
+
+# Enterprise Applications
+
+Enterprise applications are the service principals registered in your tenant —
+SaaS integrations, internal apps, and anything that has been granted access to
+your Entra environment. Over time they accumulate, and unused ones become
+attack surface and licence/consent clutter.
+
+Scripts in this area help you keep that estate under review:
+
+- **[Auditing Stale Enterprise Applications](/docs/script-repository/microsoft-365/entra/enterprise-applications/auditing-stale-enterprise-applications)** —
+  report every non-Microsoft enterprise app with its last sign-in, in AEST, so
+  you can find what's gone quiet.

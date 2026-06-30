@@ -1,0 +1,58 @@
+---
+title: Microsoft 365
+sidebar_label: Overview & Connection
+description: Connecting PowerShell to Microsoft 365 — the required modules per workload, interactive vs certificate-based app authentication, and least-privilege scopes.
+---
+
+# Microsoft 365 — Overview & Connection
+
+Scripts in this section administer the major Microsoft 365 workloads — Entra ID,
+Exchange Online, SharePoint, OneDrive, Teams, Intune, Purview, and Defender.
+Before the per-workload scripts, this page covers how to connect cleanly and
+securely.
+
+## Modules per workload
+
+Microsoft 365 has no single PowerShell module; each workload has its own. Install
+only what you need:
+
+| Workload | Module | Install |
+| --- | --- | --- |
+| Entra ID, Intune, Defender, reports | `Microsoft.Graph` | `Install-Module Microsoft.Graph` |
+| Exchange Online, Purview (audit/DLP) | `ExchangeOnlineManagement` | `Install-Module ExchangeOnlineManagement` |
+| SharePoint / OneDrive (PnP) | `PnP.PowerShell` | `Install-Module PnP.PowerShell` |
+| SharePoint admin (classic) | `Microsoft.Online.SharePoint.PowerShell` | `Install-Module Microsoft.Online.SharePoint.PowerShell` |
+| Teams | `MicrosoftTeams` | `Install-Module MicrosoftTeams` |
+
+:::tip Install scope
+Install for the current user to avoid needing admin rights on shared hosts:
+`Install-Module <name> -Scope CurrentUser`. Keep modules updated — the Graph SDK
+in particular changes quickly.
+:::
+
+## Interactive vs app-only authentication
+
+- **Interactive** (`Connect-MgGraph -Scopes ...`, `Connect-ExchangeOnline -UserPrincipalName ...`)
+  is fine for ad-hoc, attended work. It runs as *you*, with your roles, and
+  prompts for MFA.
+- **App-only / certificate-based** is the right choice for **unattended
+  automation** (scheduled tasks, runbooks). Register an Entra app, grant it the
+  minimum application permissions, and authenticate with a certificate — never a
+  client secret in a script. This avoids storing credentials and keeps automation
+  auditable.
+
+## Least privilege
+
+Request only the scopes/permissions a script needs, and prefer **read-only**
+scopes for reporting. For example, a script that only reports on users needs
+`User.Read.All`, not `User.ReadWrite.All`. Over-scoped automation is a standing
+risk — exactly the kind of thing the
+[MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening) baseline
+exists to contain.
+
+## Workloads
+
+- **[Entra ID](/docs/script-repository/microsoft-365/entra/)** — identity,
+  applications, and access.
+- Exchange Online, SharePoint Online, OneDrive, Teams, Intune, Purview, and
+  Defender — see the sidebar.

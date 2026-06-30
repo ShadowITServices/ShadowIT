@@ -1,0 +1,218 @@
+---
+title: Auditing Stale Enterprise Applications
+sidebar_label: Auditing Stale Enterprise Applications
+description: PowerShell that reports every non-Microsoft Entra enterprise application with its last sign-in (in AEST), sorted oldest-first so never-used apps surface at the top. Staleness is flagged, not filtered.
+---
+
+# Auditing Stale Enterprise Applications
+
+Reports every **non-Microsoft enterprise application** (service principal) in the
+tenant alongside its most recent sign-in — converted to AEST — and flags which
+are stale. It deliberately reports **all** matching apps (sorted oldest sign-in
+first, so never-used apps surface at the top) so the output is a review list, not
+a pass/fail check.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports all non-Microsoft enterprise applications (those with a Homepage URL,
+    matching the Entra portal "All applications" enterprise view) with their last
+    sign-in activity in AEST. Reports ALL apps, sorted oldest last-login first
+    (NEVER-signed-in apps surface at the top). Staleness flagged as metadata.
+.NOTES
+    Required Graph perms: Application.Read.All, AuditLog.Read.All, Directory.Read.All
+    Source: reports/servicePrincipalSignInActivities (beta).
+#>
+
+[CmdletBinding()]
+param(
+    [int]$StaleDays = 30,
+    [string]$LogDir = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\EnterpriseAppSignIns.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("EnterpriseAppSignIns_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- AEST helper --------------------------------------------------------------
+$AestTz = [System.TimeZoneInfo]::FindSystemTimeZoneById('AUS Eastern Standard Time')
+function ConvertTo-Aest {
+    param([Parameter(ValueFromPipeline)][AllowNull()][object]$Utc)
+    process {
+        if (-not $Utc) { return $null }
+        $dt = if ($Utc -is [datetime]) { $Utc } else { ConvertTo-Utc $Utc }
+        if (-not $dt) { return $null }
+        [System.TimeZoneInfo]::ConvertTimeFromUtc($dt.ToUniversalTime(), $AestTz)
+    }
+}
+
+# --- Robust UTC parse ---------------------------------------------------------
+function ConvertTo-Utc {
+    [CmdletBinding()]
+    param([Parameter(ValueFromPipeline)][AllowNull()][object]$Value)
+    process {
+        if ($null -eq $Value) { return $null }
+        if ($Value -is [datetime]) { return [datetime]::SpecifyKind($Value,'Utc').ToUniversalTime() }
+        $s = [string]$Value
+        if ([string]::IsNullOrWhiteSpace($s)) { return $null }
+        $parsed = [datetime]::MinValue
+        $styles = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor `
+                  [System.Globalization.DateTimeStyles]::AdjustToUniversal
+        if ([datetime]::TryParse($s, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) { return $parsed }
+        $fmts = @('MM/dd/yyyy HH:mm:ss','M/d/yyyy H:mm:ss','yyyy-MM-ddTHH:mm:ssZ','yyyy-MM-ddTHH:mm:ss.fffffffZ')
+        if ([datetime]::TryParseExact($s, $fmts, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) { return $parsed }
+        Write-Log ("Unparseable datetime: '{0}'" -f $s) 'WARN'
+        return $null
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log "Starting enterprise-app sign-in report. StaleDays=$StaleDays." 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log "No Graph session; connecting." 'INFO'
+        Connect-MgGraph -Scopes 'Application.Read.All','AuditLog.Read.All','Directory.Read.All' -NoWelcome
+    }
+    $ctx = Get-MgContext
+    Write-Log ("Connected as {0} (tenant {1})." -f $ctx.Account, $ctx.TenantId) 'INFO'
+
+    $cutoffUtc = (Get-Date).ToUniversalTime().AddDays(-$StaleDays)
+    Write-Log ("Stale cutoff (AEST): {0:yyyy-MM-dd HH:mm}" -f (ConvertTo-Aest $cutoffUtc)) 'INFO'
+
+    # Microsoft first-party owner tenants — excluded to match the portal's non-MS view.
+    $msFirstParty = @('f8cdef31-a31e-4b4a-93e4-5f571e91255a','72f988bf-86f1-41af-91ab-2d7cd011db47')
+
+    # 1. Sign-in activity report -> hashtable keyed by appId (single paged call).
+    Write-Log "Fetching servicePrincipalSignInActivities (paged)." 'DEBUG'
+    $activity = @{}
+    $uri = 'https://graph.microsoft.com/beta/reports/servicePrincipalSignInActivities?$top=999'
+    do {
+        $resp = Invoke-MgGraphRequest -Method GET -Uri $uri
+        foreach ($a in $resp.value) { $activity[$a.appId] = $a }
+        $uri = $resp.'@odata.nextLink'
+    } while ($uri)
+    Write-Log ("Activity records retrieved: {0}" -f $activity.Count) 'INFO'
+
+    # 2. Enumerate apps, filter to portal-equivalent set:
+    #    type=Application, has Homepage URL, not Microsoft-owned.
+    Write-Log "Enumerating service principals and applying portal filter." 'DEBUG'
+    $sps = Get-MgServicePrincipal -All -Property `
+            Id,AppId,DisplayName,AccountEnabled,ServicePrincipalType,`
+            AppOwnerOrganizationId,Homepage,CreatedDateTime,PublisherName |
+        Where-Object {
+            $_.ServicePrincipalType -eq 'Application' -and
+            $_.Homepage -and                                   # portal rows all have Homepage URL
+            ($_.AppOwnerOrganizationId -notin $msFirstParty)   # exclude MS first-party
+        }
+    Write-Log ("Apps after portal-equivalent filter: {0} (expect ~42)." -f $sps.Count) 'INFO'
+
+    # 3. Correlate — report ALL, staleness as a flag not a filter.
+    $results = $sps | ForEach-Object {
+        $sp  = $_
+        $act = $activity[$sp.AppId]
+
+        $candidates = @(
+            $act.lastSignInActivity.lastSignInDateTime
+            $act.delegatedClientSignInActivity.lastSignInDateTime
+            $act.applicationAuthenticationClientSignInActivity.lastSignInDateTime
+        ) | ForEach-Object { ConvertTo-Utc $_ } | Where-Object { $_ }
+
+        $lastUtc = if ($candidates) { ($candidates | Sort-Object -Descending)[0] } else { $null }
+
+        [pscustomobject]@{
+            Name           = $sp.DisplayName
+            ObjectId       = $sp.Id
+            ApplicationId  = $sp.AppId
+            HomepageUrl    = $sp.Homepage
+            CreatedOnAest  = if ($sp.CreatedDateTime) { '{0:yyyy-MM-dd}' -f (ConvertTo-Aest $sp.CreatedDateTime) } else { '' }
+            Enabled        = $sp.AccountEnabled
+            LastSignInAest = if ($lastUtc) { '{0:yyyy-MM-dd HH:mm}' -f (ConvertTo-Aest $lastUtc) } else { 'NEVER' }
+            DaysSince      = if ($lastUtc) { [int]((Get-Date).ToUniversalTime() - $lastUtc).TotalDays } else { $null }
+            IsStale        = (-not $lastUtc) -or ($lastUtc -lt $cutoffUtc)
+        }
+    } | Sort-Object -Property @{
+        # Oldest last-login first. NEVER (null DaysSince) = infinitely stale -> MaxValue, lands top.
+        Expression = { if ($null -eq $_.DaysSince) { [int]::MaxValue } else { $_.DaysSince } }
+        Descending = $true
+    }
+
+    Write-Log ("Apps reported: {0} ({1} stale)." -f $results.Count, ($results | Where-Object IsStale).Count) 'INFO'
+
+    # 4. Export + console summary.
+    $results | Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    $results | Format-Table Name, Enabled, LastSignInAest, DaysSince, IsStale, CreatedOnAest -AutoSize
+    Write-Host ("`n{0} app(s) reported, {1} stale. Report: {2}`nLog: {3}" -f `
+        $results.Count, ($results | Where-Object IsStale).Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log "Run complete." 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Lists every non-Microsoft enterprise application in the tenant
+with its most recent sign-in (in AEST) and a staleness flag. It reports *all*
+matching apps — sorted oldest sign-in first, so never-used apps surface at the
+top — rather than filtering, giving you a review list instead of a pass/fail
+result.
+
+**How it works.**
+
+- **Portal-equivalent filter.** Keeps service principals where
+  `ServicePrincipalType = Application` *and* a `Homepage` URL is present, and
+  excludes the Microsoft first-party owner tenants — matching the set you see
+  under Entra → Enterprise applications → "All applications".
+- **Sign-in correlation.** Pulls the beta `reports/servicePrincipalSignInActivities`
+  feed once (paged into a hashtable keyed by `appId`), then takes the most recent
+  of the interactive, delegated, and application-auth timestamps per app.
+- **AEST + robust parsing.** Every timestamp is parsed defensively (multiple
+  formats, assume-UTC) and converted to AUS Eastern Standard Time; `DaysSince`
+  and an `IsStale` flag (default cutoff 30 days; never-signed-in counts as stale)
+  are derived from it.
+- **Output.** A console table, a CSV at `C:\Temp\EnterpriseAppSignIns.csv`, and a
+  timestamped run log in `C:\Temp`.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; Graph scopes `Application.Read.All`,
+  `AuditLog.Read.All`, `Directory.Read.All`.
+- Service-principal sign-in activity reporting requires **Entra ID P1/P2** —
+  without it the activity feed is empty and every app shows `NEVER`.
+- Uses a **beta** Graph endpoint, which is subject to change. The `~42`
+  expected-count in the log line is tenant-specific; adjust or remove it for
+  general use.
+
+:::warning Validate before relying on this
+Read-only by design, but confirm the portal-equivalent filter matches what your
+tenant shows before treating the output as authoritative, and pilot in a
+non-production context first.
+:::
