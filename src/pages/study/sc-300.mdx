@@ -1,13 +1,16 @@
 ---
 title: 'SC-300: Microsoft Identity and Access Administrator — 30-Day Study Program'
-description: A 30-day, ~75-hour lab-first study plan for the SC-300 exam — domain-weighted schedule, daily lab structure, and a resource stack.
+description: A 30-day, ~75-hour lab-first study plan for the SC-300 exam — domain-weighted schedule, daily lab structure, and Microsoft Learn links for every topic.
 ---
 
 # SC-300: Microsoft Identity and Access Administrator — 30-Day Study Program
 
-- **Target exam:** SC-300 (skills measured as of 27 April 2026)
+- **Target exam:** SC-300 (skills measured as of 27 April 2026), leading to the [Identity and Access Administrator Associate](https://learn.microsoft.com/en-us/credentials/certifications/identity-and-access-administrator/) certification
 - **Time budget:** ~2 h/weekday, ~4 h/weekend day ≈ 75 h total
 - **Assumed baseline:** Strong PowerShell, working knowledge of AD DS, M365 admin, basic KQL
+
+Every topic below links to the relevant Microsoft Learn documentation. Read the linked
+page, then do the lab — the links are the study material, not a bibliography.
 
 ---
 
@@ -29,19 +32,19 @@ Domain 2 gets the most days — it carries the highest weight and Conditional Ac
 
 You cannot pass SC-300 on reading alone. Build a lab:
 
-1. **Tenant:** Create a fresh Entra tenant (free) via the Entra admin center, or use an existing dev/test tenant. The old free M365 Developer Program is restricted; if you have a Visual Studio Enterprise subscription you get a dev tenant through it. Otherwise a free Entra tenant + M365 Business Premium trial works.
-2. **Licensing:** Activate the **Microsoft Entra ID P2 trial** (or Entra Suite trial if available) — mandatory for PIM, ID Protection, access reviews, entitlement management.
-3. **Azure subscription:** Free trial or PAYG with spending cap — needed for managed identities, PIM for Azure resources, Log Analytics, diagnostic settings.
-4. **Hybrid lab (optional but recommended):** One Windows Server VM running AD DS + Entra Connect. Hyper-V locally or a small Azure VM (deallocate when not in use).
-5. **Tooling:** `Install-Module Microsoft.Graph`; install the Global Secure Access client on a test VM later in Week 2.
-6. **Break-glass account:** Create one on day 0, exclude it from every CA policy you build. This is both lab hygiene and an exam objective.
+1. **Tenant:** [Create a fresh Entra tenant](https://learn.microsoft.com/en-us/entra/fundamentals/create-new-tenant) via the Entra admin center, or use an existing dev/test tenant. The old free M365 Developer Program is restricted; if you have a Visual Studio Enterprise subscription you get a dev tenant through it. Otherwise a free Entra tenant + M365 Business Premium trial works. ([What is Microsoft Entra?](https://learn.microsoft.com/en-us/entra/fundamentals/what-is-entra))
+2. **Licensing:** Activate the **Microsoft Entra ID P2 trial** (or Entra Suite trial if available) — mandatory for PIM, ID Protection, access reviews, entitlement management. ([Licensing fundamentals](https://learn.microsoft.com/en-us/entra/fundamentals/licensing))
+3. **Azure subscription:** Free trial or PAYG with spending cap — needed for [managed identities](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview), PIM for Azure resources, Log Analytics, [diagnostic settings](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-configure-diagnostic-settings).
+4. **Hybrid lab (optional but recommended):** One Windows Server VM running AD DS + [Entra Connect](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/whatis-azure-ad-connect). Hyper-V locally or a small Azure VM (deallocate when not in use).
+5. **Tooling:** [`Install-Module Microsoft.Graph`](https://learn.microsoft.com/en-us/powershell/microsoftgraph/installation); install the [Global Secure Access client](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-install-windows-client) on a test VM later in Week 2.
+6. **Break-glass account:** [Create one on day 0](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/security-emergency-access), exclude it from every CA policy you build. This is both lab hygiene and an exam objective.
 
 ---
 
 ## Daily structure (repeat every study day)
 
-- **Block A (60–90 min):** MS Learn modules + docs for the day's topics
-- **Block B (45–60 min):** Hands-on lab in your tenant — do everything in the portal **and** in Graph PowerShell where applicable
+- **Block A (60–90 min):** [MS Learn modules](https://learn.microsoft.com/en-us/training/courses/sc-300t00) + docs for the day's topics
+- **Block B (45–60 min):** Hands-on lab in your tenant — do everything in the portal **and** in [Graph PowerShell](https://learn.microsoft.com/en-us/powershell/microsoftgraph/overview) where applicable
 - **Block C (15 min):** 10–15 practice questions on today's topic; log wrong answers in an error journal (topic, why wrong, correct concept)
 
 The error journal is your Day 28–30 remediation input. Don't skip it.
@@ -51,43 +54,43 @@ The error journal is your Day 28–30 remediation input. Don't skip it.
 ## WEEK 1 — Domain 1: User identities (Days 1–7)
 
 ### Day 1 — Tenant, roles, administrative units
-- Configure tenant properties, user/group/device settings, company branding, custom domains (Entra ID + M365 verification flow)
-- Built-in vs custom Entra roles; role assignable scopes; evaluate **effective permissions**
-- Administrative units: when to use, restricted management AUs, scoped role assignments
-- **Lab:** Create a custom role with `microsoft.directory/users/password/update`; create an AU, scope a Helpdesk Admin to it; verify effective permissions with `Get-MgRoleManagementDirectoryRoleAssignment`
+- Configure tenant properties, user/group/device settings, [company branding](https://learn.microsoft.com/en-us/entra/fundamentals/how-to-customize-branding), [custom domains](https://learn.microsoft.com/en-us/entra/identity/users/domains-manage) (Entra ID + M365 verification flow)
+- [Built-in roles](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference) vs [custom Entra roles](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/custom-overview); role assignable scopes; [assign roles](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/manage-roles-portal) and evaluate **effective permissions**
+- [Administrative units](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/administrative-units): when to use, [restricted management AUs](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/admin-units-restricted-management), scoped role assignments
+- **Lab:** [Create a custom role](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/custom-create) with `microsoft.directory/users/password/update`; create an AU, scope a Helpdesk Admin to it; verify effective permissions with [`Get-MgRoleManagementDirectoryRoleAssignment`](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.identity.governance/get-mgrolemanagementdirectoryroleassignment)
 
 ### Day 2 — Users, groups, custom security attributes
-- User types (member/guest), group types (security/M365), membership types (assigned/dynamic), group nesting limits, group expiration
-- Dynamic membership rule syntax (memorize operators: `-eq`, `-contains`, `-match`, `-any`)
-- Custom security attributes: attribute sets, permissions model (who can define vs assign)
+- [User types](https://learn.microsoft.com/en-us/entra/external-id/user-properties) (member/guest), [group types](https://learn.microsoft.com/en-us/entra/fundamentals/concept-learn-about-groups) (security/M365), membership types (assigned/dynamic), group nesting limits, [group expiration](https://learn.microsoft.com/en-us/entra/identity/users/groups-lifecycle)
+- [Dynamic membership rule syntax](https://learn.microsoft.com/en-us/entra/identity/users/groups-dynamic-membership) (memorize operators: `-eq`, `-contains`, `-match`, `-any`), plus [`memberOf` rules](https://learn.microsoft.com/en-us/entra/identity/users/groups-dynamic-rule-member-of)
+- [Custom security attributes](https://learn.microsoft.com/en-us/entra/fundamentals/custom-security-attributes-overview): attribute sets, [permissions model](https://learn.microsoft.com/en-us/entra/fundamentals/custom-security-attributes-manage) (who can define vs assign)
 - **Lab:** Build dynamic groups from `department` and `userType`; define an attribute set + attribute, assign to users, filter with Graph
 
 ### Day 3 — Bulk operations, licensing, devices
-- Bulk create/invite/delete via admin center CSV; same via `New-MgUser` loops and Graph batch requests
-- Group-based licensing, license conflict/error states, `Set-MgUserLicense`
-- Device identity: Entra registered vs Entra joined vs hybrid joined — know the decision matrix cold
+- [Bulk create/invite/delete](https://learn.microsoft.com/en-us/entra/identity/users/users-bulk-add) via admin center CSV; same via [`New-MgUser`](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.users/new-mguser) loops and [Graph batch requests](https://learn.microsoft.com/en-us/graph/json-batching)
+- [Group-based licensing](https://learn.microsoft.com/en-us/microsoft-365/admin/manage/manage-group-licenses) (now managed from the M365 admin center), license conflict/error states, [`Set-MgUserLicense`](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.users.actions/set-mguserlicense) and [PowerShell/Graph licensing examples](https://learn.microsoft.com/en-us/entra/identity/users/licensing-powershell-graph-examples)
+- [Device identity](https://learn.microsoft.com/en-us/entra/identity/devices/overview): [Entra registered](https://learn.microsoft.com/en-us/entra/identity/devices/concept-device-registration) vs [Entra joined](https://learn.microsoft.com/en-us/entra/identity/devices/concept-directory-join) vs [hybrid joined](https://learn.microsoft.com/en-us/entra/identity/devices/concept-hybrid-join) — know the decision matrix cold
 - **Lab:** Bulk-create 20 users from CSV via PowerShell with error handling; assign licenses via group; join a test VM to Entra
 
 ### Day 4 — External identities (B2B)
-- External collaboration settings, guest invite restrictions, guest user access levels
-- Invite flow (individual, bulk, self-service sign-up), guest lifecycle
-- **Cross-tenant access settings:** inbound/outbound trust, B2B collaboration vs B2B direct connect, trust settings for MFA/compliant devices
+- [External collaboration settings](https://learn.microsoft.com/en-us/entra/external-id/external-collaboration-settings-configure), guest invite restrictions, guest user access levels
+- [Invite flow](https://learn.microsoft.com/en-us/entra/external-id/add-users-administrator) (individual, bulk, [self-service sign-up](https://learn.microsoft.com/en-us/entra/external-id/self-service-sign-up-overview)), guest lifecycle
+- **[Cross-tenant access settings](https://learn.microsoft.com/en-us/entra/external-id/cross-tenant-access-overview):** [inbound/outbound trust](https://learn.microsoft.com/en-us/entra/external-id/cross-tenant-access-settings-b2b-collaboration), B2B collaboration vs [B2B direct connect](https://learn.microsoft.com/en-us/entra/external-id/b2b-direct-connect-overview), trust settings for MFA/compliant devices
 - **Lab:** Invite a guest from a personal tenant; configure cross-tenant access to trust home-tenant MFA; test the difference
 
 ### Day 5 — Cross-tenant sync, external IdPs
-- Cross-tenant synchronization: configuration, provisioning scope, attribute mapping — know it's built on the provisioning engine
-- Federation with SAML/WS-Fed IdPs, Google/Facebook federation for B2B
+- [Cross-tenant synchronization](https://learn.microsoft.com/en-us/entra/identity/multi-tenant-organizations/cross-tenant-synchronization-overview): [configuration](https://learn.microsoft.com/en-us/entra/identity/multi-tenant-organizations/cross-tenant-synchronization-configure), provisioning scope, attribute mapping — know it's built on the [provisioning engine](https://learn.microsoft.com/en-us/entra/identity/app-provisioning/user-provisioning)
+- [Federation with SAML/WS-Fed IdPs](https://learn.microsoft.com/en-us/entra/external-id/direct-federation), [Google federation](https://learn.microsoft.com/en-us/entra/external-id/google-federation) for B2B
 - **Lab:** If you have two tenants, configure cross-tenant sync; otherwise walk the full config in the portal and screenshot each blade
 
 ### Day 6 — Hybrid identity I
-- Entra Connect Sync vs Cloud Sync — comparison table (group writeback, device writeback, filtering options, agent architecture). Exam loves "which sync tool for scenario X"
-- PHS vs PTA vs federation: security posture, DR characteristics, leaked-credential detection (PHS only)
-- Seamless SSO mechanics (Kerberos ticket to AZUREADSSOACC)
-- **Lab:** If hybrid lab exists: install Entra Connect with PHS + express settings, then enable PTA staged rollout. Otherwise: John Savill's hybrid identity video + docs walkthrough
+- [Entra Connect Sync](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sync-whatis) vs [Cloud Sync](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/what-is-cloud-sync) — read the [decision guide and feature comparison](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/connect-to-cloud-sync-decision-guide) (group writeback, device writeback, filtering options, agent architecture). Exam loves "which sync tool for scenario X"
+- [PHS](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/whatis-phs) vs [PTA](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-pta) vs federation: security posture, DR characteristics, leaked-credential detection (PHS only) — the [choose an authentication method](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/choose-ad-authn) guide is the exam's mental model
+- [Seamless SSO](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sso) mechanics ([Kerberos ticket to AZUREADSSOACC](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sso-how-it-works))
+- **Lab:** If hybrid lab exists: [install Entra Connect with PHS + express settings](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-install-express), then enable [PTA staged rollout](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-staged-rollout). Otherwise: John Savill's hybrid identity video + docs walkthrough
 
 ### Day 7 — Hybrid identity II + Week 1 review
-- Migrate from AD FS: staged rollout, decommission path
-- Entra Connect Health: agents, alerts, sync insights
+- [Migrate from AD FS](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/migrate-from-federation-to-cloud-authentication): [staged rollout](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-staged-rollout), decommission path
+- Entra Connect Health: [agents](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-health-agent-install), alerts, [sync insights](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-health-sync)
 - **Review:** 30–40 mixed Domain 1 questions; update error journal
 - **Checkpoint:** Can you explain PHS vs PTA vs federation trade-offs, AU vs custom role use cases, and cross-tenant access settings without notes? If not, re-do before Week 2.
 
@@ -96,80 +99,80 @@ The error journal is your Day 28–30 remediation input. Don't skip it.
 ## WEEK 2 — Domain 2: Authentication and access management (Days 8–15)
 
 ### Day 8 — Authentication methods
-- Authentication methods policy (the modern one — legacy MFA/SSPR policies are being retired; know the migration)
-- Methods: FIDO2 passkeys, Microsoft Authenticator (number matching, additional context), certificate-based auth (CBA), Temporary Access Pass, OATH tokens
-- Authentication strengths (built-in + custom)
-- **Lab:** Enable TAP, onboard a test user passwordlessly with a passkey; create a custom authentication strength requiring phishing-resistant MFA
+- [Authentication methods policy](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-methods-manage) (the modern one — legacy MFA/SSPR policies are being retired; know the [migration](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-authentication-methods-manage))
+- [Methods](https://learn.microsoft.com/en-us/entra/identity/authentication/overview-authentication): [FIDO2 passkeys](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-authentication-passkeys-fido2), Microsoft Authenticator ([number matching](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-mfa-number-match), [additional context](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-mfa-additional-context)), [certificate-based auth (CBA)](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-certificate-based-authentication), [Temporary Access Pass](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-authentication-temporary-access-pass), [OATH tokens](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-oath-tokens)
+- [Authentication strengths](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-strengths) (built-in + custom)
+- **Lab:** Enable TAP, onboard a test user passwordlessly with a [passkey](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-passkeys-fido2); create a custom authentication strength requiring phishing-resistant MFA
 
 ### Day 9 — MFA, SSPR, WHfB, password protection
-- Tenant-wide MFA settings, per-user MFA vs CA-based MFA (know why per-user is legacy)
-- SSPR: registration, gates, writeback requirements for hybrid
-- Windows Hello for Business deployment models (cloud Kerberos trust is the modern answer)
-- Entra password protection: global/custom banned lists, on-prem agent architecture
-- Entra Kerberos for hybrid (Azure Files scenarios), account disable + `Revoke-MgUserSignInSession`
+- [Tenant-wide MFA settings](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-mfa-mfasettings), [per-user MFA](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-mfa-userstates) vs CA-based MFA (know why per-user is legacy)
+- [SSPR](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-howitworks): [registration and gates](https://learn.microsoft.com/en-us/entra/identity/authentication/tutorial-enable-sspr), [writeback requirements for hybrid](https://learn.microsoft.com/en-us/entra/identity/authentication/tutorial-enable-sspr-writeback)
+- [Windows Hello for Business](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/) deployment models ([cloud Kerberos trust](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/deploy/hybrid-cloud-kerberos-trust) is the modern answer)
+- [Entra password protection](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-password-ban-bad): global/custom banned lists, [on-prem agent architecture](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-password-ban-bad-on-premises)
+- [Entra Kerberos for hybrid](https://learn.microsoft.com/en-us/azure/storage/files/storage-files-identity-auth-hybrid-identities-enable) (Azure Files scenarios), account disable + [`Revoke-MgUserSignInSession`](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.users.actions/revoke-mgusersigninsession)
 - **Lab:** Configure SSPR for a pilot group; configure banned password list; revoke a session and observe token behaviour
 
 ### Days 10–11 — Conditional Access (two full days — highest-yield topic)
-- Policy anatomy: assignments (users, target resources, network, conditions) → grant/session controls
-- Named locations, device platforms, client apps, filter for devices/apps
-- Grant controls: MFA, authentication strength, compliant device, hybrid joined, ToU, AND/OR logic
-- Session controls: sign-in frequency, persistent browser, CAE strict enforcement, app-enforced restrictions, CA App Control
-- **Authentication context** (tie-in to SharePoint sensitivity labels and PIM), **protected actions**
-- Report-only mode, What If tool, CA insights workbook, templates
-- **Lab:** Build: (1) require phishing-resistant MFA for admins, (2) block legacy auth, (3) require compliant device for M365, (4) authentication context + protected action for CA policy management itself. Test each with What If, deploy report-only first, review sign-in log CA tab
+- [Policy anatomy](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-policies): assignments ([users](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-users-groups), [target resources](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-cloud-apps), [network](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-assignment-network), [conditions](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-conditions)) → grant/session controls. Start from the [CA overview](https://learn.microsoft.com/en-us/entra/identity/conditional-access/overview)
+- [Named locations](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-assignment-network) (IP ranges, countries, trusted locations — see the [block-by-location policy](https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-by-location)), device platforms, client apps, [filter for devices](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-condition-filters-for-devices)
+- [Grant controls](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-grant): MFA, authentication strength, compliant device, hybrid joined, ToU, AND/OR logic
+- [Session controls](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-session): [sign-in frequency and persistent browser](https://learn.microsoft.com/en-us/entra/identity/conditional-access/howto-conditional-access-session-lifetime), [CAE](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-continuous-access-evaluation) [strict enforcement](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-continuous-access-evaluation-strict-enforcement), app-enforced restrictions, CA App Control
+- **[Authentication context](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-cloud-apps)** (tie-in to SharePoint sensitivity labels and PIM; [developer guidance](https://learn.microsoft.com/en-us/entra/identity-platform/developer-guide-conditional-access-authentication-context)), **[protected actions](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/protected-actions-overview)**
+- [Report-only mode](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-report-only), [What If tool](https://learn.microsoft.com/en-us/entra/identity/conditional-access/what-if-tool), CA insights workbook, [policy templates and common policies](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-conditional-access-policy-common)
+- **Lab:** Build: (1) [require phishing-resistant MFA for admins](https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-mfa-strength), (2) [block legacy auth](https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-block-legacy-authentication), (3) [require compliant device](https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-all-users-device-compliance) for M365, (4) authentication context + protected action for CA policy management itself. Test each with What If, deploy report-only first, review sign-in log CA tab
 
 ### Day 12 — Entra ID Protection
-- User risk vs sign-in risk; risk detections (leaked creds, impossible travel, token anomalies)
-- Risk-based CA policies vs legacy ID Protection policies (Microsoft's guidance: use CA)
-- Remediation: self-remediation via MFA/password change, admin dismiss/confirm compromise
-- MFA registration campaign, risky workload identities (requires Workload ID Premium)
+- [ID Protection overview](https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection): user risk vs sign-in risk; [risk detections](https://learn.microsoft.com/en-us/entra/id-protection/concept-identity-protection-risks) (leaked creds, impossible travel, token anomalies)
+- [Risk-based CA policies](https://learn.microsoft.com/en-us/entra/id-protection/howto-identity-protection-configure-risk-policies) vs legacy ID Protection policies (Microsoft's guidance: use CA)
+- [Remediation](https://learn.microsoft.com/en-us/entra/id-protection/howto-identity-protection-remediate-unblock): self-remediation via MFA/password change, admin dismiss/confirm compromise — and how to [investigate risk](https://learn.microsoft.com/en-us/entra/id-protection/howto-identity-protection-investigate-risk)
+- [MFA registration campaign](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-mfa-registration-campaign), [risky workload identities](https://learn.microsoft.com/en-us/entra/id-protection/concept-workload-identity-risk) (requires Workload ID Premium)
 - **Lab:** Create user-risk and sign-in-risk CA policies; simulate risk with Tor browser sign-in; investigate and remediate in the Risky users blade
 
 ### Day 13 — Global Secure Access
-- Architecture: SSE, traffic forwarding profiles (Private Access, Internet Access, M365)
-- GSA client deployment, Private Access app segments vs Quick Access, Entra Private Network Connector
-- Internet Access web content filtering, universal CA / compliant network check
+- [Architecture](https://learn.microsoft.com/en-us/entra/global-secure-access/overview-what-is-global-secure-access): SSE, [traffic forwarding profiles](https://learn.microsoft.com/en-us/entra/global-secure-access/concept-traffic-forwarding) ([Private Access](https://learn.microsoft.com/en-us/entra/global-secure-access/concept-private-access), [Internet Access](https://learn.microsoft.com/en-us/entra/global-secure-access/concept-internet-access), M365)
+- [GSA client deployment](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-install-windows-client), [Private Access app segments](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-configure-per-app-access) vs [Quick Access](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-configure-quick-access), [Entra Private Network Connector](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-configure-connectors)
+- Internet Access [web content filtering](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-configure-web-content-filtering), universal CA / [compliant network check](https://learn.microsoft.com/en-us/entra/global-secure-access/how-to-compliant-network)
 - **Lab:** Deploy GSA client on a test VM, enable the M365 profile, create a Private Access app to an internal RDP/SMB target if you have the hybrid lab
 
 ### Day 14 — Domain 2 consolidation lab
-- Full scenario build: zero-trust baseline (block legacy auth, require MFA all users, phishing-resistant for admins, risk policies, compliant device for sensitive apps, break-glass exclusions everywhere)
-- Troubleshoot deliberately: lock a test user out, diagnose via sign-in logs → CA tab
+- Full scenario build: zero-trust baseline (block legacy auth, require MFA all users, phishing-resistant for admins, risk policies, compliant device for sensitive apps, [break-glass exclusions](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/security-emergency-access) everywhere)
+- Troubleshoot deliberately: lock a test user out, [diagnose via sign-in logs → CA tab](https://learn.microsoft.com/en-us/entra/identity/conditional-access/troubleshoot-conditional-access)
 
 ### Day 15 — Domain 2 review
 - 40–50 mixed questions on auth + CA + ID Protection + GSA; error journal
-- **Checkpoint:** Given a scenario table (user, location, device, app), can you predict which CA policies apply and the resulting access decision? This is the core exam skill.
+- **Checkpoint:** Given a scenario table (user, location, device, app), can you predict which CA policies apply and the resulting access decision? This is the core exam skill — the [CA deployment planning guide](https://learn.microsoft.com/en-us/entra/identity/conditional-access/plan-conditional-access) is good revision.
 
 ---
 
 ## WEEK 3 — Domain 3: Workload identities (Days 16–21)
 
 ### Day 16 — Identity types for workloads
-- Decision matrix: system-assigned MI vs user-assigned MI vs service principal vs user account vs (group) managed service accounts
-- **Lab:** Create both MI types; assign to a VM/Function; use the VM's MI to read a Key Vault secret and list a storage container (`Connect-AzAccount -Identity`)
+- [Workload identities overview](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-overview) — decision matrix: system-assigned MI vs user-assigned MI ([managed identities](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview), [best-practice guidance](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/managed-identity-best-practice-recommendations)) vs [service principal](https://learn.microsoft.com/en-us/entra/identity-platform/app-objects-and-service-principals) vs user account vs (group) managed service accounts
+- **Lab:** Create both MI types; assign to a VM/Function; [use the VM's MI to reach Azure services](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/tutorial-windows-managed-identities-vm-access) — read a Key Vault secret and list a storage container ([`Connect-AzAccount -Identity`](https://learn.microsoft.com/en-us/powershell/module/az.accounts/connect-azaccount))
 
 ### Day 17 — Enterprise applications
-- App registration vs enterprise application (application object vs service principal) — this distinction underpins half of Domain 3
-- Tenant-level settings (user consent settings, admin consent workflow), app-level settings (assignment required, visibility)
-- Roles: Application Administrator vs Cloud Application Administrator vs owner
-- App collections (My Apps), assigning users/groups/app roles
-- **Lab:** Add a gallery SaaS app, configure SAML SSO with claims customization, require assignment, assign via group
+- [App registration vs enterprise application](https://learn.microsoft.com/en-us/entra/identity-platform/app-objects-and-service-principals) (application object vs service principal) — this distinction underpins half of Domain 3. See also [what is application management](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/what-is-application-management)
+- Tenant-level settings ([user consent settings](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-user-consent), [admin consent workflow](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-admin-consent-workflow)), app-level settings (assignment required, visibility)
+- Roles: [Application Administrator vs Cloud Application Administrator](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference) vs owner
+- [App collections (My Apps)](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/access-panel-collections), [assigning users/groups/app roles](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/assign-user-or-group-access-portal)
+- **Lab:** [Add a gallery SaaS app](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/add-application-portal), [configure SAML SSO](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/add-application-portal-setup-sso) with [claims customization](https://learn.microsoft.com/en-us/entra/identity-platform/saml-claims-customization), require assignment, assign via group
 
 ### Day 18 — Application Proxy + SaaS integration
-- App Proxy architecture: connectors, connector groups, pre-authentication (Entra vs passthrough), KCD for SSO to IWA apps
-- Header-based and SAML SSO via App Proxy
-- SCIM provisioning to SaaS apps: mappings, scoping filters, provisioning logs
+- [App Proxy architecture](https://learn.microsoft.com/en-us/entra/identity/app-proxy/overview-what-is-app-proxy): [connectors](https://learn.microsoft.com/en-us/entra/identity/app-proxy/application-proxy-conceptual-connectors), connector groups, pre-authentication (Entra vs passthrough), [KCD for SSO to IWA apps](https://learn.microsoft.com/en-us/entra/identity/app-proxy/how-to-configure-sso-with-kcd)
+- [Header-based](https://learn.microsoft.com/en-us/entra/identity/app-proxy/application-proxy-configure-single-sign-on-with-headers) and SAML SSO via App Proxy — [SSO options compared](https://learn.microsoft.com/en-us/entra/identity/app-proxy/how-to-configure-sso)
+- [SCIM provisioning to SaaS apps](https://learn.microsoft.com/en-us/entra/identity/app-provisioning/user-provisioning): [attribute mappings](https://learn.microsoft.com/en-us/entra/identity/app-provisioning/customize-application-attributes), [scoping filters](https://learn.microsoft.com/en-us/entra/identity/app-provisioning/define-conditional-rules-for-provisioning-user-accounts), [provisioning logs](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-provisioning-logs)
 - **Lab:** If hybrid lab: publish an internal IIS site via App Proxy with Entra pre-auth + CA. Configure SCIM provisioning on a gallery app (many offer free dev tenants)
 
 ### Day 19 — App registrations
-- Single vs multi-tenant, redirect URIs, certificates vs secrets (and why certs win), federated credentials
-- API permissions: delegated vs application — know this cold, including consent implications
-- Expose an API, app roles, scopes; admin consent grant flow
-- **Lab:** Register an app, add delegated `User.Read` + application `User.Read.All`, grant admin consent, define an app role, call Graph with client credentials from PowerShell
+- [Register an app](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app): single vs multi-tenant, [redirect URIs](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url), [certificates vs secrets](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials) (and why certs win), [federated credentials](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation)
+- [API permissions](https://learn.microsoft.com/en-us/entra/identity-platform/permissions-consent-overview): delegated vs application — know this cold, including consent implications
+- [Expose an API](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-expose-web-apis), [app roles](https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-app-roles-in-apps), scopes; admin consent grant flow
+- **Lab:** Register an app, add delegated `User.Read` + application `User.Read.All`, grant admin consent, define an app role, call Graph with the [client credentials flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow) from PowerShell
 
 ### Day 20 — Defender for Cloud Apps
-- Cloud discovery: log upload, Defender for Endpoint integration, snapshot reports; sanction/unsanction; cloud app catalog + risk scores
-- App connectors, Conditional Access App Control (session policies: block download, monitor), access policies
-- OAuth app policies (risky consent detection, app governance)
+- [Cloud discovery](https://learn.microsoft.com/en-us/defender-cloud-apps/set-up-cloud-discovery): log upload, [Defender for Endpoint integration](https://learn.microsoft.com/en-us/defender-cloud-apps/mde-integration), snapshot reports; [sanction/unsanction](https://learn.microsoft.com/en-us/defender-cloud-apps/governance-discovery); cloud app catalog + [risk scores](https://learn.microsoft.com/en-us/defender-cloud-apps/risk-score). Start at the [product overview](https://learn.microsoft.com/en-us/defender-cloud-apps/what-is-defender-for-cloud-apps)
+- [App connectors](https://learn.microsoft.com/en-us/defender-cloud-apps/enable-instant-visibility-protection-and-governance-actions-for-your-apps), [Conditional Access App Control](https://learn.microsoft.com/en-us/defender-cloud-apps/proxy-intro-aad) ([session policies](https://learn.microsoft.com/en-us/defender-cloud-apps/session-policy-aad): block download, monitor), [access policies](https://learn.microsoft.com/en-us/defender-cloud-apps/access-policy-aad)
+- [OAuth app policies](https://learn.microsoft.com/en-us/defender-cloud-apps/app-permission-policy) (risky consent detection, [app governance](https://learn.microsoft.com/en-us/defender-cloud-apps/app-governance-manage-app-governance))
 - **Lab:** Onboard the M365 connector, create a session policy blocking downloads on unmanaged devices via CA App Control, review discovered apps
 
 ### Day 21 — Domain 3 review
@@ -181,33 +184,33 @@ The error journal is your Day 28–30 remediation input. Don't skip it.
 ## WEEK 4 — Domain 4: Identity governance (Days 22–27)
 
 ### Day 22 — Entitlement management I
-- Catalogs (resources, owners), access packages (policies, questions, approvals, lifecycle)
-- Multiple policies per package (internal vs connected org vs any external)
+- [Entitlement management overview](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-overview): [catalogs](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-catalog-create) (resources, owners), [access packages](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-access-package-create) (policies, questions, approvals, lifecycle)
+- [Multiple policies per package](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-access-package-request-policy) (internal vs connected org vs any external), and [approval settings](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-access-package-approval-policy)
 - **Lab:** Build a catalog with a group + app, create an access package with two-stage approval and 90-day expiry, request it as a test user
 
 ### Day 23 — Entitlement management II
-- Connected organizations, external user lifecycle (block sign-in/delete after package expiry)
-- Terms of use: per-app via CA, per-access-package, re-acceptance
-- Lifecycle workflows if time permits (joiner/mover/leaver — appears in newer question pools)
+- [Connected organizations](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-organization), [external user lifecycle](https://learn.microsoft.com/en-us/entra/id-governance/entitlement-management-external-users) (block sign-in/delete after package expiry)
+- [Terms of use](https://learn.microsoft.com/en-us/entra/identity/conditional-access/terms-of-use): per-app via CA, per-access-package, re-acceptance
+- [Lifecycle workflows](https://learn.microsoft.com/en-us/entra/id-governance/what-are-lifecycle-workflows) if time permits (joiner/mover/leaver — appears in newer question pools)
 - **Lab:** Create a ToU, attach to a CA policy and an access package; configure external user lifecycle settings
 
 ### Day 24 — Access reviews
-- Review targets: groups, apps, access packages, PIM roles; reviewer types (self, manager, selected)
-- Multi-stage reviews, auto-apply, "if reviewer doesn't respond" behaviour, inactive user recommendations
-- **Lab:** Create a quarterly guest review on a group with auto-remove on deny; manually respond and apply
+- [Access reviews overview](https://learn.microsoft.com/en-us/entra/id-governance/access-reviews-overview) — review targets: groups, apps, access packages, PIM roles; reviewer types (self, manager, selected)
+- [Multi-stage reviews, auto-apply, "if reviewer doesn't respond" behaviour](https://learn.microsoft.com/en-us/entra/id-governance/create-access-review), [inactive user recommendations](https://learn.microsoft.com/en-us/entra/id-governance/review-recommendations-access-reviews)
+- **Lab:** Create a quarterly guest review on a group with auto-remove on deny; manually respond and [apply the results](https://learn.microsoft.com/en-us/entra/id-governance/complete-access-review)
 
 ### Day 25 — PIM
-- Eligible vs active, permanent vs time-bound; role settings (MFA/auth context, justification, approval, ticket, max duration)
-- PIM for Entra roles, PIM for Azure resources (management group/subscription/RG scope), PIM for Groups (and why: to gate app/AD roles via group membership)
-- Approval flow, audit history, alerts (e.g., roles assigned outside PIM)
-- Break-glass accounts: exclusions, monitoring for their use
+- [PIM overview](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-configure): eligible vs active, permanent vs time-bound; [role settings](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-how-to-change-default-settings) (MFA/auth context, justification, approval, ticket, max duration)
+- [PIM for Entra roles](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-how-to-add-role-to-user), [PIM for Azure resources](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-resource-roles-assign-roles) (management group/subscription/RG scope), [PIM for Groups](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/concept-pim-for-groups) (and why: to gate app/AD roles via group membership)
+- [Approval flow](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-approval-workflow), [audit history](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-how-to-use-audit-log), [alerts](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-how-to-configure-security-alerts) (e.g., roles assigned outside PIM)
+- [Break-glass accounts](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/security-emergency-access): exclusions, monitoring for their use
 - **Lab:** Make a user eligible for User Administrator with approval + authentication context; activate it; review audit history; configure PIM for a group
 
 ### Day 26 — Monitoring, logs, KQL
-- Sign-in logs (interactive/non-interactive/SP/MI), audit logs, provisioning logs — retention limits per licence
-- Diagnostic settings → Log Analytics / storage / Event Hubs
-- KQL against `SigninLogs`, `AuditLogs`: filter by CA result, risk, app. Practice: failed sign-ins by user last 7 days; CA failures by policy
-- Workbooks (CA insights, sign-in analysis), usage & insights, Identity Secure Score (improvement actions, score mechanics)
+- [Sign-in logs](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-sign-ins) (interactive/non-interactive/SP/MI), [audit logs](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-audit-logs), [provisioning logs](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-provisioning-logs) — [retention limits per licence](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/reference-reports-data-retention)
+- [Diagnostic settings](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-configure-diagnostic-settings) → [Log Analytics](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-integrate-activity-logs-with-azure-monitor-logs) / storage / Event Hubs
+- [KQL](https://learn.microsoft.com/en-us/kusto/query/) against `SigninLogs`, `AuditLogs`: filter by CA result, risk, app ([how to analyse activity logs](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-analyze-activity-logs-log-analytics), [log query basics](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/log-query-overview)). Practice: failed sign-ins by user last 7 days; CA failures by policy
+- [Workbooks](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-use-workbooks) (CA insights, sign-in analysis), [usage & insights](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-usage-insights-report), [Identity Secure Score](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-identity-secure-score) (improvement actions, score mechanics)
 - **Lab:** Route logs to a Log Analytics workspace, write 5 KQL queries, pin one to a workbook, action one Secure Score recommendation
 
 ### Day 27 — Domain 4 review
@@ -219,7 +222,7 @@ The error journal is your Day 28–30 remediation input. Don't skip it.
 ## Days 28–30 — Full review and exam readiness
 
 ### Day 28 — Full practice exam #1
-- **Free official Microsoft Practice Assessment** for SC-300 on the Learn exam page — do it timed, closed-book
+- **Free official [Microsoft Practice Assessment](https://learn.microsoft.com/en-us/credentials/certifications/practice-assessments-for-microsoft-certifications)**, linked from the [SC-300 certification page](https://learn.microsoft.com/en-us/credentials/certifications/identity-and-access-administrator/) — do it timed, closed-book
 - Score by domain; spend the rest of the day re-studying your two weakest objective groups using the error journal
 
 ### Day 29 — Full practice exam #2 + gap remediation
@@ -230,22 +233,22 @@ The error journal is your Day 28–30 remediation input. Don't skip it.
 ### Day 30 — Light review + logistics
 - Skim error journal end-to-end; re-read the CA and PIM settings matrices
 - Review exam mechanics: ~40–60 questions, case studies, possible lab-style items; **you get Microsoft Learn access during the exam** — practice searching Learn quickly for exact settings names, don't plan to rely on it
-- Book/sit the exam. Online proctored or Pearson VUE centre (Albury–Wodonga: nearest centres may be Wagga/Melbourne — online proctoring is usually the practical option; check room requirements)
+- [Book/sit the exam](https://learn.microsoft.com/en-us/credentials/certifications/identity-and-access-administrator/). Online proctored or Pearson VUE centre (Albury–Wodonga: nearest centres may be Wagga/Melbourne — online proctoring is usually the practical option; check room requirements)
 
 ---
 
 ## Resource stack (in priority order)
 
-1. **Microsoft Learn — SC-300 official learning paths** (free, maps 1:1 to objectives; follow the course SC-300T00 outline)
+1. **[Microsoft Learn — SC-300 official learning paths](https://learn.microsoft.com/en-us/training/courses/sc-300t00)** (free, maps 1:1 to objectives; follow the course SC-300T00 outline)
 2. **Your lab tenant** — non-negotiable
-3. **Microsoft Learn Practice Assessment** (free, official)
+3. **[Microsoft Learn Practice Assessment](https://learn.microsoft.com/en-us/credentials/certifications/practice-assessments-for-microsoft-certifications)** (free, official)
 4. **John Savill's SC-300 Study Cram** (YouTube) — watch at Week 4 start as consolidation, not as primary learning
 5. **MeasureUp SC-300** — optional paid practice exam
-6. **Microsoft Graph PowerShell docs** — do every lab task twice: portal, then PowerShell
+6. **[Microsoft Graph PowerShell docs](https://learn.microsoft.com/en-us/powershell/microsoftgraph/overview)** — do every lab task twice: portal, then PowerShell
 
 ## Exam-technique notes
 
 - Scenario questions usually hinge on **least privilege** and **lowest licence that satisfies the requirement** — when two answers both work, pick the cheaper/lesser-privileged one
 - "Minimize administrative effort" = the most managed/automated option (Cloud Sync over Connect where features allow, dynamic groups over assigned, group-based licensing, access packages over manual assignment)
-- Know licence gates: P1 (CA, group-based licensing basics), P2 (PIM, ID Protection, access reviews, entitlement management), Workload ID Premium (workload identity risk, CA for workload identities), Entra Suite (GSA Private/Internet Access + governance bundle)
+- Know [licence gates](https://learn.microsoft.com/en-us/entra/fundamentals/licensing): P1 (CA, group-based licensing basics), P2 (PIM, ID Protection, access reviews, entitlement management), Workload ID Premium (workload identity risk, CA for workload identities), Entra Suite (GSA Private/Internet Access + governance bundle)
 - Case studies: read the requirements first, then mine the environment description only for what each question needs
