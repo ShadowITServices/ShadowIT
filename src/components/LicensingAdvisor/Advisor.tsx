@@ -31,6 +31,12 @@ function PriceBand({result}: {result: Result}): ReactNode {
 
   return (
     <div className={styles.priceBand}>
+      {/* The toggles are hidden in print, so the printout states its own basis. */}
+      <div className={clsx(styles.printOnly, styles.printBasis)}>
+        Priced <b>{withTeams ? 'with Teams bundled' : 'on the no-Teams SKU'}</b> ·{' '}
+        <b>{nonprofit ? 'nonprofit' : 'commercial'}</b> pricing
+      </div>
+
       <div className={styles.toggleRow} role="group" aria-label="Teams bundling">
         <button
           type="button"
@@ -78,8 +84,8 @@ function PriceBand({result}: {result: Result}): ReactNode {
               lands at each organisation&apos;s renewal date.
             </li>
             <li>
-              Business Basic is granted free up to 300 users, Business Standard is AU$5.00, and Business
-              Premium is AU$8.20. Other suites run roughly 60–75% off.
+              Business Basic is granted free up to 300 users, Business Standard is $5.00 AUD, and Business
+              Premium is $8.20 AUD. Other suites run roughly 60–75% off.
             </li>
             <li>
               The nonprofit rates are for the plain plans — where the commercial SKU now bundles Copilot,
@@ -102,7 +108,7 @@ function PriceBand({result}: {result: Result}): ReactNode {
         <>
           <div className={styles.priceTotal}>
             {npAnchor ? npAnchor.total : <span className={styles.verify}>Verify nonprofit rate</span>}
-            <span className={styles.priceUnit}> / user / month</span>
+            <span className={styles.priceUnit}> / per user / per month</span>
           </div>
           <div className={styles.priceMath}>
             {npAnchor
@@ -114,7 +120,7 @@ function PriceBand({result}: {result: Result}): ReactNode {
         <>
           <div className={styles.priceTotal}>
             <Price value={headline} />
-            <span className={styles.priceUnit}> / user / month</span>
+            <span className={styles.priceUnit}> / per user / per month</span>
           </div>
           <div className={styles.priceMath}>
             {price.base} <Price value={math} />
@@ -126,7 +132,7 @@ function PriceBand({result}: {result: Result}): ReactNode {
       {price.entNote && (
         <div className={styles.priceNote}>
           ⚠️ New enterprise customers can&apos;t buy E3 or E5 with Teams bundled — they buy the{' '}
-          <b>no-Teams</b> SKU plus <b>Teams Enterprise at AU$12.80</b> separately. Existing customers keep
+          <b>no-Teams</b> SKU plus <b>Teams Enterprise at $12.80 AUD</b> separately. Existing customers keep
           their with-Teams plans.
         </div>
       )}
@@ -157,6 +163,14 @@ function PriceBand({result}: {result: Result}): ReactNode {
 function ResultView({result, onRestart}: {result: Result; onRestart: () => void}): ReactNode {
   return (
     <div className={styles.result}>
+      <div className={clsx(styles.printOnly, styles.printHeader)}>
+        <div className={styles.printHeaderBrand}>Shadow IT · Microsoft 365 licensing advisor</div>
+        <div className={styles.printHeaderMeta}>
+          Australian list pricing (AUD, excluding GST), annual commitment · verified {LAST_VERIFIED} ·
+          shadowit.com.au/services/licensing
+        </div>
+      </div>
+
       <div className={styles.recCard}>
         <div className={clsx(styles.recHead, toneClass(result.tone))}>
           <div className={styles.recKicker}>Recommended · {result.kicker}</div>
@@ -270,6 +284,13 @@ function ResultView({result, onRestart}: {result: Result; onRestart: () => void}
           Links open Microsoft Learn or microsoft.com in a new tab. Those pages are maintained by Microsoft
           and change without notice.
         </div>
+      </div>
+
+      <div className={clsx(styles.printOnly, styles.printFooter)}>
+        Indicative Australian list pricing only, not a quote. Actual pricing moves with agreement type,
+        promotions, seat volume, and renewal timing; a “from” figure means part of the stack has no
+        published Australian price. Confirm current figures with your Microsoft partner before you budget.
+        Shadow IT is independent and is not affiliated with, endorsed by, or acting on behalf of Microsoft.
       </div>
 
       <div className={styles.resultActions}>

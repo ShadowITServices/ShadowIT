@@ -315,3 +315,90 @@ html {
     overflow: hidden;  /* clip instead of forcing a page scrollbar */
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * PRINT — global rules for every page.
+ *
+ * The important one is the theme reset. Printing a dark-mode page hands Chrome
+ * light text on a dark background; its default ink-saving pass then flattens
+ * everything toward mid-grey, and body copy lands around #8f8f8f on white —
+ * technically legible, visibly washed out. Forcing the light palette under
+ * @media print means the printout is black-on-white by construction rather
+ * than by whatever the browser decides to do with the dark one.
+ * ------------------------------------------------------------------------- */
+@page {
+  margin: 14mm 12mm;
+}
+
+@media print {
+  /* Re-declare the light palette so a dark-mode visitor still prints clean. */
+  html[data-theme='dark'],
+  html {
+    --ifm-background-color: #ffffff;
+    --ifm-background-surface-color: #ffffff;
+    --ifm-font-color-base: #16141a;
+    --ifm-heading-color: #000000;
+    --ifm-color-emphasis-0: #ffffff;
+    --ifm-color-emphasis-100: #f4f2f7;
+    --ifm-color-emphasis-200: #cfc9d6;
+    --ifm-color-emphasis-300: #a89fb4;
+    /* Darkest brand purple that still reads as brand at small sizes on paper. */
+    --ifm-color-primary: #6e1b78;
+    --ifm-color-primary-dark: #5c1665;
+    --ifm-color-primary-light: #7d1f89;
+    --ifm-color-success: #1a6b2f;
+    --ifm-color-success-dark: #145425;
+    --ifm-color-warning: #8a5a00;
+    --ifm-color-warning-dark: #6d4700;
+    --ifm-color-warning-contrast-background: #fdf5e3;
+    --ifm-color-warning-contrast-foreground: #4a3100;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #16141a !important;
+  }
+
+  /* Print what the browser is told to print, rather than an ink-saving guess. */
+  body * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Site chrome carries no meaning on paper. */
+  .navbar,
+  .navbar-sidebar,
+  .theme-back-to-top-button,
+  .footer,
+  [class*='skipToContent'],
+  [class*='searchBox'] {
+    display: none !important;
+  }
+
+  .main-wrapper {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Docusaurus links print as brand purple; keep them dark enough to read. */
+  a {
+    color: #16141a !important;
+    text-decoration: none !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: #000000 !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  p,
+  li {
+    orphans: 3;
+    widows: 3;
+  }
+}

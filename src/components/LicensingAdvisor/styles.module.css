@@ -28,6 +28,56 @@
   --card-shadow-lift: 0 14px 30px rgba(40, 21, 73, 0.16);
 }
 
+/* --- Print-only furniture ----------------------------------------------
+ * Hidden on screen; the @media print block at the end reveals these. They
+ * make the printout self-describing: what it is, what basis it was priced
+ * on, and where it came from.
+ * ---------------------------------------------------------------------- */
+.printOnly {
+  display: none;
+}
+
+.printHeader {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2pt solid #6e1b78;
+}
+
+.printHeaderBrand {
+  font-family: var(--brand-font-heading);
+  font-size: 13pt;
+  font-weight: 700;
+  color: #000;
+}
+
+.printHeaderMeta {
+  margin-top: 0.15rem;
+  font-size: 8.5pt;
+  color: #3d3746;
+}
+
+.printBasis {
+  margin-bottom: 0.7rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #cfc9d6;
+  border-radius: 4px;
+  font-size: 9pt;
+  color: #16141a;
+}
+
+.printBasis b {
+  color: #6e1b78;
+}
+
+.printFooter {
+  margin-top: 1.2rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #cfc9d6;
+  font-size: 8pt;
+  line-height: 1.45;
+  color: #3d3746;
+}
+
 /* --- Shared bits -------------------------------------------------------- */
 .eyebrow {
   margin: 0 0 0.4rem;
@@ -907,7 +957,13 @@
   opacity: 0.7;
 }
 
+/* Fields whose label carries a hint line are taller than those without, which
+   left the inputs on a row sitting at different heights. Grid already stretches
+   every cell to the row height, so pushing the input to the bottom of its cell
+   lines the inputs up whether or not a field has a hint — and the labels stay
+   top-aligned. Robust to adding or removing hints later. */
 .cwField input {
+  margin-top: auto;
   min-height: 44px;
   padding: 0.6rem 0.7rem;
   border: 1.5px solid var(--ifm-color-emphasis-300);
@@ -1477,50 +1533,264 @@
   }
 }
 
-/* --- Print: the recommendation is the deliverable ----------------------- */
+/* --- Print --------------------------------------------------------------
+ * The recommendation is the deliverable, so the printout is treated as its own
+ * artefact rather than a screenshot of the page.
+ *
+ * The governing constraint: "Background graphics" is a checkbox in the print
+ * dialog and it is OFF by default. Any design that puts white text on a
+ * coloured fill disappears entirely when it is off. So nothing here depends on
+ * a background printing — every panel becomes dark text on white, and the tier
+ * colour survives as a border and a coloured label instead of a filled block.
+ * ---------------------------------------------------------------------- */
 @media print {
+  .printOnly {
+    display: block !important;
+  }
+
+  /* Controls that do nothing on paper. */
   .tabs,
+  .trackToggle,
   .progress,
   .disclosure,
   .resultActions,
   .cta,
-  .explainBtn {
+  .explainBtn,
+  .toggleRow,
+  .priceCheck,
+  .searchWrap {
     display: none !important;
   }
 
+  .advisor {
+    font-size: 10.5pt;
+    line-height: 1.45;
+  }
+
+  /* Keep a recommendation's parts on one page wherever they fit. */
   .recCard,
   .upgradeBox,
   .includesBox,
   .linksBox,
-  .beyondBox {
+  .beyondBox,
+  .beyondCard,
+  .rung,
+  .newsCard,
+  .feature,
+  .includesGroup {
     box-shadow: none !important;
     break-inside: avoid;
+    page-break-inside: avoid;
   }
 
+  .recCard,
+  .beyondBox,
+  .includesBox,
+  .rung,
+  .newsCard,
+  .suite {
+    border: 1px solid #b9b1c4 !important;
+    background: none !important;
+  }
+
+  /* --- Recommendation header: tier colour as a rule, not a fill --------- */
+  .recHead {
+    padding: 0 0 0.6rem 0.9rem;
+    border-left: 5pt solid #6e1b78;
+    border-bottom: 1px solid #cfc9d6;
+    border-radius: 0;
+    background: none !important;
+    color: #000 !important;
+  }
+
+  .recHead::after {
+    display: none;
+  }
+
+  .toneGood {
+    border-left-color: #1d4e7d !important;
+  }
+
+  .toneBetter {
+    border-left-color: #7d1f89 !important;
+  }
+
+  .toneBest {
+    border-left-color: #4d00a3 !important;
+  }
+
+  .recKicker {
+    color: #4d00a3 !important;
+    opacity: 1;
+  }
+
+  .recName {
+    color: #000 !important;
+    font-size: 20pt;
+  }
+
+  .recTrack {
+    color: #3d3746 !important;
+  }
+
+  /* --- Deep panels become bordered white blocks ------------------------- */
   .priceBand,
   .upgradeBox,
   .stayCurrent {
+    border: 1pt solid #6e1b78 !important;
+    border-radius: 6px;
     background: none !important;
-    border: 1.5px solid var(--brand-purpureus);
-    color: #000 !important;
+    color: #16141a !important;
   }
 
   .priceLabel,
-  .priceMath,
-  .priceVerified,
-  .priceDisclaimer,
   .upgradeHead,
-  .upgradeArrow,
-  .upgradeNext b {
-    color: #333 !important;
+  .stayTitle {
+    color: #6e1b78 !important;
   }
 
   .priceTotal {
-    color: var(--brand-purpureus) !important;
+    color: #000 !important;
+    font-size: 22pt;
   }
 
+  .priceUnit,
+  .priceMath,
+  .priceVerified,
+  .priceDisclaimer,
+  .upgradeLine,
+  .upgradeNext,
+  .staySub,
+  .stayLink span {
+    color: #3d3746 !important;
+    opacity: 1;
+  }
+
+  .priceNote,
+  .npCaveat {
+    border: 1px solid #cfc9d6;
+    background: none !important;
+    color: #3d3746 !important;
+  }
+
+  .npCaveatHead,
+  .priceNote b,
   .upgradeLine b,
-  .priceDisclaimer b {
+  .priceDisclaimer b,
+  .upgradeNext b,
+  .stayLink b {
     color: #000 !important;
+  }
+
+  .upgradeArrow {
+    color: #6e1b78 !important;
+  }
+
+  .priceVerify {
+    justify-content: flex-start;
+  }
+
+  /* --- Get / give up ---------------------------------------------------- */
+  .columns {
+    gap: 0.6rem;
+  }
+
+  .column {
+    border: 1px solid #b9b1c4 !important;
+    background: none !important;
+  }
+
+  .columnGet .columnHead,
+  .columnGet li::before {
+    color: #145425 !important;
+  }
+
+  .columnSkip .columnHead,
+  .columnSkip li::before {
+    color: #6d4700 !important;
+  }
+
+  /* --- Beyond / ladder / badges ----------------------------------------- */
+  .beyondHead {
+    border-bottom: 1px solid #cfc9d6;
+    background: none !important;
+    color: #000 !important;
+  }
+
+  .beyondTitle {
+    color: #6e1b78 !important;
+  }
+
+  .beyondSub,
+  .beyondCardBody,
+  .includesDetail,
+  .suiteBlurb,
+  .featureWhat,
+  .featureWhy,
+  .newsWhat {
+    color: #3d3746 !important;
+    opacity: 1;
+  }
+
+  .beyondCard {
+    border: 1px solid #cfc9d6 !important;
+    background: none !important;
+  }
+
+  .rungLeft {
+    border-right: 1px solid #cfc9d6;
+    background: none !important;
+    color: #000 !important;
+  }
+
+  .rungWord,
+  .rungCost {
+    color: #4d00a3 !important;
+    opacity: 1;
+  }
+
+  .rungPrice {
+    color: #000 !important;
+  }
+
+  .rungTrigger {
+    color: #6d4700 !important;
+  }
+
+  .rungIncludes,
+  .newsWhy,
+  .stackBox,
+  .linksBox,
+  .cwBand {
+    border: 1px solid #cfc9d6;
+    background: none !important;
+  }
+
+  .newsDate {
+    border: 1px solid #cfc9d6;
+    background: none !important;
+    color: #6e1b78 !important;
+  }
+
+  /* Gradient-filled badge → outlined, so it survives without backgrounds. */
+  .newBadge {
+    border: 1px solid #6e1b78;
+    background: none !important;
+    color: #6e1b78 !important;
+  }
+
+  .msLink {
+    border-color: #b9b1c4 !important;
+    background: none !important;
+    color: #16141a !important;
+  }
+
+  .suiteIcon {
+    background: none !important;
+  }
+
+  .stayLink {
+    border: 1px solid #cfc9d6 !important;
+    background: none !important;
   }
 }

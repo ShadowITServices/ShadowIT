@@ -1,8 +1,14 @@
 import {useState, type ReactNode} from 'react';
 import Heading from '@theme/Heading';
 
-import {COWORK_CREDIT_PRICE, COWORK_RANGE} from './data';
-import {MsLink, formatCount, formatUsd} from './shared';
+import {
+  AUD_PER_USD,
+  AUD_PER_USD_DATE,
+  COWORK_CREDIT_PRICE_AUD,
+  COWORK_CREDIT_PRICE_USD,
+  COWORK_RANGE,
+} from './data';
+import {MsLink, formatCount, formatMoney} from './shared';
 import styles from './styles.module.css';
 
 type Inputs = {users: string; light: string; medium: string; heavy: string};
@@ -32,15 +38,15 @@ export default function CoworkEstimator(): ReactNode {
     users * (light * COWORK_RANGE.light[0] + medium * COWORK_RANGE.medium[0] + heavy * COWORK_RANGE.heavy[0]);
   const highCredits =
     users * (light * COWORK_RANGE.light[1] + medium * COWORK_RANGE.medium[1] + heavy * COWORK_RANGE.heavy[1]);
-  const lowUsd = lowCredits * COWORK_CREDIT_PRICE;
-  const highUsd = highCredits * COWORK_CREDIT_PRICE;
+  const lowAud = lowCredits * COWORK_CREDIT_PRICE_AUD;
+  const highAud = highCredits * COWORK_CREDIT_PRICE_AUD;
   const hasResult = users > 0 && tasks > 0;
 
   const fields: {key: keyof Inputs; label: string; hint?: string}[] = [
-    {key: 'users', label: 'Cowork users'},
-    {key: 'light', label: 'Light tasks / user / month', hint: 'weekly status, simple drafts'},
-    {key: 'medium', label: 'Medium tasks / user / month', hint: 'meeting prep, briefing docs'},
-    {key: 'heavy', label: 'Heavy tasks / user / month', hint: 'large data analysis'},
+    {key: 'users', label: 'Cowork users', hint: 'people with a Copilot licence'},
+    {key: 'light', label: 'Light tasks / per user / per month', hint: 'weekly status, simple drafts'},
+    {key: 'medium', label: 'Medium tasks / per user / per month', hint: 'meeting prep, briefing docs'},
+    {key: 'heavy', label: 'Heavy tasks / per user / per month', hint: 'large data analysis'},
   ];
 
   return (
@@ -49,11 +55,17 @@ export default function CoworkEstimator(): ReactNode {
       <div className={styles.disclosureBody}>
         <p>
           <b>Cowork is a usage-based add-on, not a per-seat price.</b> It needs a Microsoft 365 Copilot
-          license as a prerequisite, then bills separately on Copilot Credits at <b>US$0.01 per credit</b>{' '}
-          on pay-as-you-go, with volume discounts on pre-purchase. Copilot Credits are the one figure on
-          this page still quoted in <b>USD</b> — Microsoft publishes no Australian credit rate, and the
-          meter converts to your agreement currency at billing. What follows is a rough planning range only
-          — real spend moves with task complexity and how much people actually use it.
+          license as a prerequisite, then bills separately on Copilot Credits on pay-as-you-go, with volume
+          discounts on pre-purchase. What follows is a rough planning range only — real spend moves with
+          task complexity and how much people actually use it.
+        </p>
+        <p>
+          <b>One caveat specific to this estimator:</b> Microsoft meters credits in{' '}
+          <b>US${COWORK_CREDIT_PRICE_USD.toFixed(2)}</b> and publishes no Australian credit rate — usage
+          bills through Azure and converts to your agreement currency at invoice time. The AUD figures below
+          are converted at <b>A${AUD_PER_USD} per US$1</b> as at {AUD_PER_USD_DATE}. That is an exchange-rate
+          assumption rather than a Microsoft list price, so it will drift — every other price in this tool is
+          published Australian list.
         </p>
 
         <div className={styles.cwGrid}>
@@ -80,21 +92,21 @@ export default function CoworkEstimator(): ReactNode {
             <div className={styles.cwBand}>
               Estimated tenant spend:{' '}
               <b>
-                {formatUsd(lowUsd)} – {formatUsd(highUsd)}
+                {formatMoney(lowAud)} – {formatMoney(highAud)} AUD
               </b>{' '}
-              per month (USD)
+              / per month
             </div>
             <div className={styles.cwBreak}>
               <div className={styles.cwTile}>
-                <span>Per user / month</span>
+                <span>Per user / per month</span>
                 <b>
-                  {formatUsd(lowUsd / users)} – {formatUsd(highUsd / users)}
+                  {formatMoney(lowAud / users)} – {formatMoney(highAud / users)} AUD
                 </b>
               </div>
               <div className={styles.cwTile}>
                 <span>Annualised</span>
                 <b>
-                  {formatUsd(lowUsd * 12)} – {formatUsd(highUsd * 12)}
+                  {formatMoney(lowAud * 12)} – {formatMoney(highAud * 12)} AUD
                 </b>
               </div>
               <div className={styles.cwTile}>
@@ -103,8 +115,10 @@ export default function CoworkEstimator(): ReactNode {
               </div>
             </div>
             <div className={styles.cwSub}>
-              {formatCount(lowCredits)} – {formatCount(highCredits)} Copilot Credits per month at US$0.01 each
-              (pay-as-you-go list rate). Prepaid plans discount this.
+              {formatCount(lowCredits)} – {formatCount(highCredits)} Copilot Credits per month. Metered at
+              US${COWORK_CREDIT_PRICE_USD.toFixed(2)} per credit (pay-as-you-go list rate), converted here at
+              A${AUD_PER_USD} per US$1 as at {AUD_PER_USD_DATE} — about $
+              {COWORK_CREDIT_PRICE_AUD.toFixed(4)} AUD per credit. Prepaid plans discount this.
             </div>
             <div className={`${styles.cwSub} ${styles.cwWarn}`}>
               These ranges assume a frontier model and are a planning ceiling. A Copilot license is still
@@ -132,8 +146,9 @@ export default function CoworkEstimator(): ReactNode {
             per-seat charge.
           </li>
           <li>
-            Pay-as-you-go is US$0.01 per credit with no commitment. A one-year Pre-Purchase Plan offers volume
-            discounts from 5% (300K credits) up to 20% (300M credits) for tenants that want to lock a rate in.
+            Pay-as-you-go is US${COWORK_CREDIT_PRICE_USD.toFixed(2)} per credit with no commitment. A
+            one-year Pre-Purchase Plan offers volume discounts from 5% (300K credits) up to 20% (300M
+            credits) for tenants that want to lock a rate in.
           </li>
         </ul>
 

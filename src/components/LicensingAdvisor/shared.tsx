@@ -74,5 +74,6 @@ export function toneClass(tone: 'good' | 'better' | 'best'): string {
 
 export const formatCount = (n: number): string => n.toLocaleString('en-AU');
 
-export const formatUsd = (n: number): string =>
+/** Whole-dollar money, matching the "$47.90 AUD" display convention. */
+export const formatMoney = (n: number): string =>
   `$${n.toLocaleString('en-AU', {maximumFractionDigits: 0})}`;

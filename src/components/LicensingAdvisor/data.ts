@@ -14,7 +14,7 @@
  * Anything uncertain should be the literal string 'verify' — the UI renders it
  * as muted italic text rather than presenting a guess as a real number. Where a
  * stack contains an add-on Microsoft doesn't publish an AU price for, the
- * headline is written as "from AU$x" and the unpriced parts are named in the
+ * headline is written as "from $x AUD" and the unpriced parts are named in the
  * math line. Do not fill those in by converting the USD figure: Microsoft sets
  * Australian list prices independently, not by exchange rate.
  */
@@ -357,12 +357,12 @@ export type Recommendation = {
  */
 const BIZ_BASE = {
   base: 'Business Premium with Copilot',
-  baseWithTeams: 'AU$47.90',
-  baseNoTeams: 'AU$43.10 (no-Teams SKU)',
+  baseWithTeams: '$47.90',
+  baseNoTeams: '$43.10 (no-Teams SKU)',
 };
 
 /**
- * Microsoft publishes AU$18.00 for the standalone Defender, Purview, and Entra
+ * Microsoft publishes $18.00 for the standalone Defender, Purview, and Entra
  * Suites, but those attach to Microsoft 365 E3/E5. The Business Premium
  * variants are separate SKUs with no published Australian price, so Business
  * tiers that include them are shown as "from".
@@ -378,7 +378,7 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       track: 'Up to 300 users',
       tone: 'good',
       stack: 'Microsoft 365 Business Premium + Microsoft 365 Copilot',
-      price: {...BIZ_BASE, withTeams: 'AU$47.90', noTeams: 'AU$43.10'},
+      price: {...BIZ_BASE, withTeams: '$47.90 AUD', noTeams: '$43.10 AUD'},
       why: "They want AI productivity on a secure foundation, with no special compliance or agent-governance needs. <b>Business Premium already includes real security, identity, and device management</b> — add Copilot and you're done.",
       get: [
         'Microsoft 365 Copilot across Office, Outlook, Teams (Cowork billed separately on usage)',
@@ -434,9 +434,9 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       stackNew: true,
       price: {
         ...BIZ_BASE,
-        withTeams: 'from AU$106.30',
-        noTeams: 'from AU$101.50',
-        addons: `Defender Suite AU$18.00 + Purview Suite AU$18.00 + Agent 365 AU$22.40 (${SUITE_CAVEAT})`,
+        withTeams: 'from $106.30 AUD',
+        noTeams: 'from $101.50 AUD',
+        addons: `Defender Suite $18.00 + Purview Suite $18.00 + Agent 365 $22.40 (${SUITE_CAVEAT})`,
       },
       why: "They're either <b>running AI agents</b> or <b>facing compliance pressure</b> — both demand governance Business Premium alone doesn't have. The Defender and Purview Suites plus Agent 365 make AI secure, governed, and audit-ready.",
       get: [
@@ -487,9 +487,9 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       stackNew: true,
       price: {
         ...BIZ_BASE,
-        withTeams: 'from AU$124.30',
-        noTeams: 'from AU$119.50',
-        addons: `BETTER stack + Entra Suite AU$18.00 + Intune Suite (no published AU price — verify; ${SUITE_CAVEAT})`,
+        withTeams: 'from $124.30 AUD',
+        noTeams: 'from $119.50 AUD',
+        addons: `BETTER stack + Entra Suite $18.00 + Intune Suite (no published AU price — verify; ${SUITE_CAVEAT})`,
       },
       why: 'They need <b>least-privilege identity and full device control</b> on top of secure AI. Entra Suite governs who and what gets access; Intune Suite governs the endpoints. This is the SMB maximum.',
       get: [
@@ -534,12 +534,12 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       tone: 'good',
       stack: 'Microsoft 365 E3 + Microsoft 365 Copilot',
       price: {
-        withTeams: 'AU$103.30',
-        noTeams: 'AU$90.50',
+        withTeams: '$103.30 AUD',
+        noTeams: '$90.50 AUD',
         base: 'Microsoft 365 E3',
-        baseWithTeams: 'AU$58.40',
-        baseNoTeams: 'AU$45.60 (add Teams Enterprise AU$12.80 if needed)',
-        addons: 'Copilot AU$44.90',
+        baseWithTeams: '$58.40',
+        baseNoTeams: '$45.60 (add Teams Enterprise $12.80 if needed)',
+        addons: 'Copilot $44.90',
         entNote: true,
       },
       why: 'At scale, but with no special compliance or agent-governance needs. <b>E3 brings enterprise apps, Windows Enterprise, and baseline compliance</b> — add Copilot for AI productivity.',
@@ -592,12 +592,12 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       stack: 'E5 (E3 + Defender Suite + Purview Suite) + Copilot + Agent 365',
       stackNew: true,
       price: {
-        withTeams: 'AU$157.10',
-        noTeams: 'AU$144.30',
+        withTeams: '$157.10 AUD',
+        noTeams: '$144.30 AUD',
         base: 'Microsoft 365 E5',
-        baseWithTeams: 'AU$89.80',
-        baseNoTeams: 'AU$77.00 (add Teams Enterprise AU$12.80 if needed)',
-        addons: 'Copilot AU$44.90 + Agent 365 AU$22.40',
+        baseWithTeams: '$89.80',
+        baseNoTeams: '$77.00 (add Teams Enterprise $12.80 if needed)',
+        addons: 'Copilot $44.90 + Agent 365 $22.40',
         entNote: true,
       },
       why: 'At scale with <b>AI agents or compliance pressure</b>. The cleanest move is Microsoft 365 E5 — it bundles both the Defender and Purview Suites — then add Agent 365 to govern the agents. Audit-ready by design.',
@@ -646,15 +646,15 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       stack: 'E7 (E5 + Entra Suite) + Intune Suite + Copilot + Agent 365',
       stackNew: true,
       price: {
-        withTeams: 'from AU$148.20',
-        noTeams: 'from AU$135.40',
+        withTeams: 'from $148.20 AUD',
+        noTeams: 'from $135.40 AUD',
         base: 'Microsoft 365 E7 (Frontier Suite)',
-        baseWithTeams: 'AU$148.20 — bundles E5 + Copilot + Entra Suite + Agent 365',
-        baseNoTeams: 'AU$135.40 (no-Teams SKU)',
+        baseWithTeams: '$148.20 — bundles E5 + Copilot + Entra Suite + Agent 365',
+        baseNoTeams: '$135.40 (no-Teams SKU)',
         addons: 'Intune Suite (no published AU price — verify)',
         e7Note: true,
         extraNote:
-          '💡 Worth checking: buying the BETTER stack à la carte and adding Entra Suite comes to AU$175.10 (E5 AU$89.80 + Copilot AU$44.90 + Agent 365 AU$22.40 + Entra Suite AU$18.00). E7 bundles the same four for AU$148.20 — about 15% less. Above three of its components, E7 is usually the cheaper quote.',
+          '💡 Worth checking: buying the BETTER stack à la carte and adding Entra Suite comes to $175.10 (E5 $89.80 + Copilot $44.90 + Agent 365 $22.40 + Entra Suite $18.00). E7 bundles the same four for $148.20 — about 15% less. Above three of its components, E7 is usually the cheaper quote.',
       },
       why: 'At scale, needing <b>least-privilege identity and full device control</b>. Microsoft 365 E7 is the top information-worker bundle (E5 + Entra Suite); add Intune Suite for endpoint mastery. Identity, device, data, and agents — all governed.',
       get: [
@@ -743,10 +743,10 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       tone: 'good',
       stack: 'Microsoft 365 F1',
       price: {
-        withTeams: 'AU$4.50',
+        withTeams: '$4.50 AUD',
         noTeams: 'verify',
         base: 'Microsoft 365 F1',
-        baseWithTeams: 'AU$4.50',
+        baseWithTeams: '$4.50',
         baseNoTeams: 'verify',
         extraNote:
           'Microsoft doesn’t list an Australian price for the no-Teams F1 SKU — confirm it with your partner before quoting that variant.',
@@ -767,10 +767,10 @@ export const RECOMMENDATIONS: Record<'biz' | 'ent' | 'frontline', Record<string,
       tone: 'better',
       stack: 'Microsoft 365 F3',
       price: {
-        withTeams: 'AU$15.00',
+        withTeams: '$15.00 AUD',
         noTeams: 'verify',
         base: 'Microsoft 365 F3',
-        baseWithTeams: 'AU$15.00',
+        baseWithTeams: '$15.00',
         baseNoTeams: 'verify',
         extraNote:
           'Microsoft doesn’t list an Australian price for the no-Teams F3 SKU — confirm it with your partner before quoting that variant.',
@@ -839,7 +839,7 @@ export function recommend(a: Answers): Result | null {
  */
 export const NONPROFIT_PRICE: Record<string, {total: string; math: string}> = {
   'biz-good': {
-    total: 'AU$8.20',
+    total: '$8.20 AUD',
     math: 'Business Premium (nonprofit), annual — note this is the plain Business Premium grant price; Copilot is licensed separately on top',
   },
 };
@@ -863,7 +863,20 @@ export const COWORK_RANGE = {
   heavy: [700, 2000],
 } as const;
 
-export const COWORK_CREDIT_PRICE = 0.01;
+/**
+ * Copilot Credits are metered in USD, and Microsoft publishes no Australian
+ * credit rate — usage bills through Azure and converts to the agreement
+ * currency at invoice time. To report AUD like the rest of the tool, the
+ * estimator converts at a fixed rate.
+ *
+ * Treat this as an FX assumption, NOT a Microsoft list price. It is the one
+ * number here that is derived rather than published, so the estimator states
+ * the rate and its date on screen. Refresh both when it drifts.
+ */
+export const COWORK_CREDIT_PRICE_USD = 0.01;
+export const AUD_PER_USD = 1.4287;
+export const AUD_PER_USD_DATE = '27 July 2026';
+export const COWORK_CREDIT_PRICE_AUD = COWORK_CREDIT_PRICE_USD * AUD_PER_USD;
 
 /* ---------------------------------------------------------------------------
  * The upgrade ladder.
@@ -885,7 +898,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'Good',
       tone: 'good',
-      price: 'AU$47.90',
+      price: '$47.90 AUD',
       stack: 'Business Premium + Copilot',
       forWho: '<b>SMBs that want AI</b> on a secure base, with no compliance or agent needs.',
       trigger: 'Upgrade when: they deploy AI agents, land a regulated client, or need data governance.',
@@ -894,7 +907,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'Better',
       tone: 'better',
-      price: 'from AU$106.30',
+      price: 'from $106.30 AUD',
       stack: '+ Defender Suite + Purview Suite + Agent 365',
       stackNew: true,
       includes: '<b>Everything in GOOD</b> (Business Premium + Copilot), plus:',
@@ -905,7 +918,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'Best',
       tone: 'best',
-      price: 'from AU$124.30',
+      price: 'from $124.30 AUD',
       stack: '+ Entra Suite + Intune Suite',
       includes: '<b>Everything in BETTER and GOOD</b> (Defender + Purview Suites + Agent 365), plus:',
       forWho: '<b>SMBs needing least-privilege identity</b> and full device control. The SMB maximum.',
@@ -917,7 +930,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'Good',
       tone: 'good',
-      price: 'AU$103.30',
+      price: '$103.30 AUD',
       stack: 'E3 + Copilot',
       forWho: '<b>Enterprises that want AI</b> at scale, with no compliance or agent needs yet.',
       trigger: 'Upgrade when: they deploy agents, face a mandate, or need XDR → E5.',
@@ -926,7 +939,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'Better',
       tone: 'better',
-      price: 'AU$157.10',
+      price: '$157.10 AUD',
       stack: 'E5 (E3 + both Suites) + Agent 365',
       stackNew: true,
       includes: '<b>Everything in GOOD</b> (E3 + Copilot), plus:',
@@ -937,12 +950,12 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'Best',
       tone: 'best',
-      price: 'from AU$148.20',
+      price: 'from $148.20 AUD',
       stack: 'E7 (E5 + Entra Suite) + Intune Suite',
       stackNew: true,
       includes: '<b>Everything in BETTER and GOOD</b> (E5 + both Suites + Agent 365), plus:',
       forWho:
-        '<b>Enterprises needing identity and device governance</b> at scale. The top bundle — and note it sits <b>below BETTER</b> on price. That is not a typo: E7 bundles E5, Copilot, Entra Suite, and Agent 365 for AU$148.20, where the same four bought separately come to AU$175.10.',
+        '<b>Enterprises needing identity and device governance</b> at scale. The top bundle — and note it sits <b>below BETTER</b> on price. That is not a typo: E7 bundles E5, Copilot, Entra Suite, and Agent 365 for $148.20, where the same four bought separately come to $175.10.',
       trigger: 'At the ceiling: layer add-ons (Defender Experts, Priva, 10-year audit) as needs arise.',
       links: ['e7', 'entra', 'intune', 'seccopilot'],
     },
@@ -951,7 +964,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'F1',
       tone: 'good',
-      price: 'AU$4.50',
+      price: '$4.50 AUD',
       stack: 'Microsoft 365 F1',
       forWho:
         '<b>Deskless and shift staff</b> who live in Teams — web/mobile Office, no mailbox, no desktop Office.',
@@ -961,7 +974,7 @@ export const LADDER: Record<'biz' | 'ent' | 'frn', Rung[]> = {
     {
       word: 'F3',
       tone: 'better',
-      price: 'AU$15.00',
+      price: '$15.00 AUD',
       stack: 'Microsoft 365 F3',
       includes: '<b>Everything in F1</b>, plus:',
       forWho: '<b>Frontline staff needing a mailbox</b>, device management, and basic frontline security.',
@@ -1369,7 +1382,7 @@ export const GLOSSARY: Suite[] = [
       {
         name: 'Teams Enterprise (standalone)',
         link: 'noteams',
-        what: 'The AU$12.80/user standalone Teams SKU that pairs with the no-Teams E1/E3/E5 suites.',
+        what: 'The $12.80 AUD/user standalone Teams SKU that pairs with the no-Teams E1/E3/E5 suites.',
         why: "Net-new enterprise customers can't buy bundled Teams — quote this alongside the suite.",
       },
       {
@@ -1558,18 +1571,18 @@ export const WHATS_NEW: NewsItem[] = [
   },
   {
     icon: '🏔️',
-    date: 'GA 1 May 2026 · AU$148.20/user/month',
+    date: 'GA 1 May 2026 · $148.20 AUD/user/month',
     title: 'Microsoft 365 E7 (Frontier Suite)',
     what: 'The new top enterprise bundle: E5 + Copilot + Entra Suite + Agent 365 in one SKU — roughly 15% less than buying the parts separately.',
-    why: 'This is the new ceiling of the upgrade ladder, and the Australian numbers bear the claim out: E5 + Copilot + Agent 365 + Entra Suite bought separately is AU$175.10, against AU$148.20 for E7. For customers buying three or more of its components à la carte, consolidating to E7 is usually both cheaper and a cleaner quote — and it includes Teams, sidestepping the no-Teams split.',
+    why: 'This is the new ceiling of the upgrade ladder, and the Australian numbers bear the claim out: E5 + Copilot + Agent 365 + Entra Suite bought separately is $175.10, against $148.20 for E7. For customers buying three or more of its components à la carte, consolidating to E7 is usually both cheaper and a cleaner quote — and it includes Teams, sidestepping the no-Teams split.',
     links: ['e7'],
   },
   {
     icon: '👥',
-    date: 'GA 1 May 2026 · AU$22.40/user/month',
+    date: 'GA 1 May 2026 · $22.40 AUD/user/month',
     title: 'Agent 365',
     what: 'The control plane for AI agents — registry, identity (Entra Agent ID), security posture, and audit for every agent in the tenant. Manages agents the way you manage employees.',
-    why: "Any customer deploying agents without it has ungoverned 'shadow agents'. It is a standalone add-on at AU$22.40, or included inside E7 — a key fork in the BETTER-tier conversation.",
+    why: "Any customer deploying agents without it has ungoverned 'shadow agents'. It is a standalone add-on at $22.40, or included inside E7 — a key fork in the BETTER-tier conversation.",
     links: ['agent365'],
   },
   {

@@ -34,6 +34,17 @@ export default function Ladder(): ReactNode {
         ))}
       </div>
 
+      {/* The track toggle is hidden in print, so name the track on paper. */}
+      <div className={clsx(styles.printOnly, styles.printHeader)}>
+        <div className={styles.printHeaderBrand}>
+          Shadow IT · The Microsoft 365 upgrade ladder
+        </div>
+        <div className={styles.printHeaderMeta}>
+          {TRACKS.find((t) => t.id === track)!.label} · Australian list pricing (AUD, excluding GST),
+          annual commitment · shadowit.com.au/services/licensing
+        </div>
+      </div>
+
       {/* Rendered top tier first so the ladder reads downward from the ceiling. */}
       <div className={styles.ladder}>
         {[...rungs].reverse().map((rung, i) => {
@@ -54,7 +65,7 @@ export default function Ladder(): ReactNode {
                     {rung.stackNew && <NewBadge />}
                   </div>
                   <div className={styles.rungPrice}>
-                    {rung.price} <span>/ user / mo · ex GST</span>
+                    {rung.price} <span>/ per user / per month · ex GST</span>
                   </div>
                   <RichText className={styles.rungFor} html={rung.forWho} />
                   <div className={styles.rungTrigger}>{rung.trigger}</div>

@@ -121,7 +121,21 @@ const config: Config = {
       items: [
         {to: '/', label: 'Home', position: 'left', activeBaseRegex: '^/$'},
         {to: '/about', label: 'About', position: 'left'},
-        {to: '/services', label: 'Services', position: 'left'},
+        // Dropdown on desktop opens on hover — the theme adds `dropdown--hoverable`
+        // to desktop dropdowns, so no custom CSS is needed. The parent stays a real
+        // link to /services, and `activeBasePath` keeps it highlighted across every
+        // page beneath it. On mobile it renders as a collapsible section instead.
+        {
+          type: 'dropdown',
+          label: 'Services',
+          to: '/services',
+          activeBasePath: '/services',
+          position: 'left',
+          items: [
+            {to: '/services', label: 'How I work'},
+            {to: '/services/licensing', label: 'M365 Calculator'},
+          ],
+        },
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
@@ -141,10 +155,6 @@ const config: Config = {
             {
               label: 'Services',
               to: '/services',
-            },
-            {
-              label: 'M365 Licensing Advisor',
-              to: '/services/licensing',
             },
             {
               label: 'About',
