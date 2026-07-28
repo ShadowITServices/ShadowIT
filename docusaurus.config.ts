@@ -143,6 +143,10 @@ const config: Config = {
               to: '/services',
             },
             {
+              label: 'M365 Licensing Advisor',
+              to: '/services/licensing',
+            },
+            {
               label: 'About',
               to: '/about',
             },
