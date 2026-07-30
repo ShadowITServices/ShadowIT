@@ -177,6 +177,10 @@ const config: Config = {
               label: 'Privacy Policy',
               to: '/privacy-policy',
             },
+            {
+              label: 'Extension Privacy Policy',
+              to: '/extension-privacy-policy',
+            },
           ],
         },
         {

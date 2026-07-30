@@ -1,0 +1,105 @@
+---
+title: Browser Extension Privacy Policy
+description: Privacy policy for the Shadow IT browser extension, which displays SPF, DKIM, and DMARC records for the site you are viewing. No personal information is collected, stored, or sold.
+keywords: [privacy policy, browser extension, chrome extension, SPF, DKIM, DMARC, email authentication]
+---
+
+# Browser Extension Privacy Policy
+
+_Last updated: 30 July 2026_
+
+Shadow IT is a browser extension that displays the email-authentication DNS
+records — SPF, DKIM, and DMARC — for the website you are currently viewing. This
+policy explains what the extension does and does not do with your information.
+
+:::info Summary
+
+The extension does not collect, store, sell, or transmit any personal
+information to its developer or to any third party. There is no account system,
+no analytics, and no tracking. Domain names are sent to Cloudflare solely to
+perform DNS lookups.
+
+:::
+
+This policy covers the browser extension only. For the shadowit.com.au website,
+see the [website Privacy Policy](/privacy-policy).
+
+## What information the extension accesses
+
+When you open the extension popup on a website, it reads the hostname (domain) of
+the active browser tab — for example, `example.com`. That domain is the only
+information the extension accesses, and it is accessed only at the moment you
+open the extension.
+
+The extension does not read the content of web pages, your browsing history, your
+other tabs, form data, cookies, or any personal information.
+
+## How that information is used
+
+The active tab's domain is used for a single purpose: to look up that domain's
+SPF, DKIM, and DMARC records. To do this, the extension sends the domain name to
+Cloudflare's public DNS-over-HTTPS service
+([cloudflare-dns.com](https://cloudflare-dns.com)) and displays the records it
+returns.
+
+The domain is held in memory only for the duration of the lookup. It is not
+recorded, accumulated into a history, or transmitted to the developer.
+
+## Third-party service: Cloudflare
+
+The extension relies on Cloudflare's public DNS-over-HTTPS resolver to perform
+DNS queries. When a lookup runs, the domain name being checked is sent to
+Cloudflare so it can return the corresponding DNS records. This is a standard,
+functional DNS request — the same kind your device makes to resolve any website —
+and it is essential to the extension's stated purpose.
+
+Cloudflare's handling of DNS queries is governed by its own privacy policy, set
+out in
+[Cloudflare's public DNS resolver privacy documentation](https://developers.cloudflare.com/1.1.1.1/privacy/public-dns-resolver/).
+The extension sends no data to any other external service.
+
+## Data storage
+
+The extension maintains no server or database and stores no user data remotely.
+
+If a future version offers to remember an optional DKIM selector you have typed,
+that value would be stored only locally in your browser, on your device, and
+would never be transmitted off the device. No browsing data or personal
+information is stored in any form.
+
+## Data collection, selling, and transfer
+
+- The extension does **not** collect personally identifiable information, health
+  information, financial information, authentication information, personal
+  communications, location, web history, user activity, or website content.
+- The extension does **not** sell or transfer user data to third parties.
+- The extension does **not** use or transfer user data for any purpose unrelated
+  to its single purpose of checking email-authentication DNS records.
+- The extension does **not** use or transfer user data to determine
+  creditworthiness or for lending purposes.
+
+## Permissions
+
+The extension requests only the minimum permissions needed for its single
+purpose:
+
+- **Active tab** — to read the current tab's domain when you open the extension.
+- **Host access to Cloudflare's DNS-over-HTTPS endpoint** — to perform the
+  lookups.
+
+It requests no access to other websites or hosts.
+
+## Children's privacy
+
+The extension is a technical utility that collects no personal information from
+anyone, including children.
+
+## Changes to this policy
+
+If this policy changes, the updated version will be published at this same URL
+with a revised "last updated" date.
+
+## Contact
+
+For questions about this privacy policy, contact
+[privacy@shadowit.com.au](mailto:privacy@shadowit.com.au).
