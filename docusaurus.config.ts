@@ -134,6 +134,7 @@ const config: Config = {
           items: [
             {to: '/tools/licensing', label: 'Microsoft Licensing'},
             {to: '/tools/copilot', label: 'Copilot'},
+            {to: '/tools/chrome-extension', label: 'Chrome Extension'},
           ],
         },
         {
@@ -159,6 +160,10 @@ const config: Config = {
             {
               label: 'Copilot',
               to: '/tools/copilot',
+            },
+            {
+              label: 'Chrome Extension',
+              to: '/tools/chrome-extension',
             },
             {
               label: 'About',

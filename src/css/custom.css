@@ -143,16 +143,16 @@ html {
 }
 
 /* ---------------------------------------------------------------------------
- * Services page — staged process cards. A numbered, gradient-badged sequence
- * (Scoping -> Solution design -> Implementation -> Hand-off).
+ * Numbered step cards — a gradient-badged sequence for walking through a short,
+ * ordered process. Used on the tool pages.
  * ------------------------------------------------------------------------- */
-.servicesSteps {
+.stepGrid {
   display: grid;
   gap: 1rem;
   margin: 2rem 0 2.5rem;
 }
 
-.serviceStep {
+.stepCard {
   position: relative;
   padding: 1.25rem 1.5rem 1.25rem 4.5rem;
   border: 1px solid var(--ifm-color-emphasis-200);
@@ -161,13 +161,13 @@ html {
   transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.serviceStep:hover {
+.stepCard:hover {
   border-color: var(--ifm-color-primary);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(40, 21, 73, 0.18);
 }
 
-.serviceStepNum {
+.stepBadge {
   position: absolute;
   left: 1.25rem;
   top: 1.4rem;
@@ -184,25 +184,20 @@ html {
   background: var(--brand-gradient);
 }
 
-.serviceStep h3 {
+.stepCard h3 {
   margin-top: 0;
   margin-bottom: 0.4rem;
 }
 
-.serviceStep p:last-child {
+.stepCard p:last-child {
   margin-bottom: 0;
 }
 
-/* Narrow screens: drop the badge above the heading so copy isn't crammed. */
-.serviceStepNarrow {
-  display: none;
-}
-
 @media screen and (max-width: 480px) {
-  .serviceStep {
+  .stepCard {
     padding: 1.25rem;
   }
-  .serviceStepNum {
+  .stepBadge {
     position: static;
     margin-bottom: 0.75rem;
   }
