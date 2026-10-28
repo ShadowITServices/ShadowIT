@@ -41,7 +41,7 @@ export default function Ladder(): ReactNode {
         </div>
         <div className={styles.printHeaderMeta}>
           {TRACKS.find((t) => t.id === track)!.label} · Australian list pricing (AUD, excluding GST),
-          annual commitment · shadowit.com.au/services/licensing
+          annual commitment · shadowit.com.au/tools/licensing
         </div>
       </div>
 

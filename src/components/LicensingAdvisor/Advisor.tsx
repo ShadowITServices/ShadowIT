@@ -14,7 +14,6 @@ import {
   type Answers,
   type Result,
 } from './data';
-import CoworkEstimator from './CoworkEstimator';
 import {MsLink, MsLinkRow, NewBadge, Price, RichText, toneClass} from './shared';
 import styles from './styles.module.css';
 
@@ -167,7 +166,7 @@ function ResultView({result, onRestart}: {result: Result; onRestart: () => void}
         <div className={styles.printHeaderBrand}>Shadow IT · Microsoft 365 licensing advisor</div>
         <div className={styles.printHeaderMeta}>
           Australian list pricing (AUD, excluding GST), annual commitment · verified {LAST_VERIFIED} ·
-          shadowit.com.au/services/licensing
+          shadowit.com.au/tools/licensing
         </div>
       </div>
 
@@ -431,10 +430,6 @@ export default function Advisor(): ReactNode {
           </div>
         </div>
       )}
-
-      <div style={{marginTop: '2.5rem'}}>
-        <CoworkEstimator />
-      </div>
     </div>
   );
 }

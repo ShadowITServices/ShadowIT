@@ -50,8 +50,10 @@ export default function CoworkEstimator(): ReactNode {
   ];
 
   return (
-    <details className={styles.disclosure}>
-      <summary>Copilot Cowork — usage-based cost estimator</summary>
+    <section className={styles.disclosure}>
+      <Heading as="h2" className={styles.cwPanelTitle}>
+        Copilot Cowork — usage-based cost estimator
+      </Heading>
       <div className={styles.disclosureBody}>
         <p>
           <b>Cowork is a usage-based add-on, not a per-seat price.</b> It needs a Microsoft 365 Copilot
@@ -170,6 +172,6 @@ export default function CoworkEstimator(): ReactNode {
           <MsLink id="copilotcredits" />
         </div>
       </div>
-    </details>
+    </section>
   );
 }

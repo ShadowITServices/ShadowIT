@@ -21,6 +21,14 @@
 
 export const LAST_VERIFIED = 'July 28, 2026';
 
+/**
+ * Per-user add-on list prices quoted outside the recommendation tables (the
+ * Copilot tool page reads these). Same basis as everything else here:
+ * Australian list, per user per month, annual commitment, GST exclusive.
+ */
+export const COPILOT_PRICE_AUD = '$44.90';
+export const AGENT365_PRICE_AUD = '$22.40';
+
 export const MS_PRICING_BUSINESS =
   'https://www.microsoft.com/en-au/microsoft-365/business/compare-all-microsoft-365-business-products';
 export const MS_PRICING_ENTERPRISE =

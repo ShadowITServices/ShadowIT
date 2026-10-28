@@ -122,18 +122,18 @@ const config: Config = {
         {to: '/', label: 'Home', position: 'left', activeBaseRegex: '^/$'},
         {to: '/about', label: 'About', position: 'left'},
         // Dropdown on desktop opens on hover — the theme adds `dropdown--hoverable`
-        // to desktop dropdowns, so no custom CSS is needed. The parent stays a real
-        // link to /services, and `activeBasePath` keeps it highlighted across every
-        // page beneath it. On mobile it renders as a collapsible section instead.
+        // to desktop dropdowns, so no custom CSS is needed. There's no /tools
+        // index page, so the parent is a plain label rather than a link, and
+        // `activeBasePath` keeps it highlighted across every page beneath it.
+        // On mobile it renders as a collapsible section instead.
         {
           type: 'dropdown',
-          label: 'Services',
-          to: '/services',
-          activeBasePath: '/services',
+          label: 'Tools',
+          activeBasePath: '/tools',
           position: 'left',
           items: [
-            {to: '/services', label: 'How I work'},
-            {to: '/services/licensing', label: 'M365 Calculator'},
+            {to: '/tools/licensing', label: 'Microsoft Licensing'},
+            {to: '/tools/copilot', label: 'Copilot'},
           ],
         },
         {
@@ -153,8 +153,12 @@ const config: Config = {
           title: 'Site Map',
           items: [
             {
-              label: 'Services',
-              to: '/services',
+              label: 'Microsoft Licensing',
+              to: '/tools/licensing',
+            },
+            {
+              label: 'Copilot',
+              to: '/tools/copilot',
             },
             {
               label: 'About',

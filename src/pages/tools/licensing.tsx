@@ -10,17 +10,22 @@ import styles from '@site/src/components/LicensingAdvisor/styles.module.css';
 export default function LicensingPage(): ReactNode {
   return (
     <Layout
-      title="Microsoft 365 licensing advisor"
+      title="Microsoft Licensing"
       description="Four questions to the Microsoft 365 license that actually fits — the stack to quote, what it costs, what you give up, and the event that means it's time to upgrade.">
       <main className="container margin-vert--lg">
         <div className="text--center margin-bottom--lg">
-          <Heading as="h1">Which Microsoft 365 license?</Heading>
+          <Heading as="h1">Microsoft Licensing</Heading>
           <p style={{maxWidth: '44rem', margin: '0 auto'}}>
             Microsoft 365 licensing is deliberately confusing, and most of the confusion is expensive.
             Buying too little means finding out at audit time. Buying too much means paying for governance
             nobody has switched on. Answer four questions and you&apos;ll get the license stack I&apos;d
             actually put on a quote, roughly what it costs, what you give up by stopping there, and the
             specific event that means it&apos;s time to move up.
+          </p>
+          <p style={{maxWidth: '44rem', margin: '0.75rem auto 0', fontSize: '0.9rem'}}>
+            Pricing Copilot instead? That sits on top of these licenses and bills differently —{' '}
+            <Link to="/tools/copilot">the Copilot tool</Link> covers the seats, the credits, and what a
+            month of Cowork actually costs.
           </p>
         </div>
 
@@ -39,9 +44,8 @@ export default function LicensingPage(): ReactNode {
           </p>
           <p className={styles.ctaBody}>
             If you want a second opinion on what you&apos;re paying, or you&apos;re sizing a move before a
-            renewal, I&apos;m happy to look at it properly.{' '}
-            <Link to="/services">How I work</Link> covers the process, or you can{' '}
-            <a href="mailto:hello@shadowit.com.au">get in touch</a> directly.
+            renewal, I&apos;m happy to look at it properly —{' '}
+            <a href="mailto:hello@shadowit.com.au">get in touch</a>.
           </p>
           <a className="button button--primary" href="mailto:hello@shadowit.com.au">
             Talk it through

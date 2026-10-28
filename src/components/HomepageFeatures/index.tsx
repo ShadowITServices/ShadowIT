@@ -39,14 +39,14 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: 'How I work',
+    title: 'Free tools',
     Svg: require('@site/static/img/feature_monitor.svg').default,
-    to: '/services',
-    cta: 'See the process',
+    to: '/tools/licensing',
+    cta: 'Open the tools',
     description: (
       <>
-        Project by project — scoping, solution design, implementation, and
-        hand-off, at my availability. No price list, no packages.
+        Work out the Microsoft 365 license that actually fits, and what Copilot
+        really costs once the credits are counted. No sign-up, no email wall.
       </>
     ),
   },
@@ -84,8 +84,8 @@ export default function HomepageFeatures(): ReactNode {
             Three ways in
           </Heading>
           <p className={styles.headingSub}>
-            Open documentation, the person behind it, and how an engagement
-            runs — pick wherever you'd like to begin.
+            Open documentation, the person behind it, and tools you can run
+            yourself — pick wherever you'd like to begin.
           </p>
         </div>
         <div className={clsx('row', styles.cardRow)}>
