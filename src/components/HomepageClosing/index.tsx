@@ -14,7 +14,7 @@ const CREDENTIALS = [
 export default function HomepageClosing(): ReactNode {
   return (
     <section className={styles.closing}>
-      <div className={clsx('container', styles.inner, 'revealUp')}>
+      <div className={clsx('container', styles.inner, 'panelIn')}>
         <p className={styles.eyebrow}>Albury–Wodonga · NSW–VIC border</p>
         <Heading as="h2" className={styles.title}>
           Managing the unseen

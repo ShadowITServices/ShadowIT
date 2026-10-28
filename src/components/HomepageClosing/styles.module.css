@@ -8,7 +8,9 @@
   padding: clamp(3rem, 9vh, 6rem) 0;
   background: var(--brand-gradient);
   color: var(--brand-white);
-  overflow: hidden;
+  /* See HomepageTools: clip keeps this from becoming a scroll container,
+     which would freeze the panel's scroll-linked animation. */
+  overflow: clip;
 }
 
 /* Dot grid + centre glow, matching the hero's treatment. */
@@ -143,5 +145,20 @@
   .btn:hover,
   .btn:focus-visible {
     transform: none;
+  }
+}
+
+/* Full-screen panel on real screens — see the homepage panel rules in
+   custom.css. Narrow or short viewports size to content instead. */
+@media screen and (min-width: 769px) and (min-height: 640px) {
+  .closing {
+    display: flex;
+    align-items: center;
+    min-height: calc(100vh - var(--ifm-navbar-height));
+    min-height: calc(100dvh - var(--ifm-navbar-height));
+  }
+
+  .inner {
+    width: 100%;
   }
 }

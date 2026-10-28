@@ -45,7 +45,8 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={`${siteConfig.title} — ${siteConfig.tagline}`}
-      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean.">
+      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean."
+      wrapperClassName="homepage-panels">
       <main>
         {/* First screen: hero + the three entry cards, sized to the viewport on
             desktop so the page still opens as one composed screen. Everything

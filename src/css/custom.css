@@ -292,16 +292,50 @@ html {
 }
 
 
+
 /* ---------------------------------------------------------------------------
- * Scroll reveal — progressive enhancement, no JavaScript. Browsers with
- * scroll-driven animations fade a section up as it enters the viewport;
- * everywhere else (and under reduced motion) the content is simply there, so
- * nothing can ever be left hidden by a script that failed to run.
+ * Homepage panels — each section fills a screen and snaps, and its content
+ * scales up as that section is scrolled in.
+ *
+ * Both halves are progressive enhancement, and both are pure CSS:
+ *   - Snapping is `mandatory`, so a panel always settles square to the screen
+ *     rather than being left half-scrolled. Two things stop that fighting the
+ *     reader: a snap area taller than the viewport scrolls freely inside
+ *     itself (per spec), so a zoomed-in or overflowing panel still behaves;
+ *     and the footer is given its own snap point below the last panel, so it
+ *     stays reachable instead of being snapped away from.
+ *   - The scale is scroll-linked via `animation-timeline: view()`, so it
+ *     tracks the scroll rather than firing once. Browsers without scroll-driven
+ *     animations, and anyone who asks for reduced motion, simply get the
+ *     content — nothing can be left scaled down or invisible.
+ *
+ * Gated to real screens: phones and short viewports keep ordinary scrolling,
+ * where full-height panels would mean scrolling a screen to read two lines.
+ * Reduced motion turns the snapping off too — it moves the page out from under
+ * you — while keeping the panels themselves.
  * ------------------------------------------------------------------------- */
-@keyframes revealUp {
+@media screen and (min-width: 769px) and (min-height: 640px) and (prefers-reduced-motion: no-preference) {
+  html:has(.main-wrapper.homepage-panels) {
+    scroll-snap-type: y mandatory;
+  }
+
+  /* The direct children of the homepage <main> are the panels themselves. */
+  .main-wrapper.homepage-panels main > * {
+    scroll-snap-align: start;
+    scroll-margin-top: var(--ifm-navbar-height);
+  }
+
+  /* The footer sits outside main — give it a snap point of its own so the last
+     panel doesn't trap the scroll above it. */
+  #__docusaurus:has(.main-wrapper.homepage-panels) .footer {
+    scroll-snap-align: start;
+  }
+}
+
+@keyframes panelIn {
   from {
     opacity: 0;
-    transform: translateY(26px);
+    transform: translateY(28px) scale(0.94);
   }
   to {
     opacity: 1;
@@ -311,10 +345,14 @@ html {
 
 @supports (animation-timeline: view()) {
   @media screen and (prefers-reduced-motion: no-preference) {
-    .revealUp {
-      animation: revealUp linear both;
+    .panelIn {
+      animation: panelIn linear both;
       animation-timeline: view();
-      animation-range: entry 8% cover 26%;
+      /* Ends at `entry 100%` — the moment a full-height panel's top edge
+         reaches the top of the viewport, which is exactly where it snaps. The
+         panel is therefore always at full scale once it has settled. */
+      animation-range: entry 20% entry 100%;
+      transform-origin: center top;
     }
   }
 }

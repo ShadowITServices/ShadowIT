@@ -80,8 +80,8 @@ function ToolCard({name, tag, Svg, to, description}: Tool) {
 export default function HomepageTools(): ReactNode {
   return (
     <section className={styles.tools} id="tools">
-      <div className="container">
-        <div className={clsx(styles.header, 'revealUp')}>
+      <div className={clsx('container', styles.panel, 'panelIn')}>
+        <div className={styles.header}>
           <p className={styles.eyebrow}>Free tools</p>
           <Heading as="h2" className={styles.headingTitle}>
             Things you can use right now
@@ -91,7 +91,7 @@ export default function HomepageTools(): ReactNode {
             No sign-up, no email wall — open the page and go.
           </p>
         </div>
-        <div className={clsx('row', styles.cardRow, 'revealUp')}>
+        <div className={clsx('row', styles.cardRow)}>
           {ToolList.map((tool) => (
             <ToolCard key={tool.name} {...tool} />
           ))}
