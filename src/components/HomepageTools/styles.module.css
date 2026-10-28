@@ -1,0 +1,190 @@
+/**
+ * Homepage "Free tools" band. Sits directly under the first screen, so it gets
+ * a tinted surface and a soft brand glow to read as a separate section rather
+ * than more of the same page.
+ */
+.tools {
+  position: relative;
+  padding: clamp(3rem, 8vh, 5.5rem) 0;
+  /* Anchor jumps from the first screen land below the sticky navbar. */
+  scroll-margin-top: var(--ifm-navbar-height);
+  background: var(--ifm-background-surface-color);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  overflow: hidden;
+}
+
+.tools::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 55% at 15% 0%, rgba(109, 0, 230, 0.1), transparent 70%),
+    radial-gradient(55% 50% at 85% 100%, rgba(190, 0, 255, 0.1), transparent 70%);
+  pointer-events: none;
+}
+
+.tools > :global(.container) {
+  position: relative;
+}
+
+/* --- Section header --------------------------------------------------- */
+.header {
+  text-align: center;
+  max-width: 42rem;
+  margin: 0 auto clamp(1.75rem, 4vh, 2.75rem);
+}
+
+.eyebrow {
+  margin: 0 0 0.4rem;
+  font-family: var(--brand-font-heading);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+}
+
+.headingTitle {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.5rem, 1.2rem + 1.4vh, 2.1rem);
+}
+
+.headingSub {
+  margin: 0;
+  font-size: clamp(0.9rem, 0.86rem + 0.3vh, 1.05rem);
+  line-height: 1.55;
+  opacity: 0.85;
+}
+
+/* --- Cards ------------------------------------------------------------ */
+.cardRow {
+  align-items: stretch;
+}
+
+.toolCol {
+  display: flex;
+}
+
+.toolCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 1.5rem;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  background: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(40, 21, 73, 0.06);
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Gradient hairline along the top edge, wiped in on hover. */
+.toolTop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--brand-gradient);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s ease;
+}
+
+.toolCard:hover,
+.toolCard:focus-visible {
+  color: inherit;
+  text-decoration: none;
+  transform: translateY(-6px);
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 16px 34px rgba(40, 21, 73, 0.18);
+}
+
+.toolCard:hover .toolTop,
+.toolCard:focus-visible .toolTop {
+  transform: scaleX(1);
+}
+
+.toolHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.toolIcon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(109, 0, 230, 0.14), rgba(190, 0, 255, 0.14));
+}
+
+.toolSvg {
+  width: 1.7rem;
+  height: 1.7rem;
+  color: var(--ifm-color-primary);
+  transition: transform 0.25s ease, color 0.25s ease;
+}
+
+.toolCard:hover .toolSvg {
+  transform: scale(1.08) rotate(-4deg);
+  color: var(--ifm-color-primary-light);
+}
+
+.toolTag {
+  padding: 0.2rem 0.6rem;
+  font-family: var(--brand-font-heading);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+  background: rgba(175, 43, 191, 0.1);
+  border-radius: 999px;
+}
+
+.toolTitle {
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+}
+
+.toolText {
+  margin: 0 0 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  opacity: 0.9;
+}
+
+.toolCta {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+}
+
+.toolArrow {
+  transition: transform 0.25s ease;
+}
+
+.toolCard:hover .toolArrow {
+  transform: translateX(5px);
+}
+
+[data-theme='dark'] .toolTag {
+  background: rgba(196, 79, 212, 0.16);
+}
+
+@media screen and (max-width: 996px) {
+  .toolCol {
+    margin-bottom: 1rem;
+  }
+}

@@ -41,7 +41,7 @@ const FeatureList: FeatureItem[] = [
   {
     title: 'Free tools',
     Svg: require('@site/static/img/feature_monitor.svg').default,
-    to: '/tools/licensing',
+    to: '#tools',
     cta: 'Open the tools',
     description: (
       <>

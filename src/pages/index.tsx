@@ -4,6 +4,8 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import HomepageTools from '@site/src/components/HomepageTools';
+import HomepageClosing from '@site/src/components/HomepageClosing';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
@@ -43,11 +45,27 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={`${siteConfig.title} — ${siteConfig.tagline}`}
-      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean."
-      wrapperClassName={clsx(styles.homeFit, 'homepage-fit')}>
-      <HomepageHeader />
-      <main className={styles.homeMain}>
-        <HomepageFeatures />
+      description="Shadow IT is a collection of learning outcomes and documentation collected, documented and published by Beau Dean.">
+      <main>
+        {/* First screen: hero + the three entry cards, sized to the viewport on
+            desktop so the page still opens as one composed screen. Everything
+            below it is reached by scrolling. */}
+        <div className={styles.firstScreen}>
+          <HomepageHeader />
+          <div className={styles.homeMain}>
+            <HomepageFeatures />
+          </div>
+          <div className={styles.cueWrap}>
+            <a className={styles.cue} href="#tools">
+              See the tools
+              <span className={styles.cueArrow} aria-hidden="true">
+                ↓
+              </span>
+            </a>
+          </div>
+        </div>
+        <HomepageTools />
+        <HomepageClosing />
       </main>
     </Layout>
   );

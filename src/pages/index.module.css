@@ -1,12 +1,14 @@
 /**
- * Homepage single-viewport layout. The page is locked to one screen (no scroll)
- * on desktop via the global `.homepage-fit` rules in custom.css; here we keep
- * the hero compact and let the feature block flex to fill the remaining height.
+ * Homepage. The first screen (hero + the three entry cards) is sized to the
+ * viewport on desktop so the page still opens as one composed screen; the
+ * sections below it are reached by scrolling.
  */
 
-.homeFit {
+.firstScreen {
   display: flex;
   flex-direction: column;
+  min-height: calc(100vh - var(--ifm-navbar-height));
+  min-height: calc(100dvh - var(--ifm-navbar-height));
 }
 
 .homeMain {
@@ -25,6 +27,21 @@
   flex: 0 0 auto;
 }
 
+/* Doubled class to out-specify the global `.hero--primary` background: the
+   gradient is oversized and drifts, so the hero breathes rather than sitting
+   as a flat panel. */
+.heroBanner.heroBanner {
+  background: linear-gradient(
+    120deg,
+    var(--brand-electric-indigo) 0%,
+    var(--brand-electric-purple) 38%,
+    var(--brand-purpureus) 62%,
+    var(--brand-electric-indigo) 100%
+  );
+  background-size: 220% 220%;
+  animation: heroDrift 22s ease-in-out infinite;
+}
+
 /* Subtle dot-grid + soft centre glow over the gradient for depth. */
 .heroBanner::before {
   content: '';
@@ -41,6 +58,16 @@
 .heroBanner :global(.container) {
   position: relative;
   z-index: 1;
+}
+
+@keyframes heroDrift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 /* Radar pulse rings, centred behind the logo. */
@@ -87,8 +114,34 @@
   }
 }
 
+/* Staggered entrance for the hero's own content. */
+.heroLogoHeading,
+.heroTagline,
+.heroDivider {
+  animation: heroRise 0.8s cubic-bezier(0.22, 0.68, 0.2, 1) both;
+}
+
 .heroLogoHeading {
   margin-bottom: clamp(0.5rem, 1.5vh, 1rem);
+}
+
+.heroTagline {
+  animation-delay: 0.12s;
+}
+
+.heroDivider {
+  animation-delay: 0.24s;
+}
+
+@keyframes heroRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Dark wordmark rendered as a white silhouette on the brand gradient. */
@@ -126,24 +179,79 @@
   );
 }
 
+/* --- Scroll cue -------------------------------------------------------- */
+.cueWrap {
+  flex: 0 0 auto;
+  padding-bottom: clamp(0.75rem, 2.5vh, 1.75rem);
+  text-align: center;
+}
+
+.cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  font-family: var(--brand-font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+  opacity: 0.75;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.cue:hover,
+.cue:focus-visible {
+  opacity: 1;
+  text-decoration: none;
+  color: var(--ifm-color-primary);
+}
+
+.cueArrow {
+  display: inline-block;
+  animation: cueBob 2.2s ease-in-out infinite;
+}
+
+@keyframes cueBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .heroRings span {
     animation: none;
     opacity: 0.16;
   }
+  .heroBanner.heroBanner,
+  .heroLogoHeading,
+  .heroTagline,
+  .heroDivider,
+  .cueArrow {
+    animation: none;
+  }
 }
 
-/* Mobile-portrait / narrow screens: allow normal scrolling (can't fit a full
-   hero + cards + footer on a phone). The desktop lock in custom.css is gated to
-   min-width: 769px, matching this breakpoint. */
+/* Mobile-portrait / narrow screens: let the first screen size to its content
+   rather than the viewport — a hero plus three stacked cards won't fit a phone. */
 @media screen and (max-width: 768px) {
-  .homeFit {
+  .firstScreen {
     display: block;
+    min-height: 0;
   }
   .homeMain {
     display: block;
   }
   .heroBanner {
     padding: 2.5rem 1rem;
+  }
+  .cueWrap {
+    display: none;
   }
 }
