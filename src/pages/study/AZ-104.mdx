@@ -1,0 +1,987 @@
+---
+title: 'AZ-104: Microsoft Azure Administrator — 60-Day Socratic Study Program'
+description: A 60-day Socratic study plan for AZ-104 — every day opens with questions you answer before you watch or read anything, then a lab built to prove or break your answer.
+keywords: [AZ-104, Azure Administrator, study plan, Socratic method, Azure certification]
+---
+
+import Admonition from '@theme/Admonition';
+
+# AZ-104: Microsoft Azure Administrator — 60-Day Socratic Study Program
+
+- **Target exam:** [AZ-104](https://learn.microsoft.com/en-us/credentials/certifications/exams/az-104/) (skills measured as of 26 October 2023), leading to [Azure Administrator Associate](https://learn.microsoft.com/en-us/credentials/certifications/azure-administrator/)
+- **Exam format:** 100 minutes, proctored, renews every 12 months
+- **Time budget:** ~1.5 h/weekday, ~3 h/weekend day ≈ 100 h over 60 days
+- **Assumed baseline:** Comfortable in a Microsoft 365 admin centre, some PowerShell, no prior Azure requirement
+- **Video spine:** lecture numbers refer to Scott Duffy's *AZ-104 Microsoft Azure Administrator* course on Udemy. Using different material? Ignore them — the questions and the labs stand on their own.
+
+---
+
+## Why Socratic, and what that costs you
+
+Most study plans are a reading list with dates attached. You watch, you nod, you
+feel informed, and then the exam asks what happens to a resource lock when you move
+the resource to another resource group and you discover that nodding wasn't knowing.
+
+This plan inverts the order. **Every day opens with questions you answer before you
+watch or read anything.** Then you go looking — not for the content, but for whether
+you were right.
+
+It is slower and more uncomfortable than watching lectures. That discomfort is the
+mechanism: retrieving a wrong answer and then correcting it builds a far more durable
+memory than reading the right one first. You are paying attention differently when
+you already have a position to defend.
+
+### The five rules
+
+1. **Answer cold, in writing.** Before any video, any doc, any portal blade. A guess
+   is fine. A blank is not — if you truly have nothing, write what you'd *expect* and
+   why.
+2. **Your answer is a hypothesis.** The lab is not a tutorial to follow; it exists to
+   try to break what you just wrote down.
+3. **"Because the course said so" is not an answer.** Every answer has to end in a
+   mechanism — what Azure actually does — and where you observed it.
+4. **Keep a question journal.** Four columns: the question, what you answered cold,
+   what turned out to be true, and *why the gap*. That last column is the whole point.
+5. **Three whys.** When you get an answer right, ask why three more times. Most
+   AZ-104 scenario questions live two layers below the obvious answer.
+
+<Admonition type="tip" title="Studying alone">
+
+The Socratic method needs someone to push back. If you don't have a study partner,
+say your answer out loud as if explaining it to a colleague who will ask "but why?" —
+or hand your written answer to an AI assistant with the prompt *"Don't tell me if I'm
+right. Ask me the question that exposes what I've got wrong."* Marking your own work
+is the weak point of self-study; make something else do it.
+
+</Admonition>
+
+---
+
+## Domain weightings (drive your effort allocation)
+
+| Domain | Weight | Days allocated |
+|---|---|---|
+| Foundations (control plane, tooling, scope) | — | Days 1–3 |
+| 1. Manage Azure identities and governance | 20–25% | Days 4–15 |
+| 2. Implement and manage storage | 15–20% | Days 16–24 |
+| 3. Deploy and manage Azure compute resources | 20–25% | Days 25–40 |
+| 4. Implement and manage virtual networking | 15–20% | Days 41–50 |
+| 5. Monitor and maintain Azure resources | 10–15% | Days 51–56 |
+| Review, practice exams, remediation | — | Days 57–60 |
+
+Compute gets sixteen days against a 20–25% weight because it carries the most
+surface area — VMs, scale sets, ARM, Bicep, App Service and containers all live
+there. Foundations gets three unweighted days because almost every wrong answer
+later traces back to not understanding scope and the control plane.
+
+---
+
+## Day 0 (before you start)
+
+Set this up properly or you will spend Day 4 doing it badly.
+
+1. **Subscription:** an [Azure free account](https://azure.microsoft.com/en-us/free/)
+   (30-day credit plus 12 months of free services) or pay-as-you-go. A Visual Studio
+   subscription credit works too.
+2. **Budget and cost alerts:** set a [budget](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets)
+   on day zero with an alert at 50% and 80%. This is both lab hygiene and an exam
+   objective you'll meet again on Day 13.
+3. **Tooling:** [Azure PowerShell (Az module)](https://learn.microsoft.com/en-us/powershell/azure/install-azure-powershell),
+   [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli),
+   [VS Code](https://code.visualstudio.com/) with the Bicep and Azure Resource Manager
+   Tools extensions.
+4. **A disposable resource group per topic.** Name them `rg-az104-storage`,
+   `rg-az104-network` and so on. Deleting a resource group is the only reliable way
+   to stop paying for a lab you've forgotten.
+5. **A second Entra tenant.** Free to create, and you'll need it for guest access and
+   cross-tenant work in Week 2.
+6. **The question journal.** A notebook, a text file, a OneNote section — anything
+   with four columns. Set it up now; it is the single highest-value artefact of the
+   next sixty days.
+7. **Course lectures 1–14** (account, budget, service overviews) are orientation.
+   Watch them today, not during a study day.
+
+<Admonition type="warning" title="Spend control">
+
+Bastion, VPN gateways, Application Gateway, Azure Firewall and premium storage bill
+by the hour whether or not you're using them. Delete the resource group at the end
+of any day that builds one. Set the budget alert first, not after the bill.
+
+</Admonition>
+
+---
+
+## The daily loop
+
+Every study day follows the same five-phase shape. The phases matter more than the
+minutes — adjust the clock, keep the order.
+
+| Phase | Time | What you do |
+|---|---|---|
+| **Prime** | 10 min | Read the day's questions. Write an answer to each, cold. No portal, no video, no search. |
+| **Probe** | 40 min | Watch the lectures and read the linked docs. Mark every point where you were wrong. |
+| **Prove** | 40 min | Do the lab. It is designed to test your answer, not to be followed blindly. |
+| **Press** | 10 min | Answer the "press further" question out loud, in full sentences. |
+| **Post-mortem** | 10 min | Fill in the journal. The *why the gap* column is mandatory. |
+
+On weekends, run two days' material or use the extra time to redo a lab from memory
+with the portal closed — PowerShell or CLI only.
+
+---
+
+## FOUNDATIONS — Days 1–3
+
+### Day 1 — What Azure actually is when you click "Create"
+*Lectures 15–17 · [Azure Resource Manager overview](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/overview)*
+
+**Answer cold:**
+- When you click **Create** in the portal, what receives that click? Is the portal talking to the VM service, or to something else?
+- The portal, PowerShell, the CLI and an ARM template all produce the same VM. What does that tell you about where the real logic lives?
+- What is a *resource provider*, and why would a deployment fail with "subscription not registered to use namespace"?
+- Why is a resource group not a folder?
+
+**Prove it:** Create a storage account in the portal. Before clicking Create, open
+**Download a template for automation**. Now create the same account with
+`az storage account create`. Compare the template to the command. Then run
+`az provider list --query "[?registrationState=='NotRegistered'].namespace"` and
+explain what that list is.
+
+**Press further:** If ARM is the only way in, what does that imply about auditing —
+where would you look to see every change anyone made to a subscription?
+
+### Day 2 — Two CLIs and a context
+*Lectures 18–19 · [Azure PowerShell](https://learn.microsoft.com/en-us/powershell/azure/what-is-azure-powershell) · [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/what-is-azure-cli)*
+
+**Answer cold:**
+- Why does Azure ship two command-line tools rather than one? What is each actually good at?
+- When you run `Connect-AzAccount`, what is stored, where, and for how long?
+- You have access to four subscriptions. Which one does your next command target, and how would you know without running it?
+- A command works in CLI but fails in PowerShell with "resource not found". Name three possible causes that have nothing to do with the resource.
+
+**Prove it:** Sign in with both tools. Run `Get-AzContext` and `az account show`.
+Switch subscriptions in each. Now deliberately break it: set your context to one
+subscription and query a resource group in another. Read the error carefully — what
+does it actually say, and what does it *not* say?
+
+**Press further:** Why does the exam care whether you know the difference between
+`az group create` and `New-AzResourceGroup` if both work?
+
+### Day 3 — Scope: the idea everything else hangs off
+*[Management groups](https://learn.microsoft.com/en-us/azure/governance/management-groups/overview) · [Subscriptions and tenants](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/azure-best-practices/initial-subscriptions)*
+
+**Answer cold:**
+- Draw the hierarchy from management group down to a single resource. How many levels, and what sits at each?
+- Can one Entra tenant hold many subscriptions? Can one subscription belong to many tenants? Why do those two questions have different answers?
+- If you delete a subscription, what happens to the user accounts that had access to it?
+- A permission is granted at the subscription and denied at the resource group. What wins, and why is that different from how NTFS works?
+
+**Prove it:** In the portal, find the tenant ID and the subscription ID and note how
+each is surfaced. Create a management group and move your subscription into it. Now
+try to explain, without looking, where a policy assigned at the management group
+takes effect.
+
+**Press further:** Why can a resource group span regions but a resource cannot span
+resource groups?
+
+---
+
+## DOMAIN 1 — Manage Azure identities and governance (20–25%) — Days 4–15
+
+### Day 4 — Entra ID is not Active Directory
+*Lectures 20–23 · [What is Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/fundamentals/whatis)*
+
+**Answer cold:**
+- Name three things AD DS does that Entra ID cannot do at all. Then three things Entra ID does that AD DS cannot.
+- Entra ID has no OUs and no Group Policy. What replaces each?
+- What protocol does a domain-joined PC use to authenticate to AD DS? What does a phone use to authenticate to Entra ID? Why can't they be the same?
+- What do you actually get when you pay for Entra ID P1 or P2 that you don't get for free?
+
+**Prove it:** Open your tenant's Overview blade. Find the tenant ID, the licence tier,
+and the number of objects. Then attempt something P1-only (a dynamic group) and read
+the error you get.
+
+**Press further:** If Entra ID is not a domain controller, what is the thing that
+makes "Entra joined" different from "domain joined" for a Windows device?
+
+### Day 5 — Tenants, directories and the custom domain dance
+*Lectures 24–29 · [Add a custom domain](https://learn.microsoft.com/en-us/entra/fundamentals/add-custom-domain)*
+
+**Answer cold:**
+- Why does every new tenant get an `onmicrosoft.com` name, and can you ever delete it?
+- To prove you own `example.com`, Microsoft asks for a TXT record. Why a TXT record and not a web page or an email?
+- You add a custom domain and it stays "unverified". List four causes in order of likelihood.
+- What is the practical difference between switching directories and switching subscriptions?
+
+**Prove it:** Add a custom domain to your tenant (any domain you control — a cheap
+`.au` is worth owning for lab work). Watch the verification fail before DNS
+propagates, then succeed. Note how long it actually took.
+
+### Day 6 — Users: more interesting than they look
+*Lectures 30, 35 · [Manage users](https://learn.microsoft.com/en-us/entra/fundamentals/how-to-create-delete-users)*
+
+**Answer cold:**
+- What is the difference between a member and a guest, expressed as a *permission*, not a description?
+- A user's UPN and their email address differ. Is that broken? What breaks if it is?
+- You delete a user by accident. How long do you have, and where do you go?
+- Which user properties can a Helpdesk Administrator change, and which can they not?
+
+**Prove it:** Create three users: one normal, one with a UPN that doesn't match their
+mail, one you then delete. Recover the deleted one. Now bulk-create ten more from CSV
+and deliberately malform one row — read how the bulk operation reports the failure.
+
+**Press further:** Why does Microsoft treat "deleted" as a 30-day state rather than
+an immediate removal? What attack does that defend against, and what attack does it enable?
+
+### Day 7 — Groups and licensing, which are the same problem
+*Lectures 31–32 · [Entra groups](https://learn.microsoft.com/en-us/entra/fundamentals/concept-learn-about-groups) · [Group-based licensing](https://learn.microsoft.com/en-us/entra/identity/users/licensing-groups-assign)*
+
+**Answer cold:**
+- Security group or Microsoft 365 group — what decides, and which one can you use for an Azure RBAC assignment?
+- Assigned, dynamic user, dynamic device: when is each the wrong choice?
+- A dynamic group rule is `user.department -eq "Sales"`. A user moves to Sales. How long until they're in the group, and what runs to make that happen?
+- A licence has a service plan the user's region can't have. What happens to the whole assignment?
+
+**Prove it:** Build a dynamic group on `department`. Change a user's department and
+time how long the membership takes to update. Then assign a licence to the group and
+watch it flow to the member — then remove the user from the group and watch what
+happens to their mailbox data.
+
+**Press further:** Why is group-based licensing described as "eventually consistent",
+and where does that bite you in a migration?
+
+### Day 8 — Administrative units and devices
+*Lectures 33–34 · [Administrative units](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/administrative-units) · [Device identity](https://learn.microsoft.com/en-us/entra/identity/devices/overview)*
+
+**Answer cold:**
+- An AU is often described as "like an OU". In what important way is that comparison wrong?
+- You want a Perth helpdesk that can reset passwords only for Perth staff. What are the moving parts?
+- Registered, joined, hybrid joined: which one does a personal iPhone get, and which does a corporate laptop get in a cloud-only org?
+- What does "device writeback" mean, and why would an organisation need it?
+
+**Prove it:** Create an AU, add users, scope a Helpdesk Administrator to it. Sign in
+as that admin and try to reset a password for someone outside the AU. Read the error.
+
+### Day 9 — External identities and self-service password reset
+*Lectures 36–37 · [B2B collaboration](https://learn.microsoft.com/en-us/entra/external-id/what-is-b2b) · [SSPR](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-howitworks)*
+
+**Answer cold:**
+- When you invite a guest, where does their password live, and who can reset it?
+- What can a guest see in your directory by default? Is that more or less than you'd assume?
+- SSPR with one method or two? What is the actual security trade-off, not the policy recommendation?
+- In a hybrid org, a user resets their cloud password. What has to be true for them to log in to their on-prem laptop afterwards?
+
+**Prove it:** Invite a guest from your second tenant. Accept the invitation. Then, as
+the guest, try to enumerate users in the host directory. Now tighten external
+collaboration settings and repeat.
+
+### Day 10 — RBAC: the anatomy of a role
+*Lectures 38–39, 45 · [Azure RBAC overview](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) · [Role definitions](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-definitions)*
+
+**Answer cold:**
+- A role assignment has three parts. Name them, then explain which one is hardest to get right in practice.
+- What is the difference between `Actions` and `DataActions`? Give an example where someone has one but not the other.
+- `NotActions` is not a deny rule. So what is it?
+- Owner, Contributor, User Access Administrator: what exactly separates them?
+
+**Prove it:** Open any built-in role's JSON in the portal. Find a role with
+`DataActions` and one without. Then assign Reader to a test user at resource-group
+scope and have them try to list storage keys. Explain the error in terms of the JSON
+you just read.
+
+**Press further:** Why does Azure need `DataActions` at all — why isn't a permission
+just a permission?
+
+### Day 11 — Control plane vs data plane, the distinction that trips everyone
+*Lectures 40–42 · [Authorize access to blob data](https://learn.microsoft.com/en-us/azure/storage/blobs/authorize-access-azure-active-directory)*
+
+**Answer cold:**
+- You are Owner of a storage account. Can you read a blob inside it? Think carefully before answering.
+- Why does "Storage Blob Data Reader" exist when "Reader" already does?
+- An access key grants what, exactly, and to whom?
+- Which of these is logged in the Azure Activity Log: creating a container, or uploading a blob?
+
+**Prove it:** As Owner, switch the container's authentication method from access key
+to Entra account in the portal and try to list blobs. Observe the failure. Grant
+yourself Storage Blob Data Reader and retry. This one surprises almost everyone — write
+down why it surprised you.
+
+**Press further:** Given the above, what is wrong with the instruction "just make them
+Owner, it'll work"?
+
+### Day 12 — Custom roles, scope and inheritance
+*Lectures 43–44 · [Custom roles](https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles) · [Scope](https://learn.microsoft.com/en-us/azure/role-based-access-control/scope-overview)*
+
+**Answer cold:**
+- At what four scopes can a role be assigned? Which one can't be used for custom role *definitions*?
+- Permissions inherit downward. Is there any way to subtract a permission further down the tree?
+- You need "can restart VMs but not create or delete them". Which built-in role, or do you need a custom one?
+- What is `AssignableScopes` for, and what happens if you set it too broadly?
+
+**Prove it:** Write a custom role with `Microsoft.Compute/virtualMachines/restart/action`
+and nothing else. Assign it. Verify the user can restart but not resize. Try to assign
+the role at a scope outside `AssignableScopes` and read the failure.
+
+### Day 13 — Subscriptions, management groups and the money
+*Lectures 46–48, 56 · [Cost Management](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/overview-cost-management)*
+
+**Answer cold:**
+- A budget and a cost alert sound like the same thing. What does a budget actually *do* when exceeded?
+- Why can a management group tree be six levels deep but not sixteen?
+- What does Azure Advisor base its cost recommendations on, and when should you ignore it?
+- You need to split costs between two departments sharing a subscription. What are your options, and which is least painful?
+
+**Prove it:** Build a management group hierarchy two levels deep. Create a budget with
+an action group that emails you. Open Cost Analysis and group by resource group, then
+by tag — note which one is currently useless to you and why.
+
+**Press further:** If tags are the answer to cost allocation, what makes tags
+unreliable in practice, and what feature fixes that? (You'll meet it tomorrow.)
+
+### Day 14 — Azure Policy
+*Lectures 50–52, 55, 58 · [Azure Policy overview](https://learn.microsoft.com/en-us/azure/governance/policy/overview) · [Effects](https://learn.microsoft.com/en-us/azure/governance/policy/concepts/effects)*
+
+**Answer cold:**
+- Policy and RBAC both stop people doing things. What is the actual difference?
+- A policy with effect `Deny` is assigned. What happens to the twenty non-compliant resources that already exist?
+- What is the difference between `Audit`, `AuditIfNotExists` and `DeployIfNotExists`?
+- `DeployIfNotExists` has to create resources. Whose permissions does it use?
+
+**Prove it:** Assign the built-in policy that restricts allowed locations. Try to
+create a resource in a blocked region and read the error — note which layer refused
+you. Then write a custom policy that denies storage accounts without a `CostCentre`
+tag, and run a remediation task against existing resources.
+
+**Press further:** Why is `Deny` evaluated at deployment time but compliance assessed
+on a schedule? What does that gap mean for an auditor?
+
+### Day 15 — Locks, tags, moving resources, and Domain 1 review
+*Lectures 49, 53–54, 57 · [Resource locks](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/lock-resources) · [Move resources](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/move-resource-group-and-subscription)*
+
+**Answer cold:**
+- `CanNotDelete` and `ReadOnly`: which one breaks more things unexpectedly, and why?
+- You apply a lock at the resource group. Can you still delete a VM inside it? Can you still *stop* it?
+- Do tags inherit from resource group to resource? If not, what makes people think they do?
+- You move a VM to a new resource group. What is its resource ID afterwards, and what does that break?
+
+**Prove it:** Lock a resource group `ReadOnly` and try to start a VM in it. (Think
+about why that fails before you run it.) Then move a storage account between resource
+groups and watch the validation step — note what it checks.
+
+**Review:** 40 mixed Domain 1 questions. Update the journal. **Checkpoint:** can you
+explain RBAC vs Policy vs locks, and control plane vs data plane, without notes? If
+not, redo Days 10–14 before moving on.
+
+---
+
+## DOMAIN 2 — Implement and manage storage (15–20%) — Days 16–24
+
+### Day 16 — Storage account anatomy and redundancy
+*Lectures 59–61 · [Storage redundancy](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy)*
+
+**Answer cold:**
+- LRS, ZRS, GRS, GZRS, RA-GRS: order them by cost and by durability. Are those the same order?
+- What does the "RA" in RA-GRS actually buy you that GRS doesn't?
+- In a GRS account, how current is the secondary copy? What's the word Microsoft uses, and what does it cost you in a failover?
+- Which redundancy options can you change after creation, and which require a migration?
+
+**Prove it:** Create accounts with two different redundancy settings. Compare the
+estimated monthly cost. Then attempt to change LRS to ZRS in the portal and record
+exactly which conversions are offered.
+
+**Press further:** Why does ZRS protect against a datacentre fire but not a regional
+outage, when GRS protects against both? What are you actually paying for?
+
+### Day 17 — Access tiers and lifecycle management
+*Lectures 62, 73 · [Access tiers](https://learn.microsoft.com/en-us/azure/storage/blobs/access-tiers-overview) · [Lifecycle management](https://learn.microsoft.com/en-us/azure/storage/blobs/lifecycle-management-overview)*
+
+**Answer cold:**
+- Hot, cool, cold, archive: what two numbers move in opposite directions as you go down that list?
+- A blob in archive is needed right now. What do you do, and how long does it take?
+- There's an early-deletion penalty on cool and archive. Why would Microsoft charge that?
+- Tier can be set on the account and on the blob. Which wins?
+
+**Prove it:** Upload a file, set it to archive, then rehydrate it and time the
+operation. Write a lifecycle rule that moves blobs to cool after 30 days and deletes
+them after 365 — then work out when it next runs.
+
+### Day 18 — Storage networking
+*Lectures 63 · [Storage network security](https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security)*
+
+**Answer cold:**
+- A storage account has a public endpoint by default. Is "public" the same as "anonymous"?
+- Service endpoint vs private endpoint: what changes about the traffic path, and what changes about DNS?
+- You restrict an account to one VNet. What breaks for you, the administrator, sitting at home?
+- What are "trusted Microsoft services" and why does the exception exist?
+
+**Prove it:** Lock an account down to a VNet. Confirm you're locked out from your own
+machine. Add your IP as an exception. Then add a private endpoint and run `nslookup`
+on the account's FQDN from inside and outside the VNet — compare the answers.
+
+**Press further:** Why does a private endpoint need a private DNS zone? What exactly
+would break without it?
+
+### Day 19 — Data protection and encryption
+*Lectures 64–66 · [Data protection overview](https://learn.microsoft.com/en-us/azure/storage/blobs/data-protection-overview) · [Storage encryption](https://learn.microsoft.com/en-us/azure/storage/common/storage-service-encryption)*
+
+**Answer cold:**
+- Soft delete, versioning, snapshots and point-in-time restore all protect blobs. What is each one actually for?
+- Storage is encrypted at rest and you can't turn it off. So what is a customer-managed key *for*?
+- If you hold the key in Key Vault and delete the key, what happens to the data?
+- What does an immutability policy prevent that a resource lock doesn't?
+
+**Prove it:** Enable soft delete and versioning. Delete a blob and recover it. Overwrite
+a blob and recover the previous version. Then set a legal hold and try to delete the
+container.
+
+### Day 20 — Blobs, files, queues and tables
+*Lecture 67 · [Storage services](https://learn.microsoft.com/en-us/azure/storage/common/storage-introduction)*
+
+**Answer cold:**
+- Four services, one account. What decides which you'd use?
+- Block blob, append blob, page blob: which one backs a VM disk, and why that one?
+- When would you choose Azure Files over Blob storage for something that "is just files"?
+- What does a queue give you that a table doesn't?
+
+**Prove it:** Create one of each in a single account. Upload the same file to blob and
+to a file share — compare how each is addressed, and how each is accessed from a VM.
+
+### Day 21 — Access keys and SAS
+*Lectures 68–69 · [SAS overview](https://learn.microsoft.com/en-us/azure/storage/common/storage-sas-overview)*
+
+**Answer cold:**
+- An account has two access keys. Why two, not one or three?
+- Account SAS, service SAS, user delegation SAS: which is most secure and why?
+- A SAS has leaked. What are your options, and what does each one break?
+- What is a stored access policy for, given SAS tokens already have an expiry?
+
+**Prove it:** Generate a read-only SAS for one blob with a 10-minute expiry. Use it in
+a browser. Let it expire and read the error. Now generate one tied to a stored access
+policy and revoke it mid-life — note how fast revocation takes effect.
+
+**Press further:** Rotating an access key invalidates every SAS signed with it. What
+does that tell you about how a SAS is validated — does Azure store the tokens it issues?
+
+### Day 22 — Entra ID authorisation for storage
+*Lecture 70 · [Authorize with Entra ID](https://learn.microsoft.com/en-us/azure/storage/blobs/authorize-access-azure-active-directory)*
+
+**Answer cold:**
+- Why is RBAC-based access to blob data considered safer than a SAS?
+- You can disable shared key authorisation entirely. What breaks when you do?
+- Which identities can be granted data-plane roles? Can a VM be one?
+- How does the portal decide whether to show you blobs via key or via your account?
+
+**Prove it:** Disable shared key access on a test account and find out which of your
+tools stop working. Then grant a VM's managed identity Storage Blob Data Contributor
+and read a blob from inside the VM with no credentials in the code.
+
+### Day 23 — Moving data: AzCopy, Storage Browser, object replication
+*Lectures 71–72, 74–76 · [AzCopy](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10)*
+
+**Answer cold:**
+- AzCopy, Storage Explorer, the portal, `az storage blob upload`: when is each the right tool?
+- AzCopy can authenticate two ways. Which would you use in a scheduled script, and why not the other?
+- Object replication copies blobs between accounts. What has to be enabled on both for it to work?
+- Is object replication a backup? Defend your answer.
+
+**Prove it:** Copy a folder with AzCopy using a SAS, then again using `azcopy login`.
+Set up object replication between two accounts and measure the lag.
+
+### Day 24 — Azure Files, snapshots, and Domain 2 review
+*Lectures 77–78 · [Azure Files planning](https://learn.microsoft.com/en-us/azure/storage/files/storage-files-planning)*
+
+**Answer cold:**
+- SMB and NFS shares: what decides which you can use, and what must be true of the account?
+- To mount a file share from a domain-joined PC, what authentication options exist?
+- A share snapshot is taken. Where does it live, and what does it cost?
+- Why would you use Azure File Sync rather than just mounting the share?
+
+**Prove it:** Create a file share, mount it from a VM, take a snapshot, delete a file,
+restore it from the snapshot.
+
+**Review:** 40 mixed Domain 2 questions. **Checkpoint:** can you explain SAS types,
+redundancy options, and the difference between soft delete and versioning cold?
+
+---
+
+## DOMAIN 3 — Deploy and manage Azure compute resources (20–25%) — Days 25–40
+
+### Day 25 — Creating a VM: every decision on the blade
+*Lectures 79, 82 · [VM sizes](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes)*
+
+**Answer cold:**
+- The create-VM blade asks maybe thirty questions. Which five can you never change afterwards?
+- What does the VM size letter actually mean — why is a D-series not just "bigger than B"?
+- A B-series VM is cheap. What's the catch, and when does it bite?
+- Where does the VM's OS disk live, and is it part of the VM?
+
+**Prove it:** Create a VM. Before you click Create, download the ARM template and read
+the `dependsOn` chain — list every resource Azure is actually making on your behalf.
+
+**Press further:** Why does deleting a VM in older Azure leave the disk and NIC behind?
+What does that tell you about what a "VM" is as an object?
+
+### Day 26 — Disks
+*Lectures 80, 86 · [Managed disks](https://learn.microsoft.com/en-us/azure/virtual-machines/managed-disks-overview)*
+
+**Answer cold:**
+- Standard HDD, Standard SSD, Premium SSD, Ultra: what changes besides speed?
+- The temp disk (`D:` on Windows). What is it for, and what happens to it on deallocate?
+- You attach a data disk. What three steps happen before it's usable?
+- Can you resize a disk down? Why do you think that is?
+
+**Prove it:** Attach a data disk, initialise and format it inside the VM, write a
+file. Deallocate and restart the VM — check both the data disk and the temp disk.
+
+### Day 27 — VM networking and connectivity
+*Lectures 81, 83 · [VM networking](https://learn.microsoft.com/en-us/azure/virtual-network/network-overview)*
+
+**Answer cold:**
+- A VM has a private IP and maybe a public one. Which does the OS actually see in `ipconfig`?
+- You stop (deallocate) a VM. What happens to each of its IP addresses?
+- RDP to a VM fails. List the five layers you'd check, in order.
+- Can a VM have two NICs? Can those NICs be in different VNets?
+
+**Prove it:** Connect over RDP or SSH. Then break it deliberately — remove the inbound
+rule — and fix it, narrating which layer you're at each time.
+
+### Day 28 — Availability
+*Lectures 84–85 · [Availability options](https://learn.microsoft.com/en-us/azure/reliability/availability-zones-overview)*
+
+**Answer cold:**
+- Availability set, availability zone, region pair: what failure does each one survive?
+- What is a fault domain? What is an update domain? Which one protects you from Microsoft?
+- A single VM with premium disks has an SLA. Why does Microsoft offer that at all?
+- You can't add an existing VM to an availability set. Why not?
+
+**Prove it:** Create an availability set and two VMs in it. Inspect their fault and
+update domain assignments. Then resize one VM and note what happens to the other.
+
+**Press further:** Why does an availability zone deployment require the load balancer
+to be Standard SKU rather than Basic?
+
+### Day 29 — Bastion and scripted VM creation
+*Lectures 87, 91 · [Azure Bastion](https://learn.microsoft.com/en-us/azure/bastion/bastion-overview)*
+
+**Answer cold:**
+- Bastion exists so you can stop doing what? What's the actual risk it removes?
+- Bastion needs a subnet with an exact name. Why would Azure require a *name*?
+- What does Bastion cost when nobody is connected?
+- Creating a VM in PowerShell takes several commands. Why can't it be one?
+
+**Prove it:** Deploy Bastion, connect without a public IP on the VM, then delete the
+VM's public IP entirely and confirm you still have access. Then build a VM end to end
+in PowerShell. **Delete the Bastion host when you finish** — it bills hourly.
+
+### Day 30 — Virtual machine scale sets
+*Lectures 88–90 · [VMSS overview](https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/overview)*
+
+**Answer cold:**
+- A scale set and an availability set both give you multiple VMs. What's the real difference?
+- Uniform vs Flexible orchestration: what problem does Flexible solve?
+- An autoscale rule says "add 1 instance when CPU > 70%". What happens at 71% for five seconds?
+- What is a cooldown period for, and what goes wrong without one?
+
+**Prove it:** Build a scale set, scale manually, then configure an autoscale rule and
+generate load to trigger it. Watch the scale-in — note which instance Azure removes
+and whether you can control that.
+
+### Day 31 — Compute consolidation lab
+*Lectures 92–94*
+
+No new material. Rebuild, from memory and without the portal: a VM with a data disk,
+in an availability set, reachable over RDP/SSH, hosting a web page. PowerShell or CLI
+only. Then build a scale set from a custom image.
+
+**Press further:** Write down the three things you had to look up. Those are tomorrow's
+revision, not today's failure.
+
+### Day 32 — ARM templates: anatomy
+*Lectures 95–96 · [ARM template structure](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/syntax)*
+
+**Answer cold:**
+- Name the top-level sections of an ARM template and what each is for.
+- What is the difference between a parameter and a variable? Why have both?
+- A template is "declarative". What does that actually mean when you deploy it twice?
+- What does `dependsOn` do that ordering the resources in the file does not?
+
+**Prove it:** Export a template from an existing resource group. Read it top to bottom
+and annotate every section. Find the `dependsOn` entries and explain each one.
+
+### Day 33 — ARM templates: modify and deploy
+*Lectures 97–103 · [Deploy templates](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deploy-powershell) · [Template specs](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/template-specs)*
+
+**Answer cold:**
+- Incremental and Complete deployment modes. Which is the default, and which one can delete things you didn't mention?
+- An exported template captures a point in time. What does it *not* capture?
+- What is a template spec for, when you could just store the JSON in a repo?
+- What does a custom script extension do that the template itself can't?
+
+**Prove it:** Modify an exported template to add a tag, deploy it in incremental mode,
+then deploy in complete mode against a resource group containing an extra resource.
+(Do this in a throwaway group. Now you know why.)
+
+**Press further:** Given idempotency, why does redeploying a template sometimes still
+cause downtime?
+
+### Day 34 — Bicep
+*Lectures 105–108 · [Bicep overview](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/overview)*
+
+**Answer cold:**
+- Bicep compiles to ARM JSON. So what problem does it actually solve?
+- Is Bicep a different service, a different API, or just a different file?
+- What happens to your Bicep when you deploy — where does the transpilation occur?
+- You decompile JSON to Bicep. Why might the result be ugly?
+
+**Prove it:** Author a Bicep file for a storage account in VS Code. Deploy it. Then
+decompile yesterday's ARM template to Bicep and compare line counts.
+
+### Day 35 — Disk encryption
+*Lectures 109–110 · [Disk encryption overview](https://learn.microsoft.com/en-us/azure/virtual-machines/disk-encryption-overview)*
+
+**Answer cold:**
+- SSE is on by default. So what is Azure Disk Encryption for?
+- Platform-managed keys vs customer-managed keys: who holds what, and what do you gain?
+- ADE uses BitLocker or DM-Crypt. Where does the key live, and what has to exist first?
+- Can you encrypt a VM that's running? Should you?
+
+**Prove it:** Inspect the encryption settings on an existing disk. Create a Key Vault
+with purge protection, then enable encryption with a customer-managed key.
+
+### Day 36 — App Service fundamentals
+*Lectures 111–115 · [App Service plans](https://learn.microsoft.com/en-us/azure/app-service/overview-hosting-plans)*
+
+**Answer cold:**
+- An App Service Plan is the thing you pay for. So what is the Web App?
+- Free, Shared, Basic, Standard, Premium: what capability appears at each step up?
+- Two web apps on one plan. What do they share, and what's the failure mode?
+- What is a deployment slot, and what makes a swap different from a redeploy?
+
+**Prove it:** Create a plan and two apps on it. Load one heavily and watch the other.
+Then add a staging slot, deploy different content to each, and swap.
+
+**Press further:** During a slot swap, what happens to app settings marked as
+"deployment slot settings"? Why does that distinction exist?
+
+### Day 37 — App Service scaling and backup
+*Lectures 116–118 · [Scale up an app](https://learn.microsoft.com/en-us/azure/app-service/manage-scale-up)*
+
+**Answer cold:**
+- Scale up and scale out: which one needs a restart, and which one costs more?
+- Autoscale on an App Service Plan — what is the unit being added?
+- Backup of a web app includes what, and what's the retention limit?
+- Why can't you back up on the Free tier?
+
+**Prove it:** Scale a plan up a tier and note what became available. Configure autoscale
+with a schedule-based rule, then a metric-based one, and explain which wins if both fire.
+
+### Day 38 — App Service networking, domains and TLS
+*Lectures 119–122 · [App Service networking](https://learn.microsoft.com/en-us/azure/app-service/networking-features)*
+
+**Answer cold:**
+- VNet integration and private endpoint on a web app: which direction is each?
+- You map `www.example.com` to an app. Which DNS records, and why is a CNAME not always enough?
+- A managed certificate is free. What are its three limitations?
+- What does "TLS/SSL binding" bind, and why is SNI the default?
+
+**Prove it:** Map a custom domain to a web app, add a managed certificate, force HTTPS.
+Then add VNet integration and prove the app can reach a private resource.
+
+### Day 39 — Containers: Azure Container Instances
+*Lectures 123–126 · [ACI overview](https://learn.microsoft.com/en-us/azure/container-instances/container-instances-overview)*
+
+**Answer cold:**
+- ACI versus a VM running Docker: what did you stop managing?
+- ACI versus App Service for Containers: when would you pick each?
+- What is a container group, and what do containers in one share?
+- ACI restart policies: `Always`, `OnFailure`, `Never` — which suits a batch job?
+
+**Prove it:** Run a public image in ACI with a DNS label. Then build a two-container
+group and verify they share a network namespace by calling one from the other on `localhost`.
+
+### Day 40 — Containers: Container Apps and ACR
+*Lectures 127–130 · [Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/overview) · [ACR](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-intro)*
+
+**Answer cold:**
+- Container Apps sits between ACI and AKS. What does it add over ACI?
+- ACR SKUs — Basic, Standard, Premium. What does Premium buy beyond storage?
+- A VM needs to pull from a private ACR. What are the authentication options, and which is best?
+- `docker push` to ACR fails with "unauthorized". Name three causes.
+
+**Prove it:** Create an ACR, push an image, pull it into ACI using a managed identity
+rather than the admin account. Then disable the admin account and confirm it still works.
+
+**Review:** 40 mixed Domain 3 questions. **Checkpoint:** ARM deployment modes, App
+Service plan vs app, and availability set vs zone — cold, no notes.
+
+---
+
+## DOMAIN 4 — Implement and manage virtual networking (15–20%) — Days 41–50
+
+### Day 41 — Virtual networks and subnets
+*Lectures 131–133 · [VNet overview](https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-overview)*
+
+**Answer cold:**
+- You create a `/24` subnet. How many usable IPs do you get? Why isn't it 254?
+- Can you change a VNet's address space after creation? Can you change a subnet's?
+- Two VNets in the same region with overlapping address spaces. What can't you do?
+- What makes a subnet "delegated", and what does that stop you doing?
+
+**Prove it:** Create a VNet with two subnets. Deploy a VM into each and confirm they
+route to each other with no configuration. Then try to shrink a subnet that contains
+a VM and read the error.
+
+**Press further:** Nothing was configured, yet the two subnets can talk. What is doing
+the routing, and where would you see it?
+
+### Day 42 — Public IPs and NICs
+*Lectures 134–136 · [Public IP addresses](https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/public-ip-addresses)*
+
+**Answer cold:**
+- Basic and Standard public IP SKUs: what differs besides price? Which is secure by default?
+- Static and dynamic allocation — when is a dynamic IP actually assigned?
+- A NIC can have several IP configurations. What would you use that for?
+- Is a public IP attached to the VM, or to something else?
+
+**Prove it:** Create a static public IP, associate it with a NIC, deallocate the VM and
+confirm the address survives. Repeat with a dynamic one and watch it change.
+
+### Day 43 — VNet peering
+*Lectures 137–138 · [VNet peering](https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview)*
+
+**Answer cold:**
+- Peering is not transitive. Explain what that means for a hub-and-spoke design.
+- You peer VNet A to B. How many peering objects exist, and what happens if you only create one?
+- What does "allow gateway transit" do, and who turns it on — the hub or the spoke?
+- Peering across regions: what changes, technically and on the bill?
+
+**Prove it:** Peer two VNets and ping between VMs. Then delete one side of the peering
+and observe the state on the other side.
+
+### Day 44 — VPN gateways
+*Lectures 139–141 · [VPN Gateway](https://learn.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpngateways)*
+
+**Answer cold:**
+- Site-to-site, point-to-site, ExpressRoute: what connects to what in each?
+- A VPN gateway needs its own subnet with a fixed name. Why does Azure insist?
+- Route-based vs policy-based: which is the modern default, and what does the other limit?
+- How long does a gateway take to deploy, and what does that tell you about what it is?
+
+**Prove it:** Deploy a VNet-to-VNet connection between two gateways. Start it early —
+it takes up to 45 minutes. **Delete both gateways today**; they are the most expensive
+thing in this plan.
+
+### Day 45 — Azure DNS
+*Lectures 142–146 · [Azure DNS](https://learn.microsoft.com/en-us/azure/dns/dns-overview) · [Private DNS](https://learn.microsoft.com/en-us/azure/dns/private-dns-overview)*
+
+**Answer cold:**
+- Public DNS zone and private DNS zone: who can query each?
+- You create a public zone for `example.com`. Is it live? What else has to happen?
+- Azure provides name resolution inside a VNet for free. Why would you add a private zone?
+- What is a virtual network link, and what does "auto-registration" do?
+
+**Prove it:** Create a private zone, link it to a VNet with auto-registration, then
+check whether your VM's hostname resolves. Create a public zone and inspect the NS
+records Azure hands you.
+
+### Day 46 — Network security groups
+*Lectures 147–148 · [NSG overview](https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview)*
+
+**Answer cold:**
+- An NSG can attach to a subnet and to a NIC. If both exist, what happens to inbound traffic?
+- Rules have priority numbers. Lower or higher wins?
+- Name the default rules. Why does `AllowVnetInBound` exist, and what would break without it?
+- NSGs are stateful. Demonstrate you understand that with an example involving a reply packet.
+
+**Prove it:** Apply NSGs at both subnet and NIC level with contradictory rules. Predict
+the outcome before testing, then use **Effective security rules** to check your reasoning.
+
+**Press further:** If NSGs are stateful, why do you still sometimes need an outbound rule?
+
+### Day 47 — Application security groups and troubleshooting
+*Lectures 149–151 · [Application security groups](https://learn.microsoft.com/en-us/azure/virtual-network/application-security-groups)*
+
+**Answer cold:**
+- ASGs let you write rules without IP addresses. What do they reference instead?
+- Can an ASG span VNets? What does that constraint imply about how they work?
+- A VM can't reach the internet. Walk through your diagnostic order.
+- Where would you see the *effective* routes for a NIC, and when do they differ from what you configured?
+
+**Prove it:** Build a web-tier and db-tier ASG. Write a rule allowing web→db on 1433
+with no IPs anywhere. Then break connectivity and diagnose it using effective rules
+and effective routes.
+
+### Day 48 — Load balancing
+*Lectures 152–154 · [Load Balancer](https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-overview)*
+
+**Answer cold:**
+- Load Balancer operates at layer 4. What decisions can it therefore *not* make?
+- Frontend IP, backend pool, health probe, rule: what breaks if each one is misconfigured?
+- Public vs internal load balancer: give a real scenario for each.
+- Basic vs Standard SKU: name the differences that matter, including the security default.
+
+**Prove it:** Build a public load balancer across two VMs serving different pages.
+Confirm distribution. Then stop one VM and watch the health probe react — time how
+long failover takes.
+
+### Day 49 — Application Gateway and load balancer troubleshooting
+*Lectures 155–158, 166 · [Application Gateway](https://learn.microsoft.com/en-us/azure/application-gateway/overview)*
+
+**Answer cold:**
+- Application Gateway is layer 7. Name three things it can do that a load balancer can't.
+- What is path-based routing, and what is multi-site hosting?
+- What is WAF, and is it a separate product?
+- Traffic Manager, Front Door, Application Gateway, Load Balancer: sort them by scope (global vs regional) and layer.
+
+**Prove it:** Work through the traffic-management lab (lecture 166): a load balancer
+and an application gateway in one environment. For each request, trace which component
+handled it and why.
+
+### Day 50 — Network Watcher
+*Lectures 159–161 · [Network Watcher](https://learn.microsoft.com/en-us/azure/network-watcher/network-watcher-overview)*
+
+**Answer cold:**
+- Name four Network Watcher tools and the question each one answers.
+- IP flow verify says traffic is allowed, but the connection still fails. What's left to check?
+- What do NSG flow logs capture that effective rules don't?
+- Connection Monitor vs Connection Troubleshoot: which do you run at 2am during an incident?
+
+**Prove it:** Break connectivity deliberately with an NSG rule. Diagnose with IP flow
+verify, then next-hop, then Connection Troubleshoot. Enable flow logs and find your own
+blocked packet in the data.
+
+**Review:** 40 mixed Domain 4 questions. **Checkpoint:** NSG evaluation order, peering
+non-transitivity, and LB vs App Gateway — cold.
+
+---
+
+## DOMAIN 5 — Monitor and maintain Azure resources (10–15%) — Days 51–56
+
+### Day 51 — Azure Monitor architecture
+*Lectures 162–163 · [Azure Monitor overview](https://learn.microsoft.com/en-us/azure/azure-monitor/overview)*
+
+**Answer cold:**
+- Metrics and logs are stored differently. What's the practical consequence for retention and cost?
+- A resource emits diagnostics only if you ask it to. Where do you ask, and where can the data go?
+- What is a Log Analytics workspace, and how many should an organisation have?
+- Activity log, resource log, platform metric: which answers "who deleted the VM?"
+
+**Prove it:** Enable diagnostic settings on a storage account, send them to a workspace,
+and find the data. Note how long it took to appear — that lag matters in an incident.
+
+### Day 52 — Insights, alerts and action groups
+*Lecture 164 · [Alerts overview](https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-overview)*
+
+**Answer cold:**
+- An alert rule has a condition, an action group and a severity. Which of those is reusable, and why does that matter?
+- Metric alert vs log alert: which is faster, which is cheaper, which is more flexible?
+- VM insights needs an agent. What does it give you that platform metrics don't?
+- Why can't Azure tell you a VM's free disk space without an agent?
+
+**Prove it:** Create an action group that emails you. Build a metric alert on VM CPU
+and trigger it. Then build a log alert on the same thing and compare how long each took.
+
+### Day 53 — KQL
+*Lecture 165 · [Kusto query language](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/query/)*
+
+**Answer cold:**
+- A KQL query starts with a table name. What does the pipe do?
+- `where` before `summarize`, or after? Does it change the answer? Does it change the cost?
+- What does `ago(1h)` resolve against — the query time or the ingestion time?
+- How would you find every failed sign-in grouped by user, sorted by count?
+
+**Prove it:** Query `Heartbeat`, then `AzureActivity`. Write a query that lists resource
+deletions in the last 7 days with the caller's identity. Get it working without copying
+a sample.
+
+**Press further:** Why does the same query cost different amounts depending on the
+order of operators?
+
+### Day 54 — Azure Backup
+*Lectures 167–168, 174 · [Azure Backup overview](https://learn.microsoft.com/en-us/azure/backup/backup-overview)*
+
+**Answer cold:**
+- A Recovery Services vault and a Backup vault are different things. What's the split?
+- A backup policy has frequency and retention. Why is retention expressed in multiple tiers?
+- Where do VM backups actually live, and what happens if the VM's region goes down?
+- Soft delete for backups is on by default. What does it protect against specifically?
+
+**Prove it:** Create a vault, back up a VM, run an on-demand backup. Then delete the
+backup item and recover it from soft delete.
+
+### Day 55 — Restore, on-premises backup and reporting
+*Lectures 169–173 · [Restore VMs](https://learn.microsoft.com/en-us/azure/backup/about-azure-vm-restore)*
+
+**Answer cold:**
+- File-level recovery and full VM restore: what's actually happening in each?
+- You restore a VM. Does it come back to the same name, NIC and IP?
+- MARS agent vs MABS: what does each back up, and from where?
+- Where do backup reports get their data, and why do they need setting up first?
+
+**Prove it:** Do a file-level recovery (mount the recovery point, copy one file,
+unmount — note that the mount expires). Then restore a full VM to a new resource group.
+
+### Day 56 — Azure Site Recovery
+*Lectures 175–178 · [Site Recovery overview](https://learn.microsoft.com/en-us/azure/site-recovery/site-recovery-overview)*
+
+**Answer cold:**
+- Backup and Site Recovery both copy data elsewhere. What is each actually for?
+- What are RPO and RTO, and which one does ASR mainly address?
+- What is a test failover for, and why must you clean up afterwards?
+- Failover and failback: which is harder, and why?
+
+**Prove it:** Enable replication for a VM to a secondary region. Run a test failover
+into an isolated network. Clean it up. Note the replication lag reported.
+
+**Review:** 30 mixed Domain 5 questions. **Checkpoint:** Backup vs ASR, metrics vs
+logs, and alert types — cold.
+
+---
+
+## FINAL STRETCH — Days 57–60
+
+### Day 57 — Review: Identity, governance and storage
+*Lectures 179–180*
+
+Work the last-minute review material, but Socratically: pause before each answer and
+state yours first. Any topic where you hesitate goes on a shortlist, not back through
+a video.
+
+### Day 58 — Review: Compute and networking
+*Lectures 181–182*
+
+Same method. Networking is the longest review for a reason — if your shortlist is
+mostly networking, that's normal, and it's where Day 60 should go.
+
+### Day 59 — Review: Monitor and maintain + full practice exam
+*Lecture 183 · Practice Test 1*
+
+Sit a full timed practice test under exam conditions: 100 minutes, no notes, no
+pausing. Mark it, then — before reading any explanations — write down why you think
+each wrong answer was wrong. *Then* read the explanations and compare. The gap between
+your diagnosis and the real one is the last thing worth studying.
+
+### Day 60 — Remediation and the two role plays
+*Role Play 1 (critical VM down) · Role Play 2 (cost optimisation) · Lectures 184–188*
+
+- Work only from the journal's *why the gap* column and yesterday's shortlist. No new material.
+- Do both role plays properly — they are the closest thing to the exam's case-study
+  style, and to the actual job.
+- Re-read your journal's first week. You'll find things you now consider obvious; that
+  is the evidence the method worked.
+- **Logistics:** confirm the booking, test the proctoring software if sitting remotely,
+  know the [renewal requirement](https://learn.microsoft.com/en-us/credentials/certifications/renew-your-microsoft-certification) (12 months, free, online).
+
+---
+
+## If you fall behind
+
+You will. The plan has no slack in it by design — slack gets absorbed silently and you
+find out in week eight.
+
+When you lose a day, **do not compress two days into one.** Drop the Probe phase on the
+easiest upcoming day and keep the Prime and Prove phases. A day where you answered
+questions and ran a lab without watching the videos is worth more than two days of
+videos at double speed.
+
+The order to sacrifice things, worst case: Press, then Probe, then the lab. Never the
+Prime questions, and never the journal — those are the plan.
