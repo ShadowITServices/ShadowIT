@@ -26,8 +26,10 @@ const ToolList: Tool[] = [
     ),
   },
   {
-    name: 'Copilot',
-    tag: 'Estimator',
+    name: 'Copilot Estimator',
+    // Not 'Estimator' — the name already says that, and the pills exist to
+    // tell the three cards apart at a glance.
+    tag: 'Pricing',
     Svg: require('@site/static/img/feature_spark.svg').default,
     to: '/tools/copilot',
     description: (

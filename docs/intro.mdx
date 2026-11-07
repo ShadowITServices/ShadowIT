@@ -17,7 +17,7 @@ organising it so you can find the one page that's actually written for *you*.
 
 ## What's in here
 
-The menu on the left has three sections beneath this page.
+The menu on the left has two sections beneath this page.
 
 ### [Executing Strategy](/docs/executing-strategy)
 
@@ -41,15 +41,18 @@ permissions it needs, what it changes, and how to tell it worked.
 Written once and referenced from everywhere else, because three copies of the
 same script are three scripts that will drift.
 
-### [Vault](https://vault.shadowit.com.au/)
+## The private site
 
-Internal documentation that isn't public: working notes, lab configuration, and
-material that hasn't earned a public page yet. It sits on its own hostname behind
-an access policy rather than as a locked folder here — a protected *path* on a
-static site still leaks its text through the JavaScript bundles and the search
-index, so the boundary has to be the whole site.
+There's a third body of documentation that isn't here: internal working notes,
+lab configuration, and material that hasn't earned a public page yet. It's
+reached from **Private Site** in the top-right of this page, and it will ask you
+to sign in.
 
-If you don't have access, the link will simply ask you to sign in and then stop.
+It isn't a locked folder inside this site, and that's deliberate. A protected
+*path* on a static site still leaks its own text — Docusaurus compiles every
+page into JavaScript bundles and a search index served from elsewhere on the
+same host, so the words survive at two public URLs even when the page is
+blocked. The boundary has to be the whole site, which means a separate one.
 
 ## A note on currency
 

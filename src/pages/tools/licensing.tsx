@@ -24,7 +24,7 @@ export default function LicensingPage(): ReactNode {
           </p>
           <p style={{maxWidth: '44rem', margin: '0.75rem auto 0', fontSize: '0.9rem'}}>
             Pricing Copilot instead? That sits on top of these licenses and bills differently —{' '}
-            <Link to="/tools/copilot">the Copilot tool</Link> covers the seats, the credits, and what a
+            <Link to="/tools/copilot">the Copilot Estimator</Link> covers the seats, the credits, and what a
             month of Cowork actually costs.
           </p>
         </div>

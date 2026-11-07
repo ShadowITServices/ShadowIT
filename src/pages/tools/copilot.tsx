@@ -76,11 +76,11 @@ const LAYERS: {name: string; price: string; body: ReactNode}[] = [
 export default function CopilotPage(): ReactNode {
   return (
     <Layout
-      title="Copilot"
+      title="Copilot Estimator"
       description="What Microsoft Copilot actually costs — the per-seat license, the usage-based credits behind Cowork, and a planning estimate for a month of agentic work.">
       <main className="container margin-vert--lg">
         <div className="text--center margin-bottom--lg">
-          <Heading as="h1">Microsoft Copilot</Heading>
+          <Heading as="h1">Copilot Estimator</Heading>
           <p style={{maxWidth: '44rem', margin: '0 auto'}}>
             Copilot isn&apos;t one product with one price. It&apos;s a per-seat license, a pool of metered
             credits for the agentic work on top, and a separate governance layer once agents start acting

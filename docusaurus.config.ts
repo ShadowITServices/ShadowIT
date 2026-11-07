@@ -139,7 +139,7 @@ const config: Config = {
           position: 'left',
           items: [
             {to: '/tools/licensing', label: 'Microsoft Licensing'},
-            {to: '/tools/copilot', label: 'Copilot'},
+            {to: '/tools/copilot', label: 'Copilot Estimator'},
             {to: '/tools/chrome-extension', label: 'Chrome Extension'},
           ],
         },
@@ -149,16 +149,29 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
-        // Remote support session launcher — a separate host, not part of this
-        // site's build. Rendered as an external link (Docusaurus adds the
-        // external-link affordance automatically for `href` items).
+        // Right-hand group, rendered in declaration order, with the colour-mode
+        // toggle appended after them by the theme:
+        //
+        //   Remote · [search] · Private Site · [theme toggle]
+        //
+        // Both are separate hosts behind Cloudflare Access, not part of this
+        // build. The `navbar-icon-link--*` classes swap the theme's generic
+        // external-link arrow for an icon that says what the destination is —
+        // a monitor for the remote session, a padlock for the private site.
+        // See src/css/custom.css.
         {
           href: 'https://remote.shadowit.com.au/',
           label: 'Remote',
-          position: 'left',
+          position: 'right',
+          className: 'navbar-icon-link navbar-icon-link--monitor',
         },
-        // Search sits in the right section, before the colour-mode toggle.
         {type: 'search', position: 'right'},
+        {
+          href: 'https://vault.shadowit.com.au/',
+          label: 'Private Site',
+          position: 'right',
+          className: 'navbar-icon-link navbar-icon-link--lock',
+        },
       ],
     },
     footer: {
@@ -172,7 +185,7 @@ const config: Config = {
               to: '/tools/licensing',
             },
             {
-              label: 'Copilot',
+              label: 'Copilot Estimator',
               to: '/tools/copilot',
             },
             {
