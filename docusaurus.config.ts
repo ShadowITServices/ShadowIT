@@ -20,6 +20,12 @@ const config: Config = {
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
 
+  // Explicit rather than inferred. The live URLs already carry a trailing slash
+  // (GitHub Pages redirects /about to /about/), so pinning this keeps every
+  // existing link and search-engine result valid through the move to Cloudflare
+  // Pages, which resolves trailing slashes differently by default.
+  trailingSlash: true,
+
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'ShadowITServices', // Usually your GitHub org/user name.

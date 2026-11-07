@@ -1,0 +1,19 @@
+# Cloudflare Pages redirects. GitHub Pages ignores this file, so it can sit here
+# before the cutover without changing anything.
+#
+# These replace the meta-refresh stubs under static/services/, which exist only
+# because GitHub Pages cannot issue a real 301. After the cutover is proven,
+# delete static/services/ and these rules take over as proper 301s.
+#
+# Pages matches these paths case-sensitively, which is what finally lets the
+# lower-case /study/az-104 spelling redirect to the real page — that was not
+# possible on GitHub Pages, where a static stub would have collided with the
+# route on a case-insensitive filesystem.
+
+/services              /about/             301
+/services/             /about/             301
+/services/licensing    /tools/licensing/   301
+/services/licensing/   /tools/licensing/   301
+
+/study/az-104          /study/AZ-104/      301
+/study/az-104/         /study/AZ-104/      301
