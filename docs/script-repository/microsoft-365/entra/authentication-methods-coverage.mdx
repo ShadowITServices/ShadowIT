@@ -1,0 +1,319 @@
+---
+title: Authentication Methods and MFA Coverage
+sidebar_label: Authentication Methods
+sidebar_position: 4
+description: PowerShell that reports what every Entra ID account can actually authenticate with, classifying methods by phishing resistance rather than counting registrations, and flagging privileged accounts that are still password-only.
+---
+
+# Authentication Methods and MFA Coverage
+
+Reports the authentication methods registered on every account, classified by
+**phishing resistance** rather than simply counted, and cross-references
+directory roles so an administrator with weak authentication surfaces
+immediately. Read-only.
+
+"MFA coverage: 98%" is the number most tenants quote, and it is usually built by
+counting accounts with *any* second method registered. An SMS code is a second
+method. It is also defeated by the same adversary-in-the-middle phishing kit
+that defeats a password, which is what most real compromises now use. Counting
+registrations answers a different question from the one being asked.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports registered authentication methods per Entra ID account, classified
+    by phishing resistance, with directory-role holders flagged.
+.DESCRIPTION
+    Uses the authentication method registration report where available (one
+    call for the whole tenant) and falls back to per-user enumeration. Joins
+    role assignments so privileged accounts with weak authentication surface.
+.EXAMPLE
+    .\Get-AuthMethodCoverage.ps1 -Verbose
+.NOTES
+    Required Graph perms: User.Read.All, UserAuthenticationMethod.Read.All,
+    AuditLog.Read.All, RoleManagement.Read.Directory. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    # Skip the per-user fallback and rely only on the tenant report.
+    [switch]$ReportOnly,
+
+    [switch]$IncludeGuests,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\AuthMethodCoverage.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("AuthMethodCoverage_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [switch]$Tolerate)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) { Write-Log ("Unavailable: {0} — {1}" -f $Uri, $_.Exception.Message) 'WARN'; return @() }
+        throw
+    }
+    return $items
+}
+
+# Three tiers, because the difference between them is the whole report.
+# Phishing-resistant: cryptographically bound to the origin.
+$Resistant = @('fido2','windowsHelloForBusiness','x509Certificate',
+               'passKeyDeviceBound','passKeyDeviceBoundAuthenticator','certificateBasedAuthentication')
+# Strong: defeats password-only attacks, but phishable via AiTM proxy.
+$Strong    = @('microsoftAuthenticatorPush','softwareOneTimePasscode','hardwareOneTimePasscode',
+               'microsoftAuthenticatorPasswordless','temporaryAccessPass','oath')
+# Weak: a second factor in name. SIM swap, SS7, and mailbox access defeat these.
+$Weak      = @('sms','voiceMobile','voiceAlternateMobile','voiceOffice','email','alternateMobilePhone','mobilePhone')
+
+function Get-MethodTier {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Methods)
+    $m = @($Methods | ForEach-Object { $_ -replace '^#microsoft\.graph\.', '' -replace 'AuthenticationMethod$', '' })
+    if ($m | Where-Object { $Resistant -contains $_ }) { return 'PhishingResistant' }
+    if ($m | Where-Object { $Strong    -contains $_ }) { return 'Strong' }
+    if ($m | Where-Object { $Weak      -contains $_ }) { return 'WeakOnly' }
+    return 'PasswordOnly'
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting authentication method coverage report.' 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -NoWelcome -Scopes `
+            'User.Read.All','UserAuthenticationMethod.Read.All','AuditLog.Read.All','RoleManagement.Read.Directory'
+    }
+    $ctx = Get-MgContext
+    Write-Log ("Connected as {0} (tenant {1})." -f $ctx.Account, $ctx.TenantId) 'INFO'
+
+    # --- Who holds a directory role? -----------------------------------------
+    # Needed to answer "are the ADMINS protected", which is the only part of a
+    # coverage percentage that really matters.
+    $roleNames = @{}
+    foreach ($r in (Get-GraphCollection -Tolerate `
+        -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions')) {
+        $roleNames[$r.id] = $r.displayName
+    }
+    $rolesByPrincipal = @{}
+    foreach ($a in (Get-GraphCollection -Tolerate `
+        -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments')) {
+        $name = $roleNames[$a.roleDefinitionId]
+        if (-not $name) { continue }
+        if (-not $rolesByPrincipal.ContainsKey($a.principalId)) { $rolesByPrincipal[$a.principalId] = @() }
+        $rolesByPrincipal[$a.principalId] += $name
+    }
+    Write-Log ("Principals holding a directory role: {0}" -f $rolesByPrincipal.Count) 'INFO'
+
+    # --- Tenant-wide registration report -------------------------------------
+    # One call for every account, rather than one call per account. Requires
+    # Entra ID P1/P2; falls back cleanly if absent.
+    $regIndex = @{}
+    foreach ($d in (Get-GraphCollection -Tolerate `
+        -Uri 'https://graph.microsoft.com/v1.0/reports/authenticationMethods/userRegistrationDetails?$top=999')) {
+        $regIndex[$d.id] = $d
+    }
+    Write-Log ("Registration-report rows: {0}" -f $regIndex.Count) 'INFO'
+    if (-not $regIndex.Count) {
+        Write-Log 'Registration report empty or unavailable (needs Entra ID P1+). Falling back to per-user calls.' 'WARN'
+    }
+
+    # --- Accounts -------------------------------------------------------------
+    $userUri = 'https://graph.microsoft.com/v1.0/users' +
+               '?$select=id,userPrincipalName,displayName,accountEnabled,userType&$top=999'
+    $users = @(Get-GraphCollection -Uri $userUri)
+    if (-not $IncludeGuests) { $users = @($users | Where-Object { $_.userType -ne 'Guest' }) }
+    Write-Log ("Accounts to assess: {0}" -f $users.Count) 'INFO'
+
+    $i = 0
+    $results = foreach ($u in $users) {
+        $i++
+        if ($i % 100 -eq 0) { Write-Log ("Assessed {0}/{1}." -f $i, $users.Count) 'DEBUG' }
+        Write-Progress -Activity 'Assessing authentication methods' -Status $u.userPrincipalName `
+                       -PercentComplete (($i / $users.Count) * 100)
+
+        $reg     = $regIndex[$u.id]
+        $methods = @()
+        $source  = ''
+
+        if ($reg -and $reg.methodsRegistered) {
+            $methods = @($reg.methodsRegistered)
+            $source  = 'RegistrationReport'
+        }
+        elseif (-not $ReportOnly) {
+            try {
+                $m = Invoke-MgGraphRequest -Method GET -Uri (
+                    'https://graph.microsoft.com/v1.0/users/{0}/authentication/methods' -f $u.id)
+                $methods = @($m.value | ForEach-Object { $_.'@odata.type' })
+                $source  = 'PerUser'
+            }
+            catch {
+                Write-Log ("Methods unreadable for {0}: {1}" -f $u.userPrincipalName, $_.Exception.Message) 'WARN'
+                $source = 'Unreadable'
+            }
+        }
+
+        # The password method is registered on every account and is not a factor.
+        $real = @($methods | Where-Object { $_ -notmatch 'password' })
+        $tier = if ($source -eq 'Unreadable') { 'Unknown' } else { Get-MethodTier -Methods $real }
+        $roles = $rolesByPrincipal[$u.id]
+
+        [pscustomobject]@{
+            User            = $u.userPrincipalName
+            DisplayName     = $u.displayName
+            UserType        = $u.userType
+            Enabled         = $u.accountEnabled
+            Tier            = $tier
+            Methods         = (($real | ForEach-Object { $_ -replace '^#microsoft\.graph\.','' -replace 'AuthenticationMethod$','' }) |
+                                Sort-Object -Unique) -join '; '
+            MethodCount     = $real.Count
+            IsMfaCapable    = if ($reg) { $reg.isMfaCapable } else { $null }
+            IsSsprRegistered= if ($reg) { $reg.isSsprRegistered } else { $null }
+            DefaultMethod   = if ($reg) { $reg.defaultMfaMethod } else { '' }
+            DirectoryRoles  = if ($roles) { ($roles | Sort-Object -Unique) -join '; ' } else { '' }
+            IsPrivileged    = [bool]$roles
+            Source          = $source
+            # The finding: administrative power behind authentication that an
+            # ordinary phishing proxy defeats.
+            PrivilegedAndWeak = [bool]$roles -and ($tier -in @('PasswordOnly','WeakOnly')) -and ($u.accountEnabled -eq $true)
+        }
+    }
+    Write-Progress -Activity 'Assessing authentication methods' -Completed
+
+    $enabled   = @($results | Where-Object Enabled)
+    $privWeak  = @($results | Where-Object PrivilegedAndWeak)
+    $pwdOnly   = @($enabled | Where-Object { $_.Tier -eq 'PasswordOnly' })
+    $weakOnly  = @($enabled | Where-Object { $_.Tier -eq 'WeakOnly' })
+    $resistant = @($enabled | Where-Object { $_.Tier -eq 'PhishingResistant' })
+
+    Write-Log ("Enabled {0}; password-only {1}; weak-only {2}; phishing-resistant {3}; privileged+weak {4}." -f `
+        $enabled.Count, $pwdOnly.Count, $weakOnly.Count, $resistant.Count, $privWeak.Count) 'INFO'
+
+    $results | Sort-Object @{Expression='PrivilegedAndWeak';Descending=$true}, Tier, User |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nAuthentication strength across enabled accounts:" -ForegroundColor Cyan
+    $enabled | Group-Object Tier | Sort-Object Count -Descending |
+        Select-Object @{N='Tier';E={$_.Name}},
+                      Count,
+                      @{N='Percent';E={ '{0:N1}%' -f (($_.Count / $enabled.Count) * 100) }} |
+        Format-Table -AutoSize
+
+    if ($privWeak) {
+        Write-Host "`nAccounts holding directory roles with weak or no second factor:" -ForegroundColor Red
+        $privWeak | Format-Table User, Tier, Methods, DirectoryRoles -AutoSize -Wrap
+    } else {
+        Write-Host "`nEvery enabled role holder has at least a strong second factor." -ForegroundColor Green
+    }
+
+    if ($pwdOnly) {
+        Write-Host ("`n{0} enabled account(s) have no second factor at all." -f $pwdOnly.Count) -ForegroundColor Yellow
+        $pwdOnly | Select-Object -First 20 | Format-Table User, DisplayName, UserType -AutoSize
+        if ($pwdOnly.Count -gt 20) { Write-Host ("  ... and {0} more in the CSV." -f ($pwdOnly.Count - 20)) -ForegroundColor Yellow }
+    }
+
+    Write-Host ("`n{0} account(s) assessed, {1} enabled. Report: {2}`nLog: {3}" -f `
+        $results.Count, $enabled.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per account with its registered methods, a
+**resistance tier**, SSPR registration, default MFA method, any directory roles
+held, and a `PrivilegedAndWeak` flag. The console prints the tier distribution
+as percentages and then names the administrators who aren't properly protected.
+
+**How it works.**
+
+- **Three tiers, not a yes/no.** `PhishingResistant` (FIDO2, Windows Hello for
+  Business, certificate-based) is cryptographically bound to the origin and
+  survives an adversary-in-the-middle proxy. `Strong` (Authenticator, TOTP)
+  stops password-only attacks but is relayable. `WeakOnly` (SMS, voice, email)
+  is a factor in name. Collapsing these into "has MFA" is what produces a
+  reassuring number that doesn't survive contact with a modern phishing kit.
+- **The tenant report first, per-user as fallback.**
+  `reports/authenticationMethods/userRegistrationDetails` returns the whole
+  tenant in a few paged calls. It needs Entra ID P1+, so where it's empty the
+  script falls back to one call per user and records which source each row came
+  from in a `Source` column — so a thin report is visible rather than silent.
+- **The password method is stripped before classifying.** Every account has
+  one; counting it would make `MethodCount` meaningless and lift every account
+  out of `PasswordOnly`.
+- **Roles are joined in.** The
+  [privileged role report](../privileged-role-assignments) explicitly cannot see
+  authentication strength — this is the other half. `PrivilegedAndWeak` is the
+  intersection, and it is a much shorter and more actionable list than either
+  report alone.
+- **Percentages are computed over *enabled* accounts.** Disabled accounts drag
+  a coverage figure down and mean nothing; including them is how a tenant ends
+  up chasing a number instead of a risk.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes `User.Read.All`,
+  `UserAuthenticationMethod.Read.All`, `AuditLog.Read.All`,
+  `RoleManagement.Read.Directory`.
+- **Registration is not enforcement.** A phishing-resistant method registered
+  on an account does not mean the account is required to use it — that is a
+  Conditional Access question, answered by the
+  [Conditional Access inventory](../conditional-access-inventory). An account
+  can be registered for FIDO2 and still sign in with a password where no policy
+  says otherwise.
+- The method-type strings Graph returns have changed as new methods shipped
+  (passkeys in particular). The tier lists at the top of the script are the
+  thing to review first if a method shows as unclassified — an unknown method
+  falls through to a lower tier, which under-reports strength rather than
+  over-reporting it.
+- Per-user fallback is slow: one call per account. On a large tenant without
+  P1, expect this to take a while, or pass `-ReportOnly` and accept the gaps.
+- Guests are excluded by default. They often have the weakest authentication in
+  the tenant, so run it once with `-IncludeGuests` alongside the
+  [guest review](../guest-account-review).
+
+> **Note — Fix the short list first**
+>
+> `PrivilegedAndWeak` is usually a handful of accounts and is worth fixing this
+> week. Tenant-wide password-only coverage is a programme, and chasing the
+> percentage before securing the administrators is the wrong order.

@@ -1,15 +1,11 @@
 ---
-title: Teams
-sidebar_label: Teams
+title: Ownership and Guest Governance
+sidebar_label: Ownership & Guests
+sidebar_position: 2
 description: PowerShell that audits Microsoft Teams governance — ownerless and single-owner teams, guest membership, public visibility, and archived state — in one call per team.
 ---
 
-# Teams
-
-PowerShell for administering Microsoft Teams, using the `MicrosoftTeams` module
-(see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
-
-## Ownership and guest governance report
+# Ownership and Guest Governance
 
 One row per team: how many owners it has, how many members and guests, whether
 it's public, and whether it's archived. Read-only.
@@ -21,7 +17,7 @@ departed, nobody reviews the guests, and the team quietly becomes a share
 nobody is accountable for. A team with exactly one owner is the same problem
 waiting for a resignation.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules MicrosoftTeams
@@ -216,7 +212,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** One row per team with owner, member, and guest counts, the
 owners named, the guest domains summarised, and flags for ownerless,

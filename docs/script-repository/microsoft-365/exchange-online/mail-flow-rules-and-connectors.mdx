@@ -1,0 +1,273 @@
+---
+title: Mail Flow Rule and Connector Audit
+sidebar_label: Mail Flow & Connectors
+sidebar_position: 3
+description: PowerShell that audits Exchange Online transport rules and connectors, flagging the tenant-wide redirection, blind-copy, and filtering-bypass patterns that no mailbox-level audit can see.
+---
+
+# Mail Flow Rule and Connector Audit
+
+Reports every transport (mail flow) rule and every inbound and outbound
+connector, and flags the configurations that quietly move or expose mail for the
+whole tenant. Read-only.
+
+A mailbox audit cannot see any of this. A transport rule can blind-copy every
+message in the organisation to an external address without touching a single
+mailbox, and it survives password resets, MFA enrolment, and mailbox
+re-provisioning. It is the quietest persistence mechanism in Exchange Online and
+the one least often checked.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Audits Exchange Online transport rules and connectors, flagging rules that
+    redirect, blind-copy, or bypass filtering, and connectors that route mail
+    to or from unexpected hosts.
+.DESCRIPTION
+    Produces two CSVs — one of rules with their actions and risk flags, one of
+    connectors with their scope and TLS posture. Risk flags are derived from
+    the action properties themselves, not from rule names.
+.EXAMPLE
+    .\Get-MailFlowAudit.ps1 -Verbose
+.NOTES
+    Required role: View-Only Organization Management. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string[]]$InternalDomain,
+    [string]$UserPrincipalName,
+    [string]$LogDir       = 'C:\Temp',
+    [string]$RuleCsv      = 'C:\Temp\TransportRules.csv',
+    [string]$ConnectorCsv = 'C:\Temp\MailConnectors.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("MailFlowAudit_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-AddressDomains {
+    [CmdletBinding()]
+    param([AllowNull()][object[]]$Addresses)
+    @($Addresses | Where-Object { $_ } | ForEach-Object {
+        $s = ([string]$_) -replace '^smtp:', ''
+        if ($s -match '@') { ($s -split '@')[-1] }
+    }) | Sort-Object -Unique
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting mail flow rule and connector audit.' 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false }
+        else                    { Connect-ExchangeOnline -ShowBanner:$false }
+    }
+
+    if (-not $InternalDomain) {
+        $InternalDomain = @(Get-AcceptedDomain | Select-Object -ExpandProperty DomainName)
+        Write-Log ("Internal domains: {0}" -f ($InternalDomain -join ', ')) 'INFO'
+    }
+
+    # --- Transport rules ------------------------------------------------------
+    Write-Log 'Enumerating transport rules.' 'DEBUG'
+    $rules = @(Get-TransportRule)
+    Write-Log ("Transport rules: {0}" -f $rules.Count) 'INFO'
+
+    $ruleRows = foreach ($r in $rules) {
+        # Every address the rule could send mail to, by any mechanism.
+        $outbound = @()
+        $outbound += @($r.RedirectMessageTo)
+        $outbound += @($r.BlindCopyTo)
+        $outbound += @($r.CopyTo)
+        $outbound += @($r.AddToRecipients)
+        $outbound += @($r.AddManagerAsRecipientType)
+        $outbound = @($outbound | Where-Object { $_ })
+
+        $outDomains = Get-AddressDomains -Addresses $outbound
+        $external   = @($outDomains | Where-Object { $InternalDomain -notcontains $_ })
+
+        # Actions that weaken filtering for the messages a rule matches.
+        $bypass = @()
+        if ($r.SetSCL -eq -1)                 { $bypass += 'SCL=-1 (skips spam filtering)' }
+        if ($r.SetHeaderName)                 { $bypass += "sets header $($r.SetHeaderName)" }
+        if ($r.RemoveHeader)                  { $bypass += "removes header $($r.RemoveHeader)" }
+        if ($r.StopRuleProcessing -eq $true)  { $bypass += 'stops further rule processing' }
+
+        [pscustomobject]@{
+            Name              = $r.Name
+            State             = $r.State                 # Enabled | Disabled
+            Mode              = $r.Mode                  # Enforce | Audit | AuditAndNotify
+            Priority          = $r.Priority
+            Redirects         = [bool]$r.RedirectMessageTo
+            BlindCopies       = [bool]$r.BlindCopyTo
+            Deletes           = [bool]$r.DeleteMessage
+            OutboundTargets   = ($outbound -join '; ')
+            ExternalTargets   = ($external -join '; ')
+            SendsExternally   = ($external.Count -gt 0)
+            FilteringBypass   = ($bypass -join '; ')
+            Comments          = $r.Comments
+            # The signature of mail-flow exfiltration: enabled, enforcing, and
+            # pushing copies to a domain that is not ours.
+            HighRisk          = ($r.State -eq 'Enabled') -and ($r.Mode -eq 'Enforce') -and
+                                (($external.Count -gt 0) -or ($r.SetSCL -eq -1))
+            WhenChanged       = $r.WhenChanged
+            LastModifiedBy    = $r.LastModifiedBy
+        }
+    }
+
+    # --- Connectors -----------------------------------------------------------
+    Write-Log 'Enumerating connectors.' 'DEBUG'
+    $connectorRows = @()
+
+    foreach ($c in @(Get-InboundConnector -ErrorAction SilentlyContinue)) {
+        $connectorRows += [pscustomobject]@{
+            Direction          = 'Inbound'
+            Name               = $c.Name
+            Enabled            = $c.Enabled
+            ConnectorType      = $c.ConnectorType
+            SenderDomains      = (@($c.SenderDomains) -join '; ')
+            SenderIpAddresses  = (@($c.SenderIPAddresses) -join '; ')
+            SmartHosts         = ''
+            TlsRequired        = $c.RequireTls
+            TlsCertSubject     = $c.TlsSenderCertificateName
+            # An inbound connector trusting a sender IP causes mail from that IP
+            # to be treated as internal, skipping much of the filtering stack.
+            Notable            = [bool]$c.SenderIPAddresses -or ($c.RequireTls -eq $false)
+            WhenChanged        = $c.WhenChanged
+        }
+    }
+
+    foreach ($c in @(Get-OutboundConnector -ErrorAction SilentlyContinue)) {
+        $connectorRows += [pscustomobject]@{
+            Direction          = 'Outbound'
+            Name               = $c.Name
+            Enabled            = $c.Enabled
+            ConnectorType      = $c.ConnectorType
+            SenderDomains      = (@($c.RecipientDomains) -join '; ')
+            SenderIpAddresses  = ''
+            SmartHosts         = (@($c.SmartHosts) -join '; ')
+            TlsRequired        = ($c.TlsSettings -and $c.TlsSettings -ne 'None')
+            TlsCertSubject     = $c.TlsDomain
+            # An outbound connector sending all mail ('*') to a smart host routes
+            # the organisation's email through a third party.
+            Notable            = (@($c.RecipientDomains) -contains '*') -or (-not $c.TlsSettings)
+            WhenChanged        = $c.WhenChanged
+        }
+    }
+    Write-Log ("Connectors: {0}" -f $connectorRows.Count) 'INFO'
+
+    # --- Report ---------------------------------------------------------------
+    $highRisk = @($ruleRows | Where-Object HighRisk)
+    $notable  = @($connectorRows | Where-Object Notable)
+
+    Write-Log ("Rules: {0} ({1} high risk). Connectors: {2} ({3} notable)." -f `
+        $ruleRows.Count, $highRisk.Count, $connectorRows.Count, $notable.Count) 'INFO'
+
+    $ruleRows      | Sort-Object Priority           | Export-Csv -Path $RuleCsv      -NoTypeInformation -Encoding UTF8
+    $connectorRows | Sort-Object Direction, Name    | Export-Csv -Path $ConnectorCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $RuleCsv, $ConnectorCsv) 'INFO'
+
+    if ($ruleRows) {
+        Write-Host "`nTransport rules:" -ForegroundColor Cyan
+        $ruleRows | Sort-Object Priority |
+            Format-Table Priority, Name, State, Mode, Redirects, BlindCopies, SendsExternally -AutoSize
+    } else {
+        Write-Host "`nNo transport rules configured." -ForegroundColor Green
+    }
+
+    if ($highRisk) {
+        Write-Host "`nRules that send mail outside the tenant or bypass filtering:" -ForegroundColor Red
+        $highRisk | Format-Table Name, ExternalTargets, FilteringBypass, LastModifiedBy, WhenChanged -AutoSize -Wrap
+    }
+
+    if ($notable) {
+        Write-Host "`nConnectors worth a second look:" -ForegroundColor Yellow
+        $notable | Format-Table Direction, Name, Enabled, SenderDomains, SmartHosts, SenderIpAddresses, TlsRequired -AutoSize -Wrap
+    }
+
+    Write-Host ("`n{0} rule(s), {1} high risk; {2} connector(s), {3} notable.`nReports: {4}; {5}`nLog: {6}" -f `
+        $ruleRows.Count, $highRisk.Count, $connectorRows.Count, $notable.Count,
+        $RuleCsv, $ConnectorCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs: every transport rule with its actions, priority and
+risk flags, and every inbound and outbound connector with its scope and TLS
+posture. The console highlights rules that push mail outside the tenant or
+weaken filtering, and connectors that change how mail is trusted or routed.
+
+**How it works.**
+
+- **Risk is derived from actions, not names.** A rule called "Archive copy" that
+  blind-copies an external address is flagged; a rule called "EXFIL" that does
+  nothing is not. The script reads `RedirectMessageTo`, `BlindCopyTo`, `CopyTo`
+  and `AddToRecipients`, resolves their domains, and compares against
+  `Get-AcceptedDomain`.
+- **`SetSCL -eq -1` is treated as a finding.** It marks matching mail as
+  non-spam and skips the filtering stack. It is a legitimate setting for a
+  known-good sender and a very effective one for an attacker who wants their
+  phishing to land.
+- **`Mode` is reported alongside `State`.** A rule can be enabled but running in
+  `Audit` mode, in which case it logs rather than acts. Treating those as live
+  inflates the finding count.
+- **Inbound connectors with sender IPs are flagged.** Mail arriving from a
+  trusted IP on such a connector is handled as internal, which bypasses much of
+  the protection applied to external mail.
+- **Outbound connectors scoped to `*` are flagged.** Every message the
+  organisation sends then leaves through a third-party smart host.
+- **`LastModifiedBy` and `WhenChanged` are carried through**, so a suspicious
+  rule comes with the beginning of its provenance.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`; **View-Only Organization Management**.
+- `Get-TransportRule` returns conditions as well as actions; this script reports
+  the actions and the risk, not the full matching logic. A rule flagged here
+  needs reading in full before you act on it — it may legitimately target one
+  internal distribution list.
+- A rule disabled today can be enabled in one click, so `State = Disabled` is a
+  reason to investigate why it exists, not to ignore it.
+- Connectors created by a migration tool or a mail-security gateway will be
+  flagged as notable. That is correct and expected — the point is that you can
+  name every one of them.
+- `AddManagerAsRecipientType` has no address to resolve, so it appears in
+  `OutboundTargets` as a mechanism without a domain.
+
+> **Warning — Check this during any email incident**
+>
+> A compromised administrator account leaves a transport rule behind far more
+> often than it leaves an inbox rule, because the rule outlives the account.
+> Audit this alongside the
+> [mailbox delegation report](../mailbox-delegation-and-forwarding), not instead
+> of it.

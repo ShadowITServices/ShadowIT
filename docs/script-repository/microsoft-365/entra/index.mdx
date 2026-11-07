@@ -1,22 +1,49 @@
 ---
 title: Entra ID
-sidebar_label: Entra ID
-description: PowerShell for administering Microsoft Entra ID — identity, applications, and access — via Microsoft Graph. Scripts are organised by area below.
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for administering Microsoft Entra ID via Microsoft Graph — enterprise application hygiene, privileged roles, authentication strength, Conditional Access, and guest access.
 ---
 
 # Entra ID
 
 PowerShell for administering **Microsoft Entra ID** via Microsoft Graph. Connect
-first (see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run any script in this section.
+first (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
+then run any script in this section — each reuses an existing `Connect-MgGraph`
+session if one is open.
 
-Scripts are grouped by the area of Entra they touch:
+## Scripts
 
-- **[Enterprise Applications](/docs/script-repository/microsoft-365/entra/enterprise-applications/)** —
-  auditing and managing service principals (the apps registered in your tenant).
+- **[Stale Enterprise Applications](./stale-enterprise-applications)** — every
+  non-Microsoft service principal with its last sign-in, oldest first.
 - **[Privileged Role Assignments](./privileged-role-assignments)** — who holds
   directory roles, permanently and through PIM, with synced and disabled
   holders flagged.
+- **[Authentication Methods and MFA Coverage](./authentication-methods-coverage)** —
+  what each account can actually authenticate with, and who is still
+  password-only.
+- **[Conditional Access Inventory](./conditional-access-inventory)** — every
+  policy, its state, who it includes and excludes, and the exclusions that
+  accumulate.
+- **[Guest Account Review](./guest-account-review)** — who the external
+  accounts are, who invited them, and which ones never accepted or never
+  returned.
 
-More areas (users and authentication methods, Conditional Access) will be added
-here over time.
+## The order they're worth running in
+
+These four answer one question between them — *who can get in, and what can
+they reach* — and they build on each other:
+
+1. **Privileged Role Assignments** tells you who holds administrative power.
+2. **Authentication Methods** tells you how well those accounts are protected.
+   It is the missing half of the first report, which can see roles but not
+   authentication strength.
+3. **Conditional Access Inventory** tells you which rules actually enforce it,
+   and who has been excluded from them.
+4. **Guest Account Review** covers the accounts most likely to be outside all
+   three.
+
+An administrator with no strong authentication, excluded from the policy that
+would require it, is a finding that only appears when you read the three
+together.

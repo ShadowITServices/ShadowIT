@@ -50,26 +50,46 @@ risk — and exactly the kind of thing an identity-hardening baseline exists to 
 
 ## Workloads
 
-| Workload | Script | What it answers |
+Each workload is a folder, and each script has its own page beneath it.
+
+| Workload | Scripts | What the section covers |
 | --- | --- | --- |
-| **[Entra ID](/docs/script-repository/microsoft-365/entra/)** | Stale enterprise apps; privileged role assignments | Which apps are unused, and who holds admin |
-| **[Exchange Online](./exchange-online)** | Mailbox delegation and forwarding audit | Who can read mail that isn't theirs, and where mail leaves |
-| **[SharePoint Online](./sharepoint-online)** | External sharing posture | Which sites can share outside, and which are capped by the tenant |
-| **[OneDrive](./onedrive)** | Storage, dormancy and orphaned data | Whose data is left behind, and what it costs |
-| **[Teams](./teams)** | Ownership and guest governance | Which teams nobody owns, and who the outsiders are |
-| **[Intune](./intune)** | Device compliance and sync | Which devices are non-compliant, and which simply stopped reporting |
-| **[Purview](./purview)** | Unified audit log export | What actually happened, without silent truncation |
-| **[Defender](./defender)** | Protection policy coverage | Which email policies are scoped to nobody |
+| **[Entra ID](./entra/)** | 5 | Enterprise app hygiene, privileged roles, authentication strength, Conditional Access, guests |
+| **[Exchange Online](./exchange-online/)** | 4 | Delegation and forwarding, mail flow rules and connectors, mailbox sizing, shared mailbox exposure |
+| **[SharePoint Online](./sharepoint-online/)** | 4 | External sharing, storage and growth, orphaned sites, site collection admins |
+| **[OneDrive](./onedrive/)** | 3 | Storage and orphaned data, external sharing, leaver drive access |
+| **[Teams](./teams/)** | 4 | Ownership and guests, inactive teams, policy assignments, external access |
+| **[Intune](./intune/)** | 4 | Compliance and sync, BitLocker escrow, profile assignments, app deployment |
+| **[Purview](./purview/)** | 4 | Audit log export, retention, DLP coverage, sensitivity labels |
+| **[Defender](./defender/)** | 4 | Policy coverage, allow and block lists, impersonation protection, quarantine |
 
 Every script is read-only unless its page says otherwise, writes a CSV to
-`C:\Temp`, and leaves a timestamped run log beside it.
+`C:\Temp`, and leaves a timestamped run log beside it. Each workload's overview
+page says which module to connect with and what to do first.
 
 ## A note on what these report
 
 Each of these answers a question an admin centre answers badly or not at all —
 usually because the answer requires joining two things the portal shows on
 separate screens. The recurring theme is the difference between **configured**
-and **effective**: a policy that exists but applies to nobody, a device
-reporting compliant that hasn't checked in since winter, a sharing setting
-capped by a tenant ceiling. Those gaps are where the portal's green ticks stop
-meaning anything, and they're the reason these exist.
+and **effective**:
+
+- a DLP policy that exists but is still in test mode
+- a device reporting compliant that hasn't checked in since winter
+- a sharing setting capped by a tenant ceiling that will loosen the day someone
+  raises it
+- an Intune profile assigned to an empty group
+- a sensitivity label published to nobody
+- a mailbox whose account can still sign in
+
+Those gaps are where the portal's green ticks stop meaning anything, and
+they're the reason these exist.
+
+## A warning that applies to all of them
+
+These are **starting points to read before you run**, not turnkey tools for
+your tenant. They have been written carefully and checked for syntax; they have
+not been run against every tenant shape, and Microsoft renames properties and
+retires endpoints regularly. The caveats section on each page is where the
+known sharp edges are recorded — read it before trusting the output, and
+especially before treating an empty result as good news.

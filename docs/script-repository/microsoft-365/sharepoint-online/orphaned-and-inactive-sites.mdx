@@ -1,0 +1,266 @@
+---
+title: Orphaned and Inactive Sites
+sidebar_label: Orphaned & Inactive
+sidebar_position: 4
+description: PowerShell that finds SharePoint sites with no valid owner, no recent content change, or both — separating genuinely abandoned sites from quiet ones that are still needed.
+---
+
+# Orphaned and Inactive Sites
+
+Finds site collections whose owners are disabled or deleted, whose content
+hasn't changed in months, or both — and keeps those two findings apart,
+because they mean very different things. Read-only.
+
+An orphaned site is an access-control problem: nobody can grant or revoke
+permissions on it, so whoever had access the day the owner left still has it.
+An inactive site is a storage and clutter problem. A site that is both is a
+candidate for archival. Treating "quiet" as "abandoned" is how a department's
+reference library gets deleted.
+
+## Script
+
+```powershell
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports SharePoint site collections with invalid owners, no recent content
+    change, or both.
+.DESCRIPTION
+    Enumerates site collections, resolves each owner against Entra ID via the
+    PnP connection, and classifies sites as orphaned, inactive, or abandoned.
+    Group-connected sites are checked for group owners rather than site admins.
+.EXAMPLE
+    .\Get-OrphanedSites.ps1 -TenantName contoso -ClientId <guid> -InactiveDays 365
+.NOTES
+    Required role: SharePoint Administrator. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$TenantName,
+    [string]$ClientId,
+
+    [int]$InactiveDays = 365,
+
+    # Sites below this size are usually templates or stubs; reported but not flagged.
+    [double]$MinimumSizeGb = 0.1,
+
+    [switch]$IncludeOneDriveSites,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\SpoOrphanedSites.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("SpoOrphanedSites_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $adminUrl = "https://$TenantName-admin.sharepoint.com"
+    Write-Log ("Starting orphaned/inactive site report. InactiveDays={0}." -f $InactiveDays) 'INFO'
+
+    $connectArgs = @{ Url = $adminUrl; Interactive = $true }
+    if ($ClientId) { $connectArgs['ClientId'] = $ClientId }
+    Connect-PnPOnline @connectArgs
+    Write-Log ("Connected to {0}." -f $adminUrl) 'INFO'
+
+    # Entra account state, so a named owner can be checked rather than trusted.
+    Write-Log 'Indexing Entra accounts.' 'DEBUG'
+    $accountState = @{}
+    try {
+        $next = 'v1.0/users?$select=userPrincipalName,accountEnabled&$top=999'
+        do {
+            $page = Invoke-PnPGraphMethod -Url $next -Method Get
+            foreach ($u in $page.value) {
+                if ($u.userPrincipalName) { $accountState[$u.userPrincipalName.ToLowerInvariant()] = [bool]$u.accountEnabled }
+            }
+            $next = $page.'@odata.nextLink'
+        } while ($next)
+        Write-Log ("Accounts indexed: {0}" -f $accountState.Count) 'INFO'
+    }
+    catch {
+        Write-Log ("Could not index Entra accounts ({0}). Owner validation will be skipped." -f $_.Exception.Message) 'WARN'
+    }
+
+    $sites = @(Get-PnPTenantSite -IncludeOneDriveSites:$IncludeOneDriveSites)
+    Write-Log ("Sites: {0}" -f $sites.Count) 'INFO'
+
+    $now = Get-Date
+    $i = 0
+
+    $results = foreach ($site in $sites) {
+        $i++
+        Write-Progress -Activity 'Assessing sites' -Status $site.Url `
+                       -PercentComplete (($i / [math]::Max($sites.Count,1)) * 100)
+
+        $sizeGb   = [math]::Round(([double]$site.StorageUsageCurrent / 1024), 2)
+        $modified = $site.LastContentModifiedDate
+        $idleDays = if ($modified) { [int]($now - $modified).TotalDays } else { $null }
+
+        # Owners. Group-connected sites are owned through the M365 group; classic
+        # and communication sites through site collection administrators.
+        $owners = @()
+        $ownerSource = ''
+        if ($site.GroupId -and $site.GroupId -ne [guid]::Empty) {
+            $ownerSource = 'M365Group'
+            try {
+                $g = Invoke-PnPGraphMethod -Url ("v1.0/groups/{0}/owners?`$select=userPrincipalName" -f $site.GroupId) -Method Get
+                $owners = @($g.value | ForEach-Object { $_.userPrincipalName } | Where-Object { $_ })
+            }
+            catch { Write-Log ("Group owners unreadable for {0}: {1}" -f $site.Url, $_.Exception.Message) 'WARN' }
+        }
+        else {
+            $ownerSource = 'SiteAdmin'
+            if ($site.Owner) { $owners = @($site.Owner) }
+        }
+
+        # An owner is valid only if it resolves to an enabled account.
+        $validOwners = @($owners | Where-Object {
+            $key = ([string]$_).ToLowerInvariant()
+            if ($accountState.Count -eq 0) { $true }            # Couldn't check; assume valid.
+            elseif ($accountState.ContainsKey($key)) { $accountState[$key] }
+            else { $false }                                      # Not in the directory at all.
+        })
+
+        $isOrphaned = ($validOwners.Count -eq 0)
+        $isInactive = ($null -eq $idleDays) -or ($idleDays -gt $InactiveDays)
+        $worthFlag  = ($sizeGb -ge $MinimumSizeGb)
+
+        [pscustomobject]@{
+            Url                 = $site.Url
+            Title               = $site.Title
+            Template            = $site.Template
+            OwnerSource         = $ownerSource
+            Owners              = ($owners -join '; ')
+            ValidOwners         = $validOwners.Count
+            SizeGb              = $sizeGb
+            LastContentModified = if ($modified) { '{0:yyyy-MM-dd}' -f $modified } else { 'UNKNOWN' }
+            IdleDays            = $idleDays
+            LockState           = $site.LockState
+            SharingCapability   = $site.SharingCapability
+            IsOrphaned          = $isOrphaned -and $worthFlag
+            IsInactive          = $isInactive -and $worthFlag
+            # Both at once: nobody owns it and nothing is happening in it.
+            IsAbandoned         = $isOrphaned -and $isInactive -and $worthFlag
+            BelowSizeFloor      = (-not $worthFlag)
+        }
+    }
+    Write-Progress -Activity 'Assessing sites' -Completed
+
+    $orphaned  = @($results | Where-Object IsOrphaned)
+    $inactive  = @($results | Where-Object IsInactive)
+    $abandoned = @($results | Where-Object IsAbandoned)
+
+    Write-Log ("Sites {0}: orphaned {1}, inactive {2}, abandoned {3}." -f `
+        $results.Count, $orphaned.Count, $inactive.Count, $abandoned.Count) 'INFO'
+
+    $results | Sort-Object @{Expression='IsAbandoned';Descending=$true}, SizeGb -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($abandoned) {
+        Write-Host "`nAbandoned — no valid owner AND no recent content change:" -ForegroundColor Red
+        $abandoned | Sort-Object SizeGb -Descending |
+            Format-Table Url, SizeGb, LastContentModified, IdleDays, Owners -AutoSize -Wrap
+        Write-Host ("Storage held by abandoned sites: {0} GB" -f `
+            [math]::Round((($abandoned | Measure-Object SizeGb -Sum).Sum), 2)) -ForegroundColor Red
+    }
+
+    if ($orphaned) {
+        Write-Host "`nOrphaned but still active — assign an owner, don't archive:" -ForegroundColor Yellow
+        @($orphaned | Where-Object { -not $_.IsAbandoned }) |
+            Format-Table Url, OwnerSource, Owners, LastContentModified, SizeGb -AutoSize -Wrap
+    }
+
+    if ($inactive) {
+        Write-Host ("`n{0} site(s) with no content change in {1}+ days:" -f $inactive.Count, $InactiveDays) -ForegroundColor Yellow
+        $inactive | Sort-Object IdleDays -Descending | Select-Object -First 20 |
+            Format-Table Url, SizeGb, LastContentModified, IdleDays, ValidOwners -AutoSize
+    }
+
+    Write-Host ("`n{0} site(s): {1} orphaned, {2} inactive, {3} abandoned.`nReport: {4}`nLog: {5}" -f `
+        $results.Count, $orphaned.Count, $inactive.Count, $abandoned.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per site with its owners, how many of those owners
+are valid enabled accounts, size, last content change and idle days, plus three
+flags: `IsOrphaned`, `IsInactive`, and `IsAbandoned` for sites that are both.
+
+**How it works.**
+
+- **Ownership is read from the right place per site type.** A
+  group-connected site is owned through its Microsoft 365 group, not through
+  site collection administrators — reading `Owner` on those returns the group's
+  own identity and tells you nothing. The script checks `GroupId` and asks
+  Graph for group owners where one exists, falling back to the site admin
+  otherwise, and records which in `OwnerSource`.
+- **Owners are validated, not just listed.** A site with a named owner who left
+  last year is orphaned in every way that matters. Each owner is checked
+  against an Entra index for existence and enabled state; `ValidOwners` is the
+  count that survives.
+- **Orphaned and inactive are kept separate, and the overlap named.** They
+  require different responses: an orphaned-but-active site needs an owner
+  assigned this week; an inactive-but-owned site needs a conversation with its
+  owner; `IsAbandoned` is the only list that is safe to treat as an archival
+  candidate.
+- **A size floor stops the report drowning in stubs.** Sites under
+  `-MinimumSizeGb` are still reported with `BelowSizeFloor` set, but are not
+  flagged — otherwise every empty template site appears as abandoned.
+- **Owner validation degrades gracefully.** If the Graph index can't be built,
+  the script logs it and treats owners as valid rather than reporting every
+  site as orphaned, which would be a spectacular false positive.
+
+**Prerequisites & caveats.**
+
+- Module `PnP.PowerShell`, **SharePoint Administrator**, plus the app
+  registration from the
+  [section overview](/docs/script-repository/microsoft-365/sharepoint-online/).
+  The app needs Graph `User.Read.All` and `Group.Read.All` for owner
+  validation.
+- **`LastContentModifiedDate` is not activity.** It moves when content changes,
+  not when it is read. A reference library that hundreds of people consult and
+  nobody edits looks dead by this measure and is anything but. Cross-check
+  against the SharePoint usage reports before archiving anything.
+- Sites in `LockState` of `ReadOnly` or `NoAccess` cannot change content by
+  definition and will always appear inactive.
+- A site whose last owner left but which is covered by a **retention policy**
+  cannot be deleted until the policy allows it. Check Purview before planning
+  a clean-up.
+- OneDrive sites are excluded by default; use
+  [the OneDrive report](/docs/script-repository/microsoft-365/onedrive/storage-and-orphaned-data)
+  for those, which understands their ownership model properly.
+
+> **Note — Assign owners before you archive anything**
+>
+> The orphaned-but-active list is the urgent one and the cheapest to fix. Every
+> site on it currently has permissions nobody can change, including removing
+> the access of people who have left.

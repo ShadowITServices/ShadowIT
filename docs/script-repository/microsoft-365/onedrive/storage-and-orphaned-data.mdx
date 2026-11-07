@@ -1,15 +1,11 @@
 ---
-title: OneDrive
-sidebar_label: OneDrive
+title: Storage, Dormancy and Orphaned Data
+sidebar_label: Storage & Orphaned Data
+sidebar_position: 2
 description: PowerShell that pulls the Graph OneDrive usage report, flags accounts near quota and dormant for months, and cross-checks owners against Entra ID to surface data belonging to disabled or deleted users.
 ---
 
-# OneDrive
-
-PowerShell for administering OneDrive for Business via Microsoft Graph reports
-(see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
-
-## Storage, dormancy, and orphaned data report
+# Storage, Dormancy and Orphaned Data
 
 Pulls the tenant OneDrive usage report, works out which accounts are near quota
 and which have had no activity for months, then cross-checks each owner against
@@ -22,7 +18,7 @@ holding whatever they put in it, retained by default for a period most people
 can't recall, costing storage and carrying exactly the same data as the day they
 left.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules Microsoft.Graph.Authentication
@@ -235,7 +231,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** One row per OneDrive: owner and their directory state, storage
 used against quota, file counts, last activity, and three derived flags —

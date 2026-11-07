@@ -1,0 +1,48 @@
+---
+title: SharePoint Online
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for SharePoint Online administration — external sharing posture, storage and growth, orphaned and inactive sites, and site collection administrator audit.
+---
+
+# SharePoint Online
+
+PowerShell for administering SharePoint Online with `PnP.PowerShell`. Connect
+to the admin endpoint once (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/))
+and every script here works from that session.
+
+## Scripts
+
+- **[External Sharing Posture](./external-sharing-posture)** — the tenant
+  ceiling, every site's effective sharing capability, and which sites are
+  capped.
+- **[Storage and Growth Report](./storage-and-growth)** — space used against
+  quota per site, with the sites that will need attention first.
+- **[Orphaned and Inactive Sites](./orphaned-and-inactive-sites)** — sites
+  with no owner, no recent content change, or both.
+- **[Site Collection Administrator Audit](./site-collection-admin-audit)** —
+  who holds full control of every site, including the admins nobody granted
+  deliberately.
+
+## Before the first run
+
+PnP.PowerShell 2.x **removed the built-in multi-tenant Entra application**, so
+an interactive connection now needs your own app registration. Do this once:
+
+```powershell
+Register-PnPEntraIDAppForInteractiveLogin `
+    -ApplicationName 'ShadowIT-PnP-Admin' `
+    -Tenant 'yourtenant.onmicrosoft.com' `
+    -Interactive
+```
+
+Keep the client ID it returns and pass it as `-ClientId` to every script here.
+An `AADSTS700016` or an unexpected consent prompt on connect almost always
+means this step hasn't been done.
+
+> **Tip — The admin endpoint, not the root site**
+>
+> These scripts connect to `https://<tenant>-admin.sharepoint.com`, not
+> `https://<tenant>.sharepoint.com`. Connecting to the wrong one produces
+> cmdlet-not-found errors that look like a module problem.

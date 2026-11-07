@@ -1,15 +1,11 @@
 ---
-title: Intune
-sidebar_label: Intune
+title: Device Compliance and Sync
+sidebar_label: Compliance & Sync
+sidebar_position: 2
 description: PowerShell that reports every Intune-managed device with compliance state, encryption, OS version, and sync recency — separating genuinely non-compliant devices from ones that simply stopped reporting.
 ---
 
-# Intune
-
-PowerShell for administering Microsoft Intune via Microsoft Graph (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
-
-## Device compliance and sync report
+# Device Compliance and Sync
 
 One row per managed device: compliance state, encryption, OS and version,
 ownership, and how long since it last checked in — with devices that have
@@ -22,7 +18,7 @@ the last state it was told about; a stolen laptop that never checks in again
 keeps that state indefinitely. Sync recency is the column that makes compliance
 mean anything.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules Microsoft.Graph.Authentication
@@ -233,7 +229,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** One row per Intune-managed device covering compliance state,
 encryption, OS and build, ownership, enrolment and last sync, with derived

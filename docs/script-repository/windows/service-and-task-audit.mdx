@@ -1,0 +1,316 @@
+---
+title: Service and Scheduled Task Audit
+sidebar_label: Services & Tasks
+sidebar_position: 5
+description: PowerShell that inventories Windows services and scheduled tasks running under privileged or domain accounts, and flags unquoted service paths and writable binary directories.
+---
+
+# Service and Scheduled Task Audit
+
+Inventories services and scheduled tasks across one or more hosts, reports what
+account each runs as, and flags the two classic privilege-escalation patterns:
+**unquoted service paths with spaces**, and **binaries in directories ordinary
+users can write to**. Read-only.
+
+Both findings are old, both are still everywhere, and both turn a standard user
+account into SYSTEM. They survive because the software that introduces them is
+usually a line-of-business application installed once in 2016, and nothing in
+Windows ever mentions it again.
+
+## Script
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Audits Windows services and scheduled tasks for privileged run-as accounts,
+    unquoted paths, and writable binary locations.
+.DESCRIPTION
+    Enumerates services via CIM and scheduled tasks via the ScheduledTasks
+    module, identifies non-default service accounts, detects unquoted paths
+    containing spaces, and tests the binary's directory for write access by
+    non-administrative principals.
+.EXAMPLE
+    .\Get-ServiceTaskAudit.ps1 -ComputerName SRV01,SRV02 -Verbose
+.NOTES
+    Requires local administrator rights on each target, and WinRM for remote
+    hosts. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string[]]$ComputerName = $env:COMPUTERNAME,
+
+    # Built-in accounts that are expected and not worth reporting as findings.
+    [string[]]$ExpectedAccount = @(
+        'LocalSystem','NT AUTHORITY\LocalService','NT AUTHORITY\NetworkService',
+        'NT AUTHORITY\SYSTEM','LocalService','NetworkService'
+    ),
+
+    [switch]$SkipPermissionCheck,
+
+    [pscredential]$Credential,
+
+    [string]$LogDir     = 'C:\Temp',
+    [string]$ServiceCsv = 'C:\Temp\ServiceAudit.csv',
+    [string]$TaskCsv    = 'C:\Temp\ScheduledTaskAudit.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("ServiceTaskAudit_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- Remote payload -----------------------------------------------------------
+$AuditProbe = {
+    param([string[]]$Expected, [bool]$CheckPermissions)
+
+    # Principals whose write access to a service binary's folder means any
+    # standard user can replace it.
+    $RiskyPrincipals = @(
+        'Everyone','BUILTIN\Users','NT AUTHORITY\Authenticated Users',
+        'BUILTIN\Power Users','NT AUTHORITY\INTERACTIVE'
+    )
+    $RiskyRights = 'Write|Modify|FullControl|CreateFiles|WriteData'
+
+    function Test-WritablePath {
+        param([string]$Directory)
+        if (-not $CheckPermissions) { return $null }
+        if ([string]::IsNullOrWhiteSpace($Directory) -or -not (Test-Path -LiteralPath $Directory)) { return $null }
+        try {
+            $acl = Get-Acl -LiteralPath $Directory -ErrorAction Stop
+            foreach ($ace in $acl.Access) {
+                if ($ace.AccessControlType -ne 'Allow') { continue }
+                if ($RiskyPrincipals -notcontains $ace.IdentityReference.Value) { continue }
+                if ($ace.FileSystemRights -match $RiskyRights) { return $ace.IdentityReference.Value }
+            }
+            return ''
+        } catch { return $null }
+    }
+
+    # --- Services -------------------------------------------------------------
+    $services = foreach ($s in (Get-CimInstance Win32_Service)) {
+        $path = [string]$s.PathName
+
+        # An unquoted path containing a space lets Windows try
+        # C:\Program.exe before C:\Program Files\App\service.exe.
+        $unquoted = $false
+        if ($path -and $path -notmatch '^\s*"') {
+            $exePart = ($path -split '\s+(?=/|-)')[0]     # strip trailing arguments
+            if ($exePart -match '\s' -and $exePart -match '\.exe') { $unquoted = $true }
+        }
+
+        # Recover the binary directory whether or not the path is quoted.
+        $binDir = ''
+        if ($path) {
+            $m = if ($path -match '^\s*"([^"]+)"') { $Matches[1] }
+                 elseif ($path -match '^\s*(\S+\.exe)') { $Matches[1] }
+                 else { '' }
+            if ($m) { $binDir = Split-Path -Path $m -Parent -ErrorAction SilentlyContinue }
+        }
+
+        [pscustomobject]@{
+            Kind           = 'Service'
+            Name           = $s.Name
+            DisplayName    = $s.DisplayName
+            State          = $s.State
+            StartMode      = $s.StartMode
+            RunAs          = $s.StartName
+            PathName       = $path
+            BinaryDir      = $binDir
+            UnquotedPath   = $unquoted
+            WritableBy     = Test-WritablePath -Directory $binDir
+            IsExpectedAcct = ($Expected -contains [string]$s.StartName)
+        }
+    }
+
+    # --- Scheduled tasks ------------------------------------------------------
+    $tasks = @()
+    try {
+        foreach ($t in (Get-ScheduledTask -ErrorAction Stop)) {
+            # Microsoft's own tasks are numerous and uninteresting here.
+            if ($t.TaskPath -like '\Microsoft\*') { continue }
+
+            $info    = try { Get-ScheduledTaskInfo -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop } catch { $null }
+            $actions = @($t.Actions | ForEach-Object { ("{0} {1}" -f $_.Execute, $_.Arguments).Trim() })
+            $first   = @($t.Actions)[0]
+            $binDir  = ''
+            if ($first -and $first.Execute) {
+                $exe = ([string]$first.Execute).Trim('"')
+                $binDir = Split-Path -Path $exe -Parent -ErrorAction SilentlyContinue
+            }
+
+            $tasks += [pscustomobject]@{
+                Kind           = 'ScheduledTask'
+                Name           = $t.TaskName
+                DisplayName    = $t.TaskPath
+                State          = $t.State
+                StartMode      = (@($t.Triggers | ForEach-Object { $_.CimClass.CimClassName }) -join '; ')
+                RunAs          = $t.Principal.UserId
+                RunLevel       = $t.Principal.RunLevel
+                PathName       = ($actions -join ' | ')
+                BinaryDir      = $binDir
+                UnquotedPath   = $false
+                WritableBy     = Test-WritablePath -Directory $binDir
+                IsExpectedAcct = ($Expected -contains [string]$t.Principal.UserId)
+                LastRun        = if ($info) { $info.LastRunTime } else { $null }
+                LastResult     = if ($info) { $info.LastTaskResult } else { $null }
+                Author         = $t.Author
+            }
+        }
+    } catch { }
+
+    [pscustomobject]@{ Services = $services; Tasks = $tasks }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting service and task audit across {0} host(s)." -f $ComputerName.Count) 'INFO'
+
+    $allServices = [System.Collections.Generic.List[object]]::new()
+    $allTasks    = [System.Collections.Generic.List[object]]::new()
+
+    foreach ($computer in $ComputerName) {
+        Write-Log ("Querying {0}." -f $computer) 'DEBUG'
+        try {
+            $invoke = @{
+                ScriptBlock  = $AuditProbe
+                ArgumentList = @($ExpectedAccount, (-not $SkipPermissionCheck))
+                ErrorAction  = 'Stop'
+            }
+            if ($computer -ne $env:COMPUTERNAME -and $computer -ne 'localhost') {
+                $invoke['ComputerName'] = $computer
+                if ($Credential) { $invoke['Credential'] = $Credential }
+            }
+
+            $r = Invoke-Command @invoke
+
+            foreach ($s in @($r.Services)) {
+                $allServices.Add(($s | Add-Member -NotePropertyName ComputerName -NotePropertyValue $computer -PassThru -Force))
+            }
+            foreach ($t in @($r.Tasks)) {
+                $allTasks.Add(($t | Add-Member -NotePropertyName ComputerName -NotePropertyValue $computer -PassThru -Force))
+            }
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $computer, $_.Exception.Message) 'WARN'
+        }
+    }
+
+    # --- Findings -------------------------------------------------------------
+    $customAcct = @($allServices | Where-Object { $_.RunAs -and -not $_.IsExpectedAcct })
+    $unquoted   = @($allServices | Where-Object UnquotedPath)
+    $writable   = @(@($allServices) + @($allTasks) | Where-Object { $_.WritableBy })
+    $highTasks  = @($allTasks | Where-Object { $_.RunLevel -eq 'Highest' -and -not $_.IsExpectedAcct })
+
+    Write-Log ("Services {0}, tasks {1}. Custom accounts {2}, unquoted {3}, writable {4}, elevated tasks {5}." -f `
+        $allServices.Count, $allTasks.Count, $customAcct.Count, $unquoted.Count, $writable.Count, $highTasks.Count) 'INFO'
+
+    $allServices | Sort-Object ComputerName, Name | Export-Csv -Path $ServiceCsv -NoTypeInformation -Encoding UTF8
+    $allTasks    | Sort-Object ComputerName, Name | Export-Csv -Path $TaskCsv    -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $ServiceCsv, $TaskCsv) 'INFO'
+
+    if ($writable) {
+        Write-Host "`nBinary directory writable by non-administrators — privilege escalation:" -ForegroundColor Red
+        $writable | Format-Table ComputerName, Kind, Name, RunAs, BinaryDir, WritableBy -AutoSize -Wrap
+    }
+    if ($unquoted) {
+        Write-Host "`nUnquoted service paths containing spaces:" -ForegroundColor Red
+        $unquoted | Format-Table ComputerName, Name, RunAs, PathName -AutoSize -Wrap
+    }
+    if ($customAcct) {
+        Write-Host "`nServices running as a non-default account:" -ForegroundColor Yellow
+        $customAcct | Sort-Object RunAs |
+            Format-Table ComputerName, Name, RunAs, State, StartMode -AutoSize
+    }
+    if ($highTasks) {
+        Write-Host "`nScheduled tasks running elevated as a named account:" -ForegroundColor Yellow
+        $highTasks | Format-Table ComputerName, Name, RunAs, RunLevel, LastRun, LastResult -AutoSize
+    }
+    if (-not ($writable -or $unquoted -or $customAcct -or $highTasks)) {
+        Write-Host "`nNothing flagged." -ForegroundColor Green
+    }
+
+    Write-Host ("`n{0} service(s), {1} task(s) across {2} host(s).`nReports: {3}; {4}`nLog: {5}" -f `
+        $allServices.Count, $allTasks.Count, $ComputerName.Count, $ServiceCsv, $TaskCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs — services and non-Microsoft scheduled tasks — each
+with the account it runs as, its binary path and directory, and flags for
+unquoted paths, writable binary directories, and elevated run levels.
+
+**How it works.**
+
+- **Unquoted path detection strips arguments first.** A service command line is
+  `C:\Program Files\App\svc.exe -service`, so testing the whole string for
+  spaces flags everything. The script splits off the arguments at the first
+  switch, then checks whether what remains contains a space and is unquoted.
+  That is the condition Windows resolves by trying `C:\Program.exe` first.
+- **Writability is tested against named principals, not calculated.** The ACL
+  is read and checked for Allow entries granting write-class rights to
+  `Everyone`, `BUILTIN\Users`, `Authenticated Users`, `Power Users` or
+  `INTERACTIVE`. Anything else is someone's deliberate delegation, not an
+  escalation path.
+- **`null` and empty are different in `WritableBy`.** Empty means checked and
+  clean; null means the path didn't exist or the ACL couldn't be read. A
+  report that renders both as blank hides every unreadable path.
+- **Microsoft's own scheduled tasks are excluded.** There are several hundred
+  under `\Microsoft\`, they are all expected, and including them buries the
+  three that matter.
+- **`RunLevel = Highest` with a named account** is called out separately: that
+  is a task running elevated as a specific identity, which usually means a
+  stored credential and a password that never rotates.
+- **`-SkipPermissionCheck`** exists because the ACL read is the slow part;
+  without it the inventory still tells you what runs as what.
+
+**Prerequisites & caveats.**
+
+- PowerShell 5.1+, local administrator on each target, WinRM for remote hosts.
+  The `ScheduledTasks` module is present on Windows 8/2012 and later; on older
+  hosts the task section returns empty and the service audit still works.
+- **An unquoted path is only exploitable if a writable directory sits on the
+  resolution route.** `C:\Program Files\...` unquoted is a finding worth fixing
+  but not usually exploitable, because the root of `C:\` is not writable by
+  standard users. Cross-reference the two findings before prioritising.
+- The ACL check looks at the **binary's directory**, not the binary itself or
+  the full path chain. A writable parent directory higher up is also an
+  escalation route and is not tested here.
+- Service accounts named in `RunAs` are reported, never their passwords — those
+  are stored by the Service Control Manager and are not retrievable this way,
+  which is correct.
+- Group-managed service accounts appear as a normal domain account with a `$`
+  suffix. They are the good outcome, not a finding; add them to
+  `-ExpectedAccount` once you have identified them.
+
+> **Tip — The writable-directory list is the one to action**
+>
+> It is usually short, usually caused by one vendor's installer, and it is a
+> complete local privilege escalation. Fixing the directory ACL is lower risk
+> than re-quoting a service path, which requires a registry change and a
+> restart.

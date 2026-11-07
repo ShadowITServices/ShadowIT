@@ -1,15 +1,11 @@
 ---
-title: SharePoint Online
-sidebar_label: SharePoint Online
+title: External Sharing Posture
+sidebar_label: External Sharing
+sidebar_position: 2
 description: PowerShell for SharePoint Online administration — an external sharing posture report that reads the tenant ceiling, every site's effective sharing capability, and the guests who actually hold access.
 ---
 
-# SharePoint Online
-
-PowerShell for administering SharePoint Online, using `PnP.PowerShell` (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
-
-## External sharing posture report
+# External Sharing Posture
 
 Reports the tenant's sharing ceiling, every site collection's effective sharing
 capability, and — optionally — the external users who actually hold access.
@@ -23,7 +19,7 @@ own settings while the tenant quietly caps it, and a tenant can look locked down
 while one site has anonymous links turned on. This resolves all of it into one
 table.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules PnP.PowerShell
@@ -207,7 +203,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** Prints the tenant's sharing settings, then one row per site
 collection giving its own setting, the tenant ceiling, the **effective**

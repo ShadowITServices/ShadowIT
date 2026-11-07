@@ -1,17 +1,11 @@
 ---
-title: Exchange Online
-sidebar_label: Exchange Online
+title: Mailbox Delegation and Forwarding Audit
+sidebar_label: Delegation & Forwarding
+sidebar_position: 2
 description: PowerShell for Exchange Online administration — a mailbox delegation and forwarding audit that surfaces Full Access, Send As, Send on Behalf, and every route mail can leave the tenant by.
 ---
 
-# Exchange Online
-
-PowerShell for administering Exchange Online. Connect using the
-`ExchangeOnlineManagement` module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
-
-## Mailbox delegation and forwarding audit
+# Mailbox Delegation and Forwarding Audit
 
 Reports, for every mailbox in the tenant, who can open it, who can send as it,
 and every configured route by which its mail can leave — mailbox forwarding,
@@ -23,7 +17,7 @@ dramatic one: it's a single inbox rule forwarding anything containing "invoice"
 to an external address, which survives a password reset and is invisible from
 the Exchange admin centre's default views.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules ExchangeOnlineManagement
@@ -257,7 +251,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** Two CSVs. The first lists every explicitly granted Full
 Access, Send As, and Send on Behalf permission across every mailbox. The second

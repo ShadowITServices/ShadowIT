@@ -1,0 +1,278 @@
+---
+title: Inactive Teams Report
+sidebar_label: Inactive Teams
+sidebar_position: 3
+description: PowerShell that measures real Teams activity from the Graph usage reports — messages, meetings and file activity per team — instead of inferring dormancy from a last-modified date.
+---
+
+# Inactive Teams Report
+
+Measures actual activity per team from the Graph usage reports — channel
+messages, reply messages, meetings organised, and active users — and ranks
+teams by how little is happening in them. Read-only.
+
+Dormancy is usually inferred from a SharePoint last-modified date, which is
+wrong in both directions. A team with daily conversation and no file uploads
+looks dead; a team nobody has opened in a year looks alive because a retention
+job touched its document library. The usage reports measure the thing itself.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports real Microsoft Teams activity per team over a period, ranking the
+    least active first.
+.DESCRIPTION
+    Downloads the Graph Teams team activity detail report, joins it to the team
+    list for visibility and archive state, and classifies each team as active,
+    quiet, or dormant based on measured messages, meetings and active users.
+.EXAMPLE
+    .\Get-InactiveTeams.ps1 -Period D90 -Verbose
+.NOTES
+    Required Graph perms: Reports.Read.All, ReportSettings.Read.All,
+    Group.Read.All. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [ValidateSet('D7','D30','D90','D180')]
+    [string]$Period = 'D90',
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\InactiveTeams.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("InactiveTeams_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+$RawCsv  = Join-Path $LogDir ("TeamsActivityRaw_{0:yyyyMMdd_HHmmss}.csv" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-CsvValue {
+    <#
+        The usage report's column headers have changed between Graph versions
+        ("Channel Messages" vs "Channel Message Count"). Try several, return
+        the first that exists, rather than silently reporting zero activity.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Row,
+        [Parameter(Mandatory)][string[]]$Names,
+        $Default = 0
+    )
+    foreach ($n in $Names) {
+        if ($Row.PSObject.Properties.Name -contains $n) {
+            $v = $Row.$n
+            if (-not [string]::IsNullOrWhiteSpace([string]$v)) { return $v }
+        }
+    }
+    return $Default
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting inactive Teams report. Period={0}." -f $Period) 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -Scopes 'Reports.Read.All','ReportSettings.Read.All','Group.Read.All' -NoWelcome
+    }
+    Write-Log ("Connected as {0}." -f (Get-MgContext).Account) 'INFO'
+
+    # Concealed names make every team an opaque hash. Say so before doing work.
+    try {
+        $settings = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/admin/reportSettings'
+        if ($settings.displayConcealedNames) {
+            Write-Log 'Usage reports conceal names in this tenant.' 'WARN'
+            Write-Host @'
+
+Report anonymisation is ON, so team names will be opaque identifiers. Turn it
+off at: Microsoft 365 admin center > Settings > Org settings > Reports, then
+re-run. It is a tenant-wide privacy setting — change it deliberately.
+
+'@ -ForegroundColor Yellow
+        }
+    }
+    catch { Write-Log ("Report settings unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # --- Activity report ------------------------------------------------------
+    Write-Log 'Downloading Teams team activity detail.' 'DEBUG'
+    $uri = "https://graph.microsoft.com/v1.0/reports/getTeamsTeamActivityDetail(period='$Period')"
+    Invoke-MgGraphRequest -Method GET -Uri $uri -OutputFilePath $RawCsv
+    $rows = @(Import-Csv -Path $RawCsv)
+    Write-Log ("Activity rows: {0}" -f $rows.Count) 'INFO'
+    if (-not $rows) { throw 'Activity report returned no rows. Reports can lag 48 hours and need Reports.Read.All.' }
+
+    # --- Team metadata --------------------------------------------------------
+    # The activity report gives counts but not visibility or archive state.
+    $teamMeta = @{}
+    $next = 'https://graph.microsoft.com/v1.0/groups' +
+            "?`$filter=resourceProvisioningOptions/Any(x:x eq 'Team')" +
+            '&$select=id,displayName,visibility,createdDateTime&$top=999'
+    do {
+        $page = Invoke-MgGraphRequest -Method GET -Uri $next
+        foreach ($g in $page.value) { $teamMeta[$g.id] = $g }
+        $next = $page.'@odata.nextLink'
+    } while ($next)
+    Write-Log ("Teams in directory: {0}" -f $teamMeta.Count) 'INFO'
+
+    $now = Get-Date
+
+    $results = foreach ($r in $rows) {
+        $id = [string](Get-CsvValue -Row $r -Names @('Team Id','TeamId') -Default '')
+
+        $channelMsgs = [int](Get-CsvValue -Row $r -Names @('Channel Messages','Channel Message Count'))
+        $replyMsgs   = [int](Get-CsvValue -Row $r -Names @('Reply Messages','Reply Message Count'))
+        $urgentMsgs  = [int](Get-CsvValue -Row $r -Names @('Urgent Messages','Urgent Message Count'))
+        $meetings    = [int](Get-CsvValue -Row $r -Names @('Meetings Organized','Meetings Organized Count'))
+        $activeUsers = [int](Get-CsvValue -Row $r -Names @('Active Users','Active Users Count'))
+        $guests      = [int](Get-CsvValue -Row $r -Names @('Guests','Guest Count'))
+        $posts       = [int](Get-CsvValue -Row $r -Names @('Post Messages','Post Messages Count'))
+
+        $lastActivity = $null
+        $raw = Get-CsvValue -Row $r -Names @('Last Activity Date') -Default ''
+        if ($raw) {
+            $p = [datetime]::MinValue
+            if ([datetime]::TryParse([string]$raw, [ref]$p)) { $lastActivity = $p }
+        }
+
+        $meta  = if ($id) { $teamMeta[$id] } else { $null }
+        $total = $channelMsgs + $replyMsgs + $posts + $meetings
+
+        [pscustomobject]@{
+            Team            = Get-CsvValue -Row $r -Names @('Team Name','Team Display Name') -Default '(concealed)'
+            TeamId          = $id
+            Visibility      = if ($meta) { $meta.visibility } else { Get-CsvValue -Row $r -Names @('Team Type') -Default '' }
+            IsDeleted       = Get-CsvValue -Row $r -Names @('Is Deleted') -Default ''
+            ActiveUsers     = $activeUsers
+            Guests          = $guests
+            ChannelMessages = $channelMsgs
+            ReplyMessages   = $replyMsgs
+            PostMessages    = $posts
+            UrgentMessages  = $urgentMsgs
+            MeetingsHeld    = $meetings
+            TotalActivity   = $total
+            LastActivity    = if ($lastActivity) { '{0:yyyy-MM-dd}' -f $lastActivity } else { 'NONE' }
+            IdleDays        = if ($lastActivity) { [int]($now - $lastActivity).TotalDays } else { $null }
+            Created         = if ($meta -and $meta.createdDateTime) { '{0:yyyy-MM-dd}' -f ([datetime]$meta.createdDateTime) } else { '' }
+            # Three bands rather than a boolean — "quiet" and "dead" warrant
+            # different conversations.
+            Band            = if     ($total -eq 0 -and $activeUsers -eq 0) { 'Dormant' }
+                              elseif ($total -lt 10)                        { 'Quiet'   }
+                              else                                          { 'Active'  }
+            ReportPeriod    = $Period
+            ReportRefreshed = Get-CsvValue -Row $r -Names @('Report Refresh Date') -Default ''
+        }
+    }
+
+    $dormant = @($results | Where-Object { $_.Band -eq 'Dormant' })
+    $quiet   = @($results | Where-Object { $_.Band -eq 'Quiet'   })
+    $active  = @($results | Where-Object { $_.Band -eq 'Active'  })
+
+    Write-Log ("Teams {0}: dormant {1}, quiet {2}, active {3}." -f `
+        $results.Count, $dormant.Count, $quiet.Count, $active.Count) 'INFO'
+
+    $results | Sort-Object TotalActivity, Team |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host ("`nActivity over the last {0}:" -f $Period) -ForegroundColor Cyan
+    $results | Group-Object Band | Sort-Object Count -Descending |
+        Select-Object @{N='Band';E={$_.Name}},
+                      Count,
+                      @{N='Percent';E={ '{0:N1}%' -f (($_.Count / $results.Count) * 100) }} |
+        Format-Table -AutoSize
+
+    if ($dormant) {
+        Write-Host "`nDormant — no messages, no meetings, no active users:" -ForegroundColor Yellow
+        $dormant | Sort-Object Team | Select-Object -First 25 |
+            Format-Table Team, Visibility, Guests, LastActivity, Created -AutoSize
+        if ($dormant.Count -gt 25) { Write-Host ("  ... and {0} more in the CSV." -f ($dormant.Count - 25)) -ForegroundColor Yellow }
+    }
+    if ($quiet) {
+        Write-Host ("`n{0} team(s) with minimal activity (under 10 messages/meetings):" -f $quiet.Count) -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} team(s): {1} dormant, {2} quiet, {3} active.`nReport: {4}`nLog: {5}" -f `
+        $results.Count, $dormant.Count, $quiet.Count, $active.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per team with measured channel messages, replies,
+posts, urgent messages, meetings organised, active users and guests over the
+chosen period, plus a three-band classification and the team's visibility and
+creation date.
+
+**How it works.**
+
+- **Activity is measured, not inferred.** `getTeamsTeamActivityDetail` returns
+  what actually happened in each team. Deriving dormancy from the underlying
+  SharePoint site's last-modified date is the common approach and is wrong in
+  both directions — chat-heavy teams look dead, and a retention job touching a
+  document library makes a dead team look alive.
+- **Column names are looked up, not assumed.** The report's headers have
+  changed between Graph versions (`Channel Messages` became
+  `Channel Message Count` and back). `Get-CsvValue` tries several names per
+  field, so a header rename produces the right number rather than a silent
+  zero — which would classify every team as dormant.
+- **Three bands, not a boolean.** `Dormant` means genuinely nothing happened.
+  `Quiet` means under ten interactions in the period — a team that is working
+  but barely, which needs a conversation rather than an archive. Collapsing
+  them produces a list too long to act on.
+- **Directory metadata is joined in.** The activity report has counts but not
+  visibility or creation date, both of which change the decision: a *public*
+  dormant team is discoverable by everyone in the tenant, and a team created
+  last month has not had time to be active.
+- **Anonymisation is detected up front**, as with the OneDrive report — a
+  report full of hashes is identified before you spend time on it.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes `Reports.Read.All`,
+  `ReportSettings.Read.All`, `Group.Read.All`.
+- **Usage data lags 24–48 hours** and the maximum period is 180 days. A team
+  created inside the window will look quiet simply because it hasn't existed
+  long — check the `Created` column before acting.
+- **Private channel activity is reported against the parent team**, so a team
+  whose work all happens in private channels is counted correctly here but
+  cannot be broken down.
+- Meetings count those *organised* within the team, not every meeting its
+  members attended. A team whose members meet constantly via Outlook invitations
+  shows zero.
+- A dormant team may still hold the only copy of something. Pair this with the
+  [ownership report](../ownership-and-guest-governance) and check guests before
+  archiving: a dormant team with external members is a sharing exposure, not
+  just clutter.
+
+> **Tip — Archive rather than delete**
+>
+> Archiving makes a team read-only and keeps everything in place and
+> searchable. It is reversible, it frees nothing, and it is almost always the
+> right first step — deletion starts a retention clock you may not control.

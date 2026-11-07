@@ -1,0 +1,44 @@
+---
+title: Purview
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for Microsoft Purview — unified audit log export, retention policy and label inventory, DLP policy coverage, and sensitivity label publication.
+---
+
+# Purview
+
+PowerShell for Microsoft Purview, using the `ExchangeOnlineManagement` module's
+**Security & Compliance** connection (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
+
+## Scripts
+
+- **[Unified Audit Log Export](./unified-audit-log-export)** — what actually
+  happened, exported without silent truncation.
+- **[Retention Policy Inventory](./retention-policy-inventory)** — what is
+  being kept, for how long, where, and what happens at the end.
+- **[DLP Policy Coverage](./dlp-policy-coverage)** — which policies are
+  enforcing, which are still in test mode, and which locations are uncovered.
+- **[Sensitivity Label Publication](./sensitivity-label-publication)** — which
+  labels exist, which are published to whom, and which nobody can apply.
+
+## The connection is different here
+
+Three of these need `Connect-IPPSSession` rather than `Connect-ExchangeOnline`.
+They are separate endpoints in the same module and the cmdlets do not overlap:
+
+```powershell
+Connect-IPPSSession -UserPrincipalName you@contoso.com
+```
+
+The audit log export is the exception — `Search-UnifiedAuditLog` lives on the
+Exchange Online connection. Running the wrong one produces "the term
+`Get-RetentionCompliancePolicy` is not recognized", which reads like a module
+problem and isn't.
+
+> **Tip — Policy and rule are two objects here too**
+>
+> Retention, DLP and label policies all split configuration from scope the same
+> way Defender's do: a *policy* holds the settings and a *rule* holds the
+> conditions. Reading only the policy tells you half of what is in force, which
+> is why each script joins both.

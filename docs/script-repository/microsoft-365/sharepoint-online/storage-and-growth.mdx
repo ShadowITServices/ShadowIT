@@ -1,0 +1,247 @@
+---
+title: Storage and Growth Report
+sidebar_label: Storage & Growth
+sidebar_position: 3
+description: PowerShell that reports SharePoint storage per site against quota and tenant total, separating live content from recycle bins and versions so the real reclaimable space is visible.
+---
+
+# Storage and Growth Report
+
+Reports storage used per site against both its own quota and the tenant pool,
+and separates **live content** from recycle bins so the genuinely reclaimable
+space is visible. Read-only.
+
+Tenant storage is pooled and grows with licences, which makes it feel infinite
+until it isn't. When it does fill, the failure is tenant-wide: uploads stop
+across every site at once. The reclaim is almost never where people look —
+first and second-stage recycle bins routinely hold more than the content that
+triggered the panic.
+
+## Script
+
+```powershell
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports SharePoint Online storage per site collection with quota, recycle
+    bin usage, and tenant pool consumption.
+.DESCRIPTION
+    Enumerates site collections, reports storage used against each site's own
+    quota and the tenant total, and optionally measures first and second stage
+    recycle bins to show reclaimable space.
+.EXAMPLE
+    .\Get-SpoStorageReport.ps1 -TenantName contoso -ClientId <guid> -IncludeRecycleBin
+.NOTES
+    Required role: SharePoint Administrator. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$TenantName,
+    [string]$ClientId,
+
+    [int]$WarnPercent = 85,
+
+    # One or two extra calls per site; slow, and the only way to see reclaim.
+    [switch]$IncludeRecycleBin,
+
+    [switch]$IncludeOneDriveSites,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\SpoStorageReport.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("SpoStorageReport_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function ConvertTo-Gb {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Mb)
+    if ($null -eq $Mb) { return $null }
+    [math]::Round(([double]$Mb / 1024), 2)
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $adminUrl = "https://$TenantName-admin.sharepoint.com"
+    Write-Log ("Starting storage report against {0}." -f $adminUrl) 'INFO'
+
+    $connectArgs = @{ Url = $adminUrl; Interactive = $true }
+    if ($ClientId) { $connectArgs['ClientId'] = $ClientId }
+    Connect-PnPOnline @connectArgs
+
+    # Tenant pool. Reported in MB by the API.
+    $tenant = Get-PnPTenant
+    $poolGb = ConvertTo-Gb $tenant.StorageQuota
+    $poolUsedGb = ConvertTo-Gb $tenant.StorageQuotaAllocated
+    Write-Log ("Tenant pool: {0} GB quota." -f $poolGb) 'INFO'
+
+    $sites = @(Get-PnPTenantSite -IncludeOneDriveSites:$IncludeOneDriveSites)
+    Write-Log ("Sites: {0}" -f $sites.Count) 'INFO'
+
+    $i = 0
+    $results = foreach ($site in $sites) {
+        $i++
+        Write-Progress -Activity 'Reading site storage' -Status $site.Url `
+                       -PercentComplete (($i / [math]::Max($sites.Count,1)) * 100)
+
+        $usedGb  = ConvertTo-Gb $site.StorageUsageCurrent
+        $quotaGb = ConvertTo-Gb $site.StorageQuota
+        $pct     = if ($quotaGb -and $quotaGb -gt 0) { [math]::Round((($usedGb / $quotaGb) * 100), 1) } else { $null }
+
+        $binGb = $null; $binSecondGb = $null
+        if ($IncludeRecycleBin) {
+            try {
+                # Connecting per-site is the cost here; the admin connection
+                # cannot read another site's recycle bin.
+                $siteArgs = @{ Url = $site.Url; Interactive = $true }
+                if ($ClientId) { $siteArgs['ClientId'] = $ClientId }
+                Connect-PnPOnline @siteArgs
+
+                $items = @(Get-PnPRecycleBinItem)
+                $binGb       = [math]::Round(((($items | Where-Object { $_.ItemState -eq 'FirstStageRecycleBin'  } |
+                                 Measure-Object Size -Sum).Sum) / 1GB), 3)
+                $binSecondGb = [math]::Round(((($items | Where-Object { $_.ItemState -eq 'SecondStageRecycleBin' } |
+                                 Measure-Object Size -Sum).Sum) / 1GB), 3)
+            }
+            catch {
+                Write-Log ("Recycle bin unreadable for {0}: {1}" -f $site.Url, $_.Exception.Message) 'WARN'
+            }
+            finally {
+                Connect-PnPOnline @connectArgs   # Back to the admin endpoint.
+            }
+        }
+
+        [pscustomobject]@{
+            Url                 = $site.Url
+            Title               = $site.Title
+            Template            = $site.Template
+            UsedGb              = $usedGb
+            QuotaGb             = $quotaGb
+            PercentOfOwnQuota   = $pct
+            PercentOfTenantPool = if ($poolGb) { [math]::Round((($usedGb / $poolGb) * 100), 2) } else { $null }
+            NearQuota           = ($null -ne $pct -and $pct -ge $WarnPercent)
+            RecycleBinGb        = $binGb
+            SecondStageBinGb    = $binSecondGb
+            ReclaimableGb       = if ($null -ne $binGb) { [math]::Round(($binGb + $binSecondGb), 3) } else { $null }
+            LastContentModified = if ($site.LastContentModifiedDate) { '{0:yyyy-MM-dd}' -f $site.LastContentModifiedDate } else { '' }
+            LockState           = $site.LockState
+        }
+    }
+    Write-Progress -Activity 'Reading site storage' -Completed
+
+    $totalUsed  = [math]::Round((($results | Measure-Object UsedGb -Sum).Sum), 2)
+    $totalBin   = if ($IncludeRecycleBin) { [math]::Round((($results | Measure-Object ReclaimableGb -Sum).Sum), 2) } else { $null }
+    $near       = @($results | Where-Object NearQuota)
+
+    Write-Log ("Sites {0}; used {1} GB; reclaimable {2} GB; near quota {3}." -f `
+        $results.Count, $totalUsed, $totalBin, $near.Count) 'INFO'
+
+    $results | Sort-Object UsedGb -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nTenant storage" -ForegroundColor Cyan
+    [pscustomobject]@{
+        TenantPoolGb   = $poolGb
+        AllocatedGb    = $poolUsedGb
+        SitesMeasured  = $results.Count
+        TotalUsedGb    = $totalUsed
+        PercentOfPool  = if ($poolGb) { '{0:N1}%' -f (($totalUsed / $poolGb) * 100) } else { 'n/a' }
+        ReclaimableGb  = if ($null -ne $totalBin) { $totalBin } else { 'not measured' }
+    } | Format-List
+
+    Write-Host "`nLargest sites:" -ForegroundColor Cyan
+    $results | Sort-Object UsedGb -Descending | Select-Object -First 20 |
+        Format-Table Url, UsedGb, QuotaGb, PercentOfOwnQuota, ReclaimableGb, LastContentModified -AutoSize
+
+    if ($near) {
+        Write-Host "`nSites at or above $WarnPercent% of their own quota:" -ForegroundColor Yellow
+        $near | Format-Table Url, UsedGb, QuotaGb, PercentOfOwnQuota -AutoSize
+    }
+    if (-not $IncludeRecycleBin) {
+        Write-Host 'Recycle bins were NOT measured. Re-run with -IncludeRecycleBin to see reclaimable space.' -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} site(s), {1} GB used. Report: {2}`nLog: {3}" -f `
+        $results.Count, $totalUsed, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** A tenant storage summary, then one row per site with space
+used, each site's own quota and percentage, that site's share of the tenant
+pool, recycle bin contents split by stage, and total reclaimable space.
+
+**How it works.**
+
+- **Two denominators, because they answer different questions.**
+  `PercentOfOwnQuota` tells you whether *this site* is about to stop accepting
+  uploads. `PercentOfTenantPool` tells you which sites are responsible for the
+  tenant filling up. A small site at 98% of a small quota is an urgent local
+  problem; a large site at 20% of a huge quota may be the tenant's real issue.
+- **Recycle bins are measured per stage.** First-stage items are user-visible
+  and restorable; second-stage are the admin's last resort. Emptying the
+  second stage frees space immediately and irreversibly, so the two are never
+  summed into one opaque figure.
+- **Per-site connection, then back to admin.** The recycle bin cannot be read
+  from the admin endpoint, so the script reconnects to each site and returns to
+  admin in a `finally` — otherwise one failure leaves the rest of the run
+  pointed at the wrong endpoint and every subsequent call fails confusingly.
+- **Everything is converted from MB.** The SharePoint API reports storage in
+  megabytes; reporting raw values produces numbers that look like bytes and
+  get misread by a factor of a million.
+- **Recycle bin measurement is opt-in**, and the script says so at the end when
+  you skip it, rather than implying reclaimable space is zero.
+
+**Prerequisites & caveats.**
+
+- Module `PnP.PowerShell`, **SharePoint Administrator**, and the app
+  registration described on the [section overview](/docs/script-repository/microsoft-365/sharepoint-online/).
+- **`-IncludeRecycleBin` is slow and heavy.** `Get-PnPRecycleBinItem` enumerates
+  every item, and a site with hundreds of thousands of deleted files will take
+  a long time or throttle. Run it against a filtered set of large sites rather
+  than the whole tenant.
+- `StorageUsageCurrent` can lag the admin centre by up to 24 hours. For a
+  capacity decision that is fine; for "did my cleanup work", wait a day.
+- Recycle bin items expire on their own after 93 days, so space in the
+  first-stage bin is reclaimable *and* self-reclaiming. Check the dates before
+  doing anything irreversible.
+- Sites with **no quota set** inherit the tenant default and may report a null
+  quota, which leaves `PercentOfOwnQuota` empty. Those sites can still fill the
+  pool, which is what the second percentage is for.
+- Preservation holds and retention policies keep content that looks deleted.
+  Reclaimable space is an upper bound, not a promise.
+
+> **Tip — Growth needs two runs, not one**
+>
+> A single report is a snapshot. Keep the monthly CSVs and the delta tells you
+> the growth rate, which is the number that actually predicts when the tenant
+> pool runs out.

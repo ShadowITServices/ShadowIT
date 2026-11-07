@@ -1,0 +1,36 @@
+---
+title: OneDrive
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for OneDrive for Business — storage and orphaned data reporting, external sharing review, and granting a manager access to a leaver's drive.
+---
+
+# OneDrive
+
+PowerShell for administering OneDrive for Business. The reporting scripts use
+Microsoft Graph; the access script uses `PnP.PowerShell` (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
+
+## Scripts
+
+- **[Storage, Dormancy and Orphaned Data](./storage-and-orphaned-data)** —
+  what each drive holds, who still owns it, and which drives belong to nobody.
+- **[External Sharing Review](./external-sharing-review)** — which personal
+  drives are shared outside the organisation, and with whom.
+- **[Grant Access to a Leaver's OneDrive](./grant-access-to-leaver-drive)** —
+  gives a named manager access to a departed user's drive. **Changes state**;
+  supports `-WhatIf`.
+
+## Why OneDrive gets its own section
+
+OneDrive drives are SharePoint site collections, so the SharePoint scripts will
+technically enumerate them — and swamping a 40-site tenant report with 400
+personal drives makes both reports useless. More importantly the questions are
+different: a SharePoint site has owners and a purpose, while a OneDrive has
+exactly one owner whose departure is the event that matters.
+
+> **Tip — Run the storage report before an offboarding**
+>
+> It answers the two questions offboarding actually needs: how much is in the
+> drive, and is anything shared out of it. Doing that *before* the account is
+> disabled is far easier than afterwards.

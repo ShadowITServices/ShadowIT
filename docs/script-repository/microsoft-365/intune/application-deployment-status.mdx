@@ -1,0 +1,286 @@
+---
+title: Application Deployment Status
+sidebar_label: App Deployment
+sidebar_position: 5
+description: PowerShell that reports Intune application install success and failure per app, separating genuine failures from devices that were never targeted or never checked in.
+---
+
+# Application Deployment Status
+
+Reports install success, failure and pending counts for every Intune
+application, ranks apps by failure rate, and separates genuine failures from
+devices that simply haven't reported yet. Read-only.
+
+Application deployment fails quietly. The Intune console shows a per-app
+summary behind two clicks, and nobody clicks through forty apps. A required
+application failing on 15% of devices looks like a green tick in the overview
+and a support ticket in three weeks' time.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports Intune mobile application install status, with failure rates and
+    the apps most worth attention.
+.DESCRIPTION
+    Enumerates mobile apps, reads each app's device install summary, computes
+    a failure rate over devices that actually reported, and optionally lists
+    the individual failing devices for the worst offenders.
+.EXAMPLE
+    .\Get-IntuneAppStatus.ps1 -FailureRateWarn 10 -ListFailures -Verbose
+.NOTES
+    Required Graph perms: DeviceManagementApps.Read.All. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    # Apps failing on more than this percentage of reporting devices are flagged.
+    [int]$FailureRateWarn = 10,
+
+    # Also emit one row per failing device for the flagged apps.
+    [switch]$ListFailures,
+
+    # Ignore apps with fewer than this many reporting devices — small samples
+    # produce meaningless percentages.
+    [int]$MinimumDevices = 3,
+
+    [string]$LogDir      = 'C:\Temp',
+    [string]$ReportCsv   = 'C:\Temp\IntuneAppStatus.csv',
+    [string]$FailuresCsv = 'C:\Temp\IntuneAppFailures.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("IntuneAppStatus_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [switch]$Tolerate)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) { Write-Log ("Unavailable: {0} — {1}" -f $Uri, $_.Exception.Message) 'WARN'; return @() }
+        throw
+    }
+    return $items
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting Intune app deployment report. FailureRateWarn={0}%." -f $FailureRateWarn) 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -Scopes 'DeviceManagementApps.Read.All' -NoWelcome
+    }
+    Write-Log ("Connected as {0}." -f (Get-MgContext).Account) 'INFO'
+
+    # Exclude the built-in store catalogue entries, which are not deployments.
+    $apps = Get-GraphCollection -Uri (
+        'https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps' +
+        '?$select=id,displayName,publisher,createdDateTime,lastModifiedDateTime&$top=999')
+    Write-Log ("Applications: {0}" -f $apps.Count) 'INFO'
+    if (-not $apps) { throw 'No applications returned. Check DeviceManagementApps.Read.All is consented.' }
+
+    $failureRows = [System.Collections.Generic.List[object]]::new()
+    $i = 0
+
+    $results = foreach ($app in $apps) {
+        $i++
+        Write-Progress -Activity 'Reading app install status' -Status $app.displayName `
+                       -PercentComplete (($i / $apps.Count) * 100)
+
+        $summary = $null
+        try {
+            $summary = Invoke-MgGraphRequest -Method GET -Uri (
+                'https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/{0}/installSummary' -f $app.id)
+        }
+        catch {
+            Write-Log ("Install summary unreadable for {0}: {1}" -f $app.displayName, $_.Exception.Message) 'WARN'
+            continue
+        }
+
+        $installed    = [int]$summary.installedDeviceCount
+        $failed       = [int]$summary.failedDeviceCount
+        $pending      = [int]$summary.pendingInstallDeviceCount
+        $notApplicable= [int]$summary.notApplicableDeviceCount
+        $notInstalled = [int]$summary.notInstalledDeviceCount
+
+        # Only devices that reached a verdict belong in the denominator.
+        # Pending and not-applicable devices have not tried and cannot fail.
+        $reporting = $installed + $failed + $notInstalled
+        $rate = if ($reporting -ge $MinimumDevices) {
+            [math]::Round((($failed / [double]$reporting) * 100), 1)
+        } else { $null }
+
+        $row = [pscustomobject]@{
+            App              = $app.displayName
+            Publisher        = $app.publisher
+            AppId            = $app.id
+            Installed        = $installed
+            Failed           = $failed
+            NotInstalled     = $notInstalled
+            Pending          = $pending
+            NotApplicable    = $notApplicable
+            ReportingDevices = $reporting
+            FailureRate      = $rate
+            NeedsAttention   = ($null -ne $rate) -and ($rate -ge $FailureRateWarn)
+            SmallSample      = ($reporting -lt $MinimumDevices)
+            # An app nothing has ever reported against is either brand new or
+            # assigned to nobody.
+            NoReports        = ($reporting -eq 0 -and $pending -eq 0)
+            LastModified     = $app.lastModifiedDateTime
+        }
+
+        if ($ListFailures -and $failed -gt 0) {
+            try {
+                foreach ($d in (Get-GraphCollection -Tolerate -Uri (
+                    'https://graph.microsoft.com/v1.0/deviceAppManagement/mobileApps/{0}/deviceStatuses' -f $app.id))) {
+                    if ($d.installState -ne 'failed') { continue }
+                    $failureRows.Add([pscustomobject]@{
+                        App          = $app.displayName
+                        DeviceName   = $d.deviceName
+                        User         = $d.userPrincipalName
+                        InstallState = $d.installState
+                        ErrorCode    = $d.errorCode
+                        Detail       = $d.installStateDetail
+                        LastSync     = $d.lastSyncDateTime
+                    })
+                }
+            }
+            catch { Write-Log ("Device statuses unreadable for {0}: {1}" -f $app.displayName, $_.Exception.Message) 'WARN' }
+        }
+
+        $row
+    }
+    Write-Progress -Activity 'Reading app install status' -Completed
+
+    $attention = @($results | Where-Object NeedsAttention)
+    $noReports = @($results | Where-Object NoReports)
+    $totalFail = ($results | Measure-Object Failed -Sum).Sum
+
+    Write-Log ("Apps {0}; needing attention {1}; no reports {2}; total failed installs {3}." -f `
+        $results.Count, $attention.Count, $noReports.Count, $totalFail) 'INFO'
+
+    $results | Sort-Object @{Expression='FailureRate';Descending=$true}, Failed -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($ListFailures) {
+        $failureRows | Sort-Object App, DeviceName | Export-Csv -Path $FailuresCsv -NoTypeInformation -Encoding UTF8
+        Write-Log ("Failure detail written: {0} ({1} rows)" -f $FailuresCsv, $failureRows.Count) 'INFO'
+    }
+
+    Write-Host "`nApps by failure count:" -ForegroundColor Cyan
+    $results | Where-Object { $_.Failed -gt 0 } | Sort-Object Failed -Descending | Select-Object -First 20 |
+        Format-Table App, Installed, Failed, NotInstalled, Pending, FailureRate -AutoSize
+
+    if ($attention) {
+        Write-Host ("`nFailing on {0}% or more of reporting devices:" -f $FailureRateWarn) -ForegroundColor Yellow
+        $attention | Format-Table App, Publisher, Failed, ReportingDevices, FailureRate -AutoSize
+    }
+    if ($noReports) {
+        Write-Host ("`n{0} app(s) have no install reports at all — new, or assigned to nobody:" -f $noReports.Count) -ForegroundColor Yellow
+        $noReports | Select-Object -First 15 | Format-Table App, Publisher, LastModified -AutoSize
+    }
+    if ($ListFailures -and $failureRows.Count) {
+        Write-Host "`nMost common failure codes:" -ForegroundColor Cyan
+        $failureRows | Group-Object ErrorCode | Sort-Object Count -Descending | Select-Object -First 10 `
+            @{N='ErrorCode';E={$_.Name}}, Count | Format-Table -AutoSize
+    }
+
+    Write-Host ("`n{0} app(s); {1} failed install(s) across the estate.`nReport: {2}`nLog: {3}" -f `
+        $results.Count, $totalFail, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per application with installed, failed, not
+installed, pending and not-applicable counts, a failure rate computed over
+devices that actually reported, and flags for apps needing attention and apps
+with no reports at all. With `-ListFailures`, a second CSV of individual
+failing devices with error codes.
+
+**How it works.**
+
+- **The denominator is the point.** `failedDeviceCount` on its own is
+  meaningless — 40 failures out of 4,000 devices is noise, out of 50 it is an
+  emergency. The rate is computed over `installed + failed + notInstalled`:
+  devices that reached a verdict. **Pending and not-applicable devices are
+  excluded**, because a device that hasn't tried yet cannot have failed, and
+  including them makes every new deployment look healthy.
+- **Small samples don't get a rate.** Below `-MinimumDevices`, `FailureRate` is
+  null and `SmallSample` is set. One failure out of two devices is 50% and
+  tells you nothing.
+- **`NoReports` separates "new" from "broken".** An app with no installs, no
+  failures and nothing pending is not deploying anywhere — usually because its
+  assignment is missing, which the
+  [profile assignment report](../configuration-profile-assignments) covers for
+  the policy side.
+- **Failure detail is opt-in and targeted.** `deviceStatuses` costs a paged
+  call per app, so it only runs for apps that actually have failures, and only
+  with the switch.
+- **Error codes are grouped.** Twenty devices failing with the same code is one
+  problem; twenty different codes is twenty problems. The summary makes that
+  distinction immediately.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scope `DeviceManagementApps.Read.All`.
+- **Install summaries lag.** Counts update as devices check in, so a
+  deployment pushed this morning will show mostly pending. Compare against a
+  run from a few days later rather than reading one snapshot as final.
+- `mobileApps` includes **every** app object, including store links and web
+  links that have no install concept. Those will report zero everywhere and
+  appear in the `NoReports` list — filter by `@odata.type` if that noise
+  matters to you.
+- `notApplicableDeviceCount` is usually platform mismatch: a Windows app
+  assigned to a group containing iOS devices. A large number there is an
+  assignment problem rather than a deployment one.
+- **Error codes are raw.** Intune surfaces Win32 and MSI return codes
+  unmodified; `0x87D13B60` and similar need looking up. The grouping tells you
+  which one to look up first.
+- Required and available assignments behave differently — an available app
+  showing "not installed" simply means nobody chose to install it, which is not
+  a failure. The install summary does not distinguish them, so check the
+  assignment intent before treating a low install count as a problem.
+
+> **Tip — Run it after every deployment wave, not monthly**
+>
+> The useful window is the few days after a push, while the failures are
+> recent enough to correlate with what changed. A monthly report tells you that
+> something broke, not what.

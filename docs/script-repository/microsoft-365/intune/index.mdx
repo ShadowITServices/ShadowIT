@@ -1,0 +1,44 @@
+---
+title: Intune
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for Microsoft Intune — device compliance and sync, BitLocker recovery key escrow, configuration profile assignment, and application deployment status.
+---
+
+# Intune
+
+PowerShell for administering Microsoft Intune via Microsoft Graph. Every script
+here uses `Microsoft.Graph.Authentication` and raw Graph calls rather than the
+full SDK — fewer modules to keep current, and the endpoints are visible in the
+code (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
+
+## Scripts
+
+- **[Device Compliance and Sync](./device-compliance-and-sync)** — which
+  devices are non-compliant, and which have simply stopped reporting.
+- **[BitLocker Recovery Key Escrow](./bitlocker-key-escrow)** — which encrypted
+  devices have a recovery key you can actually retrieve, and which do not.
+- **[Configuration Profile Assignments](./configuration-profile-assignments)** —
+  profiles, who they target, and the ones assigned to nobody.
+- **[Application Deployment Status](./application-deployment-status)** — what
+  is installing, what is failing, and on how many devices.
+
+## A recurring shape
+
+Three of these answer the same kind of question in different places: **is the
+control you configured actually reaching anything?** An unassigned
+configuration profile, an application targeting an empty group, a compliance
+policy that no device has evaluated — all look correct in the portal and
+govern nothing.
+
+The BitLocker script is the exception and the most urgent: it answers whether
+you can recover a machine you have already encrypted, which is only ever asked
+at the worst possible moment.
+
+> **Tip — Graph chooses its own page size here**
+>
+> The Intune endpoints ignore large `$top` values and page regardless, so every
+> script follows `@odata.nextLink`. A single-page read silently truncates a
+> large estate, which is the one failure mode that makes an estate report worse
+> than useless.

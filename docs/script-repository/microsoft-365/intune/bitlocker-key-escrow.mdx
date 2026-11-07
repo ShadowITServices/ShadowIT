@@ -1,0 +1,299 @@
+---
+title: BitLocker Recovery Key Escrow
+sidebar_label: BitLocker Key Escrow
+sidebar_position: 3
+description: PowerShell that cross-references encrypted Windows devices against the BitLocker recovery keys actually escrowed in Entra ID, so devices you cannot recover are visible before you need to.
+---
+
+# BitLocker Recovery Key Escrow
+
+Cross-references every encrypted Windows device in Intune against the BitLocker
+recovery keys actually held in Entra ID, and names the devices where encryption
+is on but **no key was ever escrowed**. Read-only.
+
+Encryption without a retrievable recovery key is worse than no encryption: the
+machine is protected from an attacker and equally protected from you. The gap
+appears when a device was encrypted before enrolment, when escrow failed
+silently, or when the policy was applied to a device already using a key the
+user set up themselves. Nothing in the Intune console puts the two lists side
+by side.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports Windows devices whose encryption state and escrowed BitLocker
+    recovery keys disagree.
+.DESCRIPTION
+    Joins Intune managed devices to the BitLocker recovery keys stored in Entra
+    ID, matching on the Entra device ID, and flags encrypted devices with no
+    escrowed key, unencrypted devices, and keys belonging to devices no longer
+    managed.
+.EXAMPLE
+    .\Get-BitLockerEscrowReport.ps1 -Verbose
+.NOTES
+    Required Graph perms: DeviceManagementManagedDevices.Read.All,
+    BitLockerKey.ReadBasic.All, Device.Read.All. Read-only — reads key
+    METADATA only, never key values.
+#>
+
+[CmdletBinding()]
+param(
+    [int]$StaleSyncDays = 30,
+    [string]$LogDir     = 'C:\Temp',
+    [string]$ReportCsv  = 'C:\Temp\BitLockerEscrow.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("BitLockerEscrow_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [hashtable]$Headers, [switch]$Tolerate)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            # Not $args — that is an automatic variable and shadowing it here
+            # breaks splatting in ways that are miserable to debug.
+            $req = @{ Method = 'GET'; Uri = $next }
+            if ($Headers) { $req['Headers'] = $Headers }
+            $resp = Invoke-MgGraphRequest @req
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) { Write-Log ("Unavailable: {0} — {1}" -f $Uri, $_.Exception.Message) 'WARN'; return @() }
+        throw
+    }
+    return $items
+}
+
+function ConvertTo-LocalDate {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Value)
+    if (-not $Value) { return $null }
+    if ($Value -is [datetime]) { return $Value.ToLocalTime() }
+    $p = [datetime]::MinValue
+    $styles = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor `
+              [System.Globalization.DateTimeStyles]::AdjustToUniversal
+    if ([datetime]::TryParse([string]$Value, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$p)) {
+        return $p.ToLocalTime()
+    }
+    return $null
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting BitLocker escrow report.' 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -NoWelcome -Scopes `
+            'DeviceManagementManagedDevices.Read.All','BitLockerKey.ReadBasic.All','Device.Read.All'
+    }
+    Write-Log ("Connected as {0}." -f (Get-MgContext).Account) 'INFO'
+
+    # --- Escrowed keys --------------------------------------------------------
+    # ReadBasic returns metadata only — id, device, created date, volume type.
+    # The key VALUE needs BitLockerKey.Read.All and an explicit per-key read,
+    # which this script deliberately does not do.
+    Write-Log 'Reading escrowed BitLocker recovery keys (metadata only).' 'DEBUG'
+    $keys = Get-GraphCollection -Tolerate `
+        -Uri 'https://graph.microsoft.com/v1.0/informationProtection/bitlocker/recoveryKeys'
+    Write-Log ("Recovery keys escrowed: {0}" -f $keys.Count) 'INFO'
+
+    if (-not $keys.Count) {
+        Write-Host @'
+
+No BitLocker recovery keys were returned. Either none are escrowed, or the
+BitLockerKey.ReadBasic.All permission has not been consented. Verify in
+Entra > Devices > BitLocker keys before treating this as a finding.
+
+'@ -ForegroundColor Yellow
+    }
+
+    # Keys are per-volume, so a device can have several. Index by device id.
+    $keysByDevice = @{}
+    foreach ($k in $keys) {
+        $did = [string]$k.deviceId
+        if (-not $did) { continue }
+        if (-not $keysByDevice.ContainsKey($did)) { $keysByDevice[$did] = @() }
+        $keysByDevice[$did] += $k
+    }
+    Write-Log ("Devices with at least one key: {0}" -f $keysByDevice.Count) 'INFO'
+
+    # --- Managed Windows devices ---------------------------------------------
+    $select = @('id','azureADDeviceId','deviceName','userPrincipalName','operatingSystem','osVersion',
+                'isEncrypted','complianceState','lastSyncDateTime','managedDeviceOwnerType','model') -join ','
+    $devices = Get-GraphCollection -Uri (
+        "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?`$select=$select" +
+        "&`$filter=operatingSystem eq 'Windows'")
+    Write-Log ("Windows managed devices: {0}" -f $devices.Count) 'INFO'
+
+    $now = Get-Date
+    $matchedKeyIds = [System.Collections.Generic.HashSet[string]]::new()
+
+    $results = foreach ($d in $devices) {
+        $aadId    = [string]$d.azureADDeviceId
+        $devKeys  = if ($aadId -and $keysByDevice.ContainsKey($aadId)) { $keysByDevice[$aadId] } else { @() }
+        foreach ($k in $devKeys) { [void]$matchedKeyIds.Add([string]$k.id) }
+
+        $newest = $null
+        if ($devKeys.Count) {
+            $dates = @($devKeys | ForEach-Object { ConvertTo-LocalDate $_.createdDateTime } | Where-Object { $_ })
+            if ($dates) { $newest = ($dates | Sort-Object -Descending)[0] }
+        }
+
+        $lastSync = ConvertTo-LocalDate $d.lastSyncDateTime
+        $syncAge  = if ($lastSync) { [int]($now - $lastSync).TotalDays } else { $null }
+
+        [pscustomobject]@{
+            DeviceName      = $d.deviceName
+            User            = $d.userPrincipalName
+            Model           = $d.model
+            OsVersion       = $d.osVersion
+            Ownership       = $d.managedDeviceOwnerType
+            Encrypted       = $d.isEncrypted
+            ComplianceState = $d.complianceState
+            EscrowedKeys    = $devKeys.Count
+            NewestKeyDate   = if ($newest) { '{0:yyyy-MM-dd}' -f $newest } else { '' }
+            LastSync        = if ($lastSync) { '{0:yyyy-MM-dd}' -f $lastSync } else { 'NEVER' }
+            SyncAgeDays     = $syncAge
+            StaleSync       = ($null -eq $syncAge) -or ($syncAge -gt $StaleSyncDays)
+            AzureAdDeviceId = $aadId
+            # The finding: encrypted, and no key you can retrieve.
+            EncryptedNoKey  = ($d.isEncrypted -eq $true) -and ($devKeys.Count -eq 0)
+            # The other finding: not encrypted at all.
+            NotEncrypted    = ($d.isEncrypted -eq $false)
+        }
+    }
+
+    # Keys whose device is no longer managed — recoverable, but for what?
+    $orphanKeys = @($keys | Where-Object { -not $matchedKeyIds.Contains([string]$_.id) })
+
+    $noKey       = @($results | Where-Object EncryptedNoKey)
+    $notEnc      = @($results | Where-Object NotEncrypted)
+    $covered     = @($results | Where-Object { $_.Encrypted -eq $true -and $_.EscrowedKeys -gt 0 })
+
+    Write-Log ("Devices {0}: encrypted-with-key {1}, encrypted-no-key {2}, unencrypted {3}, orphan keys {4}." -f `
+        $results.Count, $covered.Count, $noKey.Count, $notEnc.Count, $orphanKeys.Count) 'INFO'
+
+    $results | Sort-Object @{Expression='EncryptedNoKey';Descending=$true}, DeviceName |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nRecovery coverage:" -ForegroundColor Cyan
+    [pscustomobject]@{
+        WindowsDevices      = $results.Count
+        EncryptedWithKey    = $covered.Count
+        EncryptedWithoutKey = $noKey.Count
+        NotEncrypted        = $notEnc.Count
+        CoveragePercent     = if ($results.Count) { '{0:N1}%' -f (($covered.Count / $results.Count) * 100) } else { 'n/a' }
+        OrphanedKeys        = $orphanKeys.Count
+    } | Format-List
+
+    if ($noKey) {
+        Write-Host "`nENCRYPTED WITH NO ESCROWED KEY — these cannot be recovered:" -ForegroundColor Red
+        $noKey | Format-Table DeviceName, User, Model, OsVersion, LastSync, SyncAgeDays -AutoSize
+    } else {
+        Write-Host "`nEvery encrypted device has at least one escrowed key." -ForegroundColor Green
+    }
+
+    if ($notEnc) {
+        Write-Host "`nNot encrypted:" -ForegroundColor Yellow
+        $notEnc | Format-Table DeviceName, User, Ownership, OsVersion, ComplianceState -AutoSize
+    }
+    if ($orphanKeys) {
+        Write-Host ("`n{0} escrowed key(s) belong to devices no longer in Intune." -f $orphanKeys.Count) -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} Windows device(s); {1} encrypted without a key.`nReport: {2}`nLog: {3}" -f `
+        $results.Count, $noKey.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per managed Windows device with its encryption state,
+the number of BitLocker recovery keys escrowed for it, the newest key's date,
+sync recency, and two flags — `EncryptedNoKey` and `NotEncrypted`. It also
+counts escrowed keys whose device is no longer managed.
+
+**How it works.**
+
+- **It joins two systems that are never shown together.** Intune knows whether
+  a device reports as encrypted; Entra holds the escrowed keys. Neither console
+  shows the intersection, and the intersection is the only thing that tells you
+  whether you can actually recover a machine.
+- **Matching is on `azureADDeviceId`.** The Intune `id` and the Entra device ID
+  are different identifiers; joining on the wrong one produces zero matches and
+  a report claiming nothing is escrowed.
+- **Keys are per volume, so devices are counted not keys.** A machine with
+  system and data volumes escrows two keys and is one covered device.
+- **It reads metadata only, deliberately.** `BitLockerKey.ReadBasic.All`
+  returns the key's existence, device and date — never the key value. Reading
+  values needs `BitLockerKey.Read.All` and a per-key request, which is a highly
+  privileged operation that belongs in a controlled recovery process, not in a
+  reporting script.
+- **An empty key list is called out rather than reported as a disaster.** The
+  most likely cause is an unconsented permission, not a tenant with no escrow,
+  so the script says where to verify before you raise an incident.
+- **Orphaned keys are counted.** Keys for devices no longer in Intune are
+  usually retired hardware; a large number suggests devices are being removed
+  from management without being wiped.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes
+  `DeviceManagementManagedDevices.Read.All`, `BitLockerKey.ReadBasic.All`,
+  `Device.Read.All`. The BitLocker scope requires admin consent and is **not**
+  granted by a routine Graph connection.
+- **`BitLockerKey.ReadBasic.All` cannot be used with app-only authentication**
+  in the usual way — the BitLocker endpoints are delegated-only. A scheduled
+  unattended run is not straightforward; this is designed to be run by a person.
+- `isEncrypted` from Intune reflects the **last report**, so a stale device's
+  encryption state is as old as its last sync. `SyncAgeDays` is in the output
+  for exactly this reason.
+- **Hybrid-joined devices escrowing to on-premises Active Directory will not
+  appear here.** Keys in AD are a separate store; a device showing
+  `EncryptedNoKey` may be perfectly recoverable from your domain. Check
+  `msFVE-RecoveryInformation` in AD before treating it as a finding.
+- Personally-owned devices often report encryption without escrow by design,
+  since the organisation has no claim on the key. `Ownership` is in the output
+  so those can be separated.
+
+> **Warning — Verify a recovery before you need one**
+>
+> A key existing in Entra is not the same as a key someone can retrieve under
+> pressure at 7am. Test the actual retrieval path — who has the role, where
+> they look, how it is authorised — at least once, on a device you don't mind
+> locking.

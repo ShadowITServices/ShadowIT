@@ -1,0 +1,275 @@
+---
+title: Shared Mailbox Sign-In Exposure
+sidebar_label: Shared Mailbox Exposure
+sidebar_position: 5
+description: PowerShell that finds shared mailboxes whose underlying Entra account can still sign in — unlicensed, usually passwordless to the owner, frequently excluded from MFA, and a standing route into the tenant.
+---
+
+# Shared Mailbox Sign-In Exposure
+
+Finds shared mailboxes whose underlying Entra ID account is **still enabled for
+sign-in**, cross-references their MFA registration, and ranks them by how much
+delegated access they carry. Read-only.
+
+Every shared mailbox has a real user account behind it. Microsoft's guidance is
+to keep that account blocked, and the admin centre does it when you create a
+shared mailbox through the portal — but not when a user mailbox is *converted*
+to shared, which is how most of them come into existence during offboarding.
+The result is an enabled account with a password nobody has rotated, usually no
+MFA, usually no licence, and therefore usually invisible to licence-based
+reviews.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement, Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports shared mailboxes whose underlying Entra ID account is still enabled
+    for sign-in, with MFA registration state and delegation counts.
+.DESCRIPTION
+    Joins Exchange Online shared mailboxes to their Entra accounts, reads sign-in
+    state, licence assignment, last sign-in, and registered authentication
+    methods, then counts Full Access delegates to rank exposure.
+.EXAMPLE
+    .\Get-SharedMailboxExposure.ps1 -Verbose
+.NOTES
+    Required: Exchange View-Only Recipients, plus Graph scopes
+    User.Read.All, AuditLog.Read.All, UserAuthenticationMethod.Read.All.
+    Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [switch]$SkipAuthMethods,
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\SharedMailboxExposure.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("SharedMailboxExposure_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# Methods that constitute a real second factor. SMS and voice are registered
+# methods but are phishable, so they are counted separately.
+$StrongMethod = @(
+    '#microsoft.graph.fido2AuthenticationMethod',
+    '#microsoft.graph.microsoftAuthenticatorAuthenticationMethod',
+    '#microsoft.graph.windowsHelloForBusinessAuthenticationMethod',
+    '#microsoft.graph.softwareOathAuthenticationMethod',
+    '#microsoft.graph.passwordlessMicrosoftAuthenticatorAuthenticationMethod'
+)
+$WeakMethod = @(
+    '#microsoft.graph.phoneAuthenticationMethod',
+    '#microsoft.graph.emailAuthenticationMethod'
+)
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting shared mailbox sign-in exposure report.' 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false }
+        else                    { Connect-ExchangeOnline -ShowBanner:$false }
+    }
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        $scopes = @('User.Read.All','AuditLog.Read.All')
+        if (-not $SkipAuthMethods) { $scopes += 'UserAuthenticationMethod.Read.All' }
+        Connect-MgGraph -Scopes $scopes -NoWelcome
+    }
+
+    Write-Log 'Enumerating shared mailboxes.' 'DEBUG'
+    $shared = @(Get-EXOMailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited -Properties WhenMailboxCreated)
+    Write-Log ("Shared mailboxes: {0}" -f $shared.Count) 'INFO'
+    if (-not $shared) {
+        Write-Host "`nNo shared mailboxes in this tenant." -ForegroundColor Green
+        return
+    }
+
+    # Entra accounts for those mailboxes. One paged call beats one per mailbox.
+    Write-Log 'Indexing Entra accounts.' 'DEBUG'
+    $userIndex = @{}
+    $next = 'https://graph.microsoft.com/v1.0/users' +
+            '?$select=id,userPrincipalName,accountEnabled,assignedLicenses,signInActivity,createdDateTime&$top=999'
+    do {
+        $page = Invoke-MgGraphRequest -Method GET -Uri $next
+        foreach ($u in $page.value) {
+            if ($u.userPrincipalName) { $userIndex[$u.userPrincipalName.ToLowerInvariant()] = $u }
+        }
+        $next = $page.'@odata.nextLink'
+    } while ($next)
+    Write-Log ("Entra accounts indexed: {0}" -f $userIndex.Count) 'INFO'
+
+    $i = 0
+    $results = foreach ($mbx in $shared) {
+        $i++
+        Write-Progress -Activity 'Assessing shared mailboxes' -Status $mbx.UserPrincipalName `
+                       -PercentComplete (($i / $shared.Count) * 100)
+
+        $upn  = [string]$mbx.UserPrincipalName
+        $user = $userIndex[$upn.ToLowerInvariant()]
+
+        # Delegation count — how much is reachable if the account is taken.
+        $delegates = 0
+        try {
+            $delegates = @(Get-EXOMailboxPermission -Identity $mbx.Identity -ErrorAction Stop |
+                Where-Object { $_.User -notlike 'NT AUTHORITY\*' -and -not $_.IsInherited }).Count
+        } catch { Write-Log ("Permissions unreadable for {0}: {1}" -f $upn, $_.Exception.Message) 'WARN' }
+
+        # Authentication methods, only for accounts that can actually sign in.
+        $strong = 0; $weak = 0; $methodNote = 'NotChecked'
+        if (-not $SkipAuthMethods -and $user -and $user.accountEnabled) {
+            try {
+                $m = Invoke-MgGraphRequest -Method GET -Uri (
+                    'https://graph.microsoft.com/v1.0/users/{0}/authentication/methods' -f $user.id)
+                $types  = @($m.value | ForEach-Object { $_.'@odata.type' })
+                $strong = @($types | Where-Object { $StrongMethod -contains $_ }).Count
+                $weak   = @($types | Where-Object { $WeakMethod   -contains $_ }).Count
+                $methodNote = if ($strong) { 'Strong' } elseif ($weak) { 'WeakOnly' } else { 'PasswordOnly' }
+            }
+            catch {
+                Write-Log ("Auth methods unreadable for {0}: {1}" -f $upn, $_.Exception.Message) 'WARN'
+                $methodNote = 'Unreadable'
+            }
+        }
+
+        $lastSignIn = $null
+        if ($user.signInActivity.lastSignInDateTime) {
+            $parsed = [datetime]::MinValue
+            if ([datetime]::TryParse([string]$user.signInActivity.lastSignInDateTime, [ref]$parsed)) { $lastSignIn = $parsed }
+        }
+
+        $enabled = if ($user) { [bool]$user.accountEnabled } else { $null }
+
+        [pscustomobject]@{
+            Mailbox         = $upn
+            DisplayName     = $mbx.DisplayName
+            AccountFound    = [bool]$user
+            SignInEnabled   = $enabled
+            Licensed        = if ($user) { @($user.assignedLicenses).Count -gt 0 } else { $null }
+            AuthMethods     = $methodNote
+            StrongMethods   = $strong
+            WeakMethods     = $weak
+            LastInteractiveSignIn = if ($lastSignIn) { '{0:yyyy-MM-dd}' -f $lastSignIn } else { 'NEVER' }
+            FullAccessDelegates   = $delegates
+            MailboxCreated  = if ($mbx.WhenMailboxCreated) { '{0:yyyy-MM-dd}' -f $mbx.WhenMailboxCreated } else { '' }
+            # The whole point: an enabled shared-mailbox account with no strong
+            # authentication is a credential-stuffing target with a mailbox
+            # attached and, often, several other mailboxes delegated to it.
+            Exposed         = ($enabled -eq $true) -and ($strong -eq 0)
+            HasSignedIn     = [bool]$lastSignIn
+        }
+    }
+    Write-Progress -Activity 'Assessing shared mailboxes' -Completed
+
+    $enabledMbx = @($results | Where-Object { $_.SignInEnabled -eq $true })
+    $exposed    = @($results | Where-Object Exposed)
+    $signedIn   = @($enabledMbx | Where-Object HasSignedIn)
+
+    Write-Log ("Shared mailboxes {0}; sign-in enabled {1}; exposed {2}; have signed in {3}." -f `
+        $results.Count, $enabledMbx.Count, $exposed.Count, $signedIn.Count) 'INFO'
+
+    $results | Sort-Object @{Expression='Exposed';Descending=$true}, FullAccessDelegates -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($exposed) {
+        Write-Host "`nShared mailboxes that can sign in with no strong authentication:" -ForegroundColor Red
+        $exposed | Format-Table Mailbox, Licensed, AuthMethods, LastInteractiveSignIn, FullAccessDelegates -AutoSize
+    } else {
+        Write-Host "`nNo shared mailbox account is both enabled and without strong authentication." -ForegroundColor Green
+    }
+
+    if ($signedIn) {
+        Write-Host "`nShared mailbox accounts with recorded interactive sign-ins — investigate each:" -ForegroundColor Yellow
+        $signedIn | Format-Table Mailbox, LastInteractiveSignIn, AuthMethods -AutoSize
+    }
+
+    Write-Host ("`n{0} shared mailbox(es); {1} sign-in enabled, {2} exposed.`nReport: {3}`nLog: {4}" -f `
+        $results.Count, $enabledMbx.Count, $exposed.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per shared mailbox: whether its Entra account exists
+and can sign in, whether it's licensed, what authentication methods are
+registered, when it last signed in interactively, and how many Full Access
+delegates it has. Then it names the exposed ones.
+
+**How it works.**
+
+- **It joins two systems, because neither knows the answer alone.** Exchange
+  knows which mailboxes are shared; Entra knows which accounts can sign in.
+  The exposure only exists at the intersection, and no single admin centre
+  shows it.
+- **Authentication methods are classified, not counted.** A registered phone
+  number is a method but a phishable one, so `WeakOnly` is reported separately
+  from `Strong` and from `PasswordOnly`. `Exposed` requires *zero* strong
+  methods — a shared mailbox with Authenticator registered is a deliberate
+  service account, not an oversight.
+- **Methods are only fetched for enabled accounts.** A blocked account's
+  registration doesn't matter and the call costs a round trip each.
+- **`LastInteractiveSignIn` is the alarming column.** A shared mailbox account
+  that has *never* signed in is the normal case. One that has is either an
+  undocumented service account or something to investigate today.
+- **Delegate count ranks the blast radius.** A compromised shared mailbox
+  account inherits every mailbox delegated to it, so the row with twelve
+  delegates matters more than the one with none.
+- **Unlicensed is not safe.** Shared mailboxes under 50 GB need no licence, so
+  these accounts are routinely absent from licence-driven reviews while
+  remaining fully able to authenticate.
+
+**Prerequisites & caveats.**
+
+- Modules `ExchangeOnlineManagement` and `Microsoft.Graph.Authentication`;
+  Exchange **View-Only Recipients** plus Graph `User.Read.All`,
+  `AuditLog.Read.All`, and `UserAuthenticationMethod.Read.All`.
+- **`signInActivity` requires Entra ID P1 or P2.** Without it the field is
+  absent and every mailbox reads `NEVER`, which looks reassuring and means
+  nothing. Check your licensing before trusting that column.
+- Sign-in state is only half the control. An enabled account blocked by a
+  Conditional Access policy is not reachable in practice — this script does not
+  evaluate CA, so cross-reference with the
+  [Conditional Access inventory](/docs/script-repository/microsoft-365/entra/conditional-access-inventory)
+  before concluding a mailbox is genuinely exposed.
+- Some shared mailboxes are *meant* to sign in: application mailboxes, scan-to-
+  email destinations, and ticketing integrations. The report cannot tell those
+  apart from oversights, which is why `AuthMethods` and delegate counts are
+  there — so you can.
+
+> **Note — Blocking sign-in is the fix, and it is safe**
+>
+> Blocking sign-in on a shared mailbox account does not affect delegated access:
+> users open it through their own credentials. The exception is anything that
+> authenticates *as* the mailbox, so check `LastInteractiveSignIn` before
+> blocking, and make the change out of hours on anything with a recorded
+> sign-in.

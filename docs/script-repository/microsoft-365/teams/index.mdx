@@ -1,0 +1,40 @@
+---
+title: Teams
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for Microsoft Teams administration — ownership and guest governance, inactive team detection, policy assignment audit, and external access configuration.
+---
+
+# Teams
+
+PowerShell for administering Microsoft Teams. Most scripts here use the
+`MicrosoftTeams` module; the activity report uses Microsoft Graph (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
+
+## Scripts
+
+- **[Ownership and Guest Governance](./ownership-and-guest-governance)** —
+  teams nobody owns, teams one resignation from nobody owning them, and who
+  the guests are.
+- **[Inactive Teams Report](./inactive-teams-report)** — teams with no
+  messages, meetings or file activity, measured rather than guessed.
+- **[Policy Assignment Audit](./policy-assignment-audit)** — which users hold
+  which meeting, messaging and calling policies, and who is on the Global
+  default by accident.
+- **[External Access Configuration](./external-access-configuration)** — who
+  the tenant federates with, and what guests are allowed to do once they're in.
+
+## The order worth running them in
+
+**Ownership** first: it is the governance problem that blocks every other fix,
+because a team nobody owns cannot have its membership corrected.
+**Inactive** second, to know which of those teams anyone would miss.
+**External access** is tenant-wide configuration rather than per-team, and it
+determines whether the guest findings in the first report were ever possible —
+worth reading before you start removing people.
+
+> **Tip — `Get-Team` is slow before it is anything else**
+>
+> Enumerating every team in a large tenant takes a noticeable while and
+> produces no output until it finishes. The scripts log before and after the
+> call so a long silence is identifiable rather than alarming.

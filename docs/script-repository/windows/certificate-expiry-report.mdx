@@ -1,0 +1,293 @@
+---
+title: Certificate Expiry Report
+sidebar_label: Certificate Expiry
+sidebar_position: 6
+description: PowerShell that reports expiring certificates in the machine stores across servers, identifies which are actually bound to an IIS site or service, and separates the ones that will cause an outage from the ones nobody will notice.
+---
+
+# Certificate Expiry Report
+
+Reports certificates in the local machine stores across one or more servers,
+ranks them by days remaining, and identifies which are **actually bound** to an
+IIS binding — so the ones that will cause an outage are separable from the
+hundreds that will not. Read-only.
+
+Certificate expiry is the most predictable outage in IT and still one of the
+most common. The reason is never that nobody knew certificates expire; it is
+that a typical server holds a hundred and fifty of them, almost all irrelevant,
+and the one that matters is indistinguishable in a list sorted by name.
+
+## Script
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Reports expiring certificates across Windows hosts, flagging those bound to
+    IIS sites.
+.DESCRIPTION
+    Enumerates LocalMachine\My (and optionally other stores), computes days to
+    expiry, reads IIS HTTPS bindings where the WebAdministration module is
+    present, and separates bound certificates from unbound ones.
+.EXAMPLE
+    .\Get-CertificateExpiry.ps1 -ComputerName WEB01,WEB02 -WarnDays 45 -Verbose
+.NOTES
+    Requires local administrator rights on each target, and WinRM for remote
+    hosts. Read-only — reads certificate METADATA, never private keys.
+#>
+
+[CmdletBinding()]
+param(
+    [string[]]$ComputerName = $env:COMPUTERNAME,
+
+    [int]$WarnDays = 45,
+
+    # Additional LocalMachine stores to include. 'My' is always read.
+    [string[]]$AdditionalStore = @(),
+
+    # Include certificates that have already expired.
+    [switch]$IncludeExpired,
+
+    [pscredential]$Credential,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\CertificateExpiry.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("CertificateExpiry_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- Remote payload -----------------------------------------------------------
+$CertProbe = {
+    param([string[]]$Stores, [bool]$WantExpired)
+
+    # IIS bindings tell us which certificates are load-bearing. The module is
+    # absent on non-web servers, which is normal.
+    $boundThumbprints = @{}
+    try {
+        Import-Module WebAdministration -ErrorAction Stop
+        foreach ($site in (Get-ChildItem IIS:\Sites -ErrorAction Stop)) {
+            foreach ($b in $site.Bindings.Collection) {
+                if ($b.protocol -ne 'https' -or -not $b.certificateHash) { continue }
+                $tp = ($b.certificateHash | ForEach-Object { $_.ToString('X2') }) -join ''
+                if (-not $boundThumbprints.ContainsKey($tp)) { $boundThumbprints[$tp] = @() }
+                $boundThumbprints[$tp] += ("{0} [{1}]" -f $site.Name, $b.bindingInformation)
+            }
+        }
+    } catch { }
+
+    $now = Get-Date
+    foreach ($storeName in $Stores) {
+        $path = "Cert:\LocalMachine\$storeName"
+        if (-not (Test-Path $path)) { continue }
+
+        foreach ($c in (Get-ChildItem -Path $path -ErrorAction SilentlyContinue)) {
+            $days = [int]($c.NotAfter - $now).TotalDays
+            if (-not $WantExpired -and $days -lt 0) { continue }
+
+            $tp    = $c.Thumbprint
+            $bound = $boundThumbprints.ContainsKey($tp)
+
+            # Subject Alternative Names, where present — the names the
+            # certificate actually serves.
+            $sans = ''
+            try {
+                $ext = $c.Extensions | Where-Object { $_.Oid.FriendlyName -eq 'Subject Alternative Name' }
+                if ($ext) { $sans = ($ext.Format($false) -replace 'DNS Name=', '' -replace ', ', '; ') }
+            } catch { }
+
+            [pscustomobject]@{
+                Store          = $storeName
+                Subject        = $c.Subject
+                FriendlyName   = $c.FriendlyName
+                Issuer         = $c.Issuer
+                NotBefore      = $c.NotBefore
+                NotAfter       = $c.NotAfter
+                DaysRemaining  = $days
+                Thumbprint     = $tp
+                HasPrivateKey  = $c.HasPrivateKey
+                SelfSigned     = ($c.Subject -eq $c.Issuer)
+                SubjectAltNames= $sans
+                IisBindings    = if ($bound) { ($boundThumbprints[$tp] -join '; ') } else { '' }
+                IsBound        = $bound
+            }
+        }
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $stores = @('My') + @($AdditionalStore) | Select-Object -Unique
+    Write-Log ("Starting certificate expiry report. WarnDays={0}, stores={1}." -f `
+        $WarnDays, ($stores -join ',')) 'INFO'
+
+    $results = foreach ($computer in $ComputerName) {
+        Write-Log ("Querying {0}." -f $computer) 'DEBUG'
+        try {
+            $invoke = @{
+                ScriptBlock  = $CertProbe
+                ArgumentList = @($stores, [bool]$IncludeExpired)
+                ErrorAction  = 'Stop'
+            }
+            if ($computer -ne $env:COMPUTERNAME -and $computer -ne 'localhost') {
+                $invoke['ComputerName'] = $computer
+                if ($Credential) { $invoke['Credential'] = $Credential }
+            }
+
+            foreach ($c in @(Invoke-Command @invoke)) {
+                [pscustomobject]@{
+                    ComputerName    = $computer
+                    Status          = 'OK'
+                    Store           = $c.Store
+                    Subject         = $c.Subject
+                    FriendlyName    = $c.FriendlyName
+                    Issuer          = $c.Issuer
+                    NotAfter        = '{0:yyyy-MM-dd}' -f $c.NotAfter
+                    DaysRemaining   = $c.DaysRemaining
+                    Expired         = ($c.DaysRemaining -lt 0)
+                    ExpiringSoon    = ($c.DaysRemaining -ge 0 -and $c.DaysRemaining -le $WarnDays)
+                    Thumbprint      = $c.Thumbprint
+                    HasPrivateKey   = $c.HasPrivateKey
+                    SelfSigned      = $c.SelfSigned
+                    SubjectAltNames = $c.SubjectAltNames
+                    IisBindings     = $c.IisBindings
+                    IsBound         = $c.IsBound
+                    # Bound to a live site and running out: this is the outage.
+                    Critical        = $c.IsBound -and ($c.DaysRemaining -le $WarnDays)
+                }
+            }
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $computer, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                ComputerName = $computer; Status = 'Error'
+                Store = ''; Subject = ''; FriendlyName = ''; Issuer = ''
+                NotAfter = ''; DaysRemaining = $null; Expired = $null; ExpiringSoon = $null
+                Thumbprint = ''; HasPrivateKey = $null; SelfSigned = $null
+                SubjectAltNames = ''; IisBindings = ''; IsBound = $null; Critical = $null
+            }
+        }
+    }
+
+    $ok       = @($results | Where-Object Status -eq 'OK')
+    $critical = @($ok | Where-Object Critical)
+    $soon     = @($ok | Where-Object ExpiringSoon)
+    $expired  = @($ok | Where-Object Expired)
+    $bound    = @($ok | Where-Object IsBound)
+
+    Write-Log ("Certificates {0}: bound {1}, expiring soon {2}, critical {3}, expired {4}." -f `
+        $ok.Count, $bound.Count, $soon.Count, $critical.Count, $expired.Count) 'INFO'
+
+    $results | Sort-Object @{Expression='Critical';Descending=$true},
+                           @{Expression={ if ($null -eq $_.DaysRemaining) { 99999 } else { $_.DaysRemaining } }} |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($critical) {
+        Write-Host ("`nBOUND TO A SITE and expiring within {0} days — these cause outages:" -f $WarnDays) -ForegroundColor Red
+        $critical | Sort-Object DaysRemaining |
+            Format-Table ComputerName, Subject, NotAfter, DaysRemaining, IisBindings -AutoSize -Wrap
+    }
+    if ($soon) {
+        Write-Host ("`nAll certificates expiring within {0} days:" -f $WarnDays) -ForegroundColor Yellow
+        $soon | Sort-Object DaysRemaining |
+            Format-Table ComputerName, Subject, Issuer, NotAfter, DaysRemaining, IsBound, SelfSigned -AutoSize -Wrap
+    }
+    if ($expired) {
+        Write-Host ("`n{0} certificate(s) have already expired." -f $expired.Count) -ForegroundColor Yellow
+    }
+    if (-not $soon -and -not $critical) {
+        Write-Host ("`nNothing expires within {0} days." -f $WarnDays) -ForegroundColor Green
+    }
+
+    if ($bound) {
+        Write-Host "`nAll IIS-bound certificates:" -ForegroundColor Cyan
+        $bound | Sort-Object DaysRemaining |
+            Format-Table ComputerName, Subject, NotAfter, DaysRemaining, IisBindings -AutoSize -Wrap
+    }
+
+    Write-Host ("`n{0} certificate(s) across {1} host(s); {2} critical.`nReport: {3}`nLog: {4}" -f `
+        $ok.Count, $ComputerName.Count, $critical.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per certificate per host with subject, issuer,
+expiry, days remaining, subject alternative names, whether it has a private
+key, whether it's self-signed, and — the important column — which IIS bindings
+use it.
+
+**How it works.**
+
+- **`IsBound` is what makes the report usable.** A web server holds well over a
+  hundred certificates in `LocalMachine\My` once you include intermediate CAs
+  and old renewals. Perhaps three serve traffic. Sorting by expiry date without
+  that column produces a list nobody reads twice.
+- **Binding thumbprints are reconstructed from bytes.** IIS stores
+  `certificateHash` as a byte array, not a string, so each byte is formatted as
+  two hex digits and joined — comparing the raw array against the certificate's
+  `Thumbprint` string never matches.
+- **`Critical` is the intersection**: bound *and* inside the warning window.
+  That list is normally short enough to act on this afternoon.
+- **Subject alternative names are extracted.** The subject CN is frequently
+  not the name the site is actually served under, and a SAN certificate
+  covering six hostnames is six outages, not one.
+- **`SelfSigned` is reported, not filtered.** Self-signed certificates on
+  internal services are legitimate and are also the ones nobody has a renewal
+  process for.
+- **The IIS module failing is expected**, not an error. A database or file
+  server has no bindings; the script simply reports every certificate as
+  unbound there.
+
+**Prerequisites & caveats.**
+
+- PowerShell 5.1+, local administrator on each target, WinRM for remote hosts.
+  Reading `Cert:\LocalMachine` requires elevation.
+- **IIS bindings are not the only thing that uses a certificate.** SQL Server,
+  RDS, WinRM over HTTPS, LDAPS on a domain controller, and any application
+  reading a thumbprint from its own configuration all bind certificates
+  invisibly to this script. An unbound certificate is *probably* unused — it is
+  not proof.
+- `http.sys` bindings outside IIS (`netsh http show sslcert`) are a separate
+  store of bindings and are not read here. On a server running a .NET service
+  that self-hosts HTTPS, that is where the binding lives.
+- Only `LocalMachine` stores are read. Certificates in a service account's user
+  store, or on a hardware module, are out of scope.
+- **This reads metadata only.** Private keys are never touched, exported, or
+  reported on beyond whether one is present.
+- Certificates issued by a public CA with short lifetimes now renew on cycles
+  measured in weeks. A 45-day warning window that was generous for a two-year
+  certificate is tight for a 90-day one — set `-WarnDays` to match your
+  shortest-lived issuer.
+
+> **Tip — Run it weekly against the servers that matter**
+>
+> The critical list is normally empty, which takes a second to confirm, and the
+> one week it isn't is the week it saves you. A monthly cadence can miss a
+> 90-day certificate's entire warning window.

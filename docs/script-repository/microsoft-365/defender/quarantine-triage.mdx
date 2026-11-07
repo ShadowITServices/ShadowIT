@@ -1,0 +1,278 @@
+---
+title: Quarantine Triage
+sidebar_label: Quarantine Triage
+sidebar_position: 5
+description: PowerShell that summarises the Defender quarantine by verdict, sender domain and recipient, surfacing repeat senders, high-confidence phishing aimed at specific people, and messages about to expire unreviewed.
+---
+
+# Quarantine Triage
+
+Summarises the quarantine by verdict, sender domain and recipient; surfaces
+senders who appear repeatedly, high-confidence phishing aimed at specific
+people, and messages about to expire without anyone having looked at them.
+Read-only.
+
+Quarantine is treated as a bin. It is actually the highest-signal dataset in
+the tenant: a record of every message your filtering decided was an attack,
+with who it was aimed at. A campaign targeting four people in finance is
+obvious in aggregate and invisible one release request at a time.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Summarises Exchange Online quarantine contents by verdict, sender and
+    recipient, highlighting targeted campaigns and expiring messages.
+.DESCRIPTION
+    Pages quarantined messages over a date range, groups them by type, sender
+    domain and recipient, and flags repeat senders, high-confidence phishing,
+    and messages close to automatic deletion.
+.EXAMPLE
+    .\Get-QuarantineTriage.ps1 -Days 7 -Verbose
+.NOTES
+    Required role: Security Reader or Quarantine Administrator. Read-only —
+    reports only, never releases or deletes.
+#>
+
+[CmdletBinding()]
+param(
+    [ValidateRange(1, 30)]
+    [int]$Days = 7,
+
+    # A sender domain appearing at least this often is treated as a campaign.
+    [int]$CampaignThreshold = 3,
+
+    # Messages expiring within this many days are flagged for review.
+    [int]$ExpiryWarnDays = 3,
+
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\QuarantineTriage.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("QuarantineTriage_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-SenderDomain {
+    [CmdletBinding()]
+    param([AllowNull()][string]$Address)
+    if ([string]::IsNullOrWhiteSpace($Address) -or $Address -notmatch '@') { return '(none)' }
+    ($Address -split '@')[-1].ToLowerInvariant()
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $start = (Get-Date).AddDays(-$Days)
+    $end   = Get-Date
+    Write-Log ("Starting quarantine triage {0:yyyy-MM-dd} to {1:yyyy-MM-dd}." -f $start, $end) 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false }
+        else                    { Connect-ExchangeOnline -ShowBanner:$false }
+    }
+
+    # --- Page the quarantine --------------------------------------------------
+    # Get-QuarantineMessage is paged by page number, not by a continuation
+    # token, and silently stops rather than erroring past the end.
+    $messages = [System.Collections.Generic.List[object]]::new()
+    $page = 1
+    $pageSize = 1000
+    do {
+        $batch = @(Get-QuarantineMessage -StartReceivedDate $start -EndReceivedDate $end `
+                    -PageSize $pageSize -Page $page -ErrorAction Stop)
+        if ($batch.Count) { $messages.AddRange($batch) }
+        Write-Log ("Page {0}: {1} message(s), running {2}." -f $page, $batch.Count, $messages.Count) 'DEBUG'
+        $page++
+    } while ($batch.Count -eq $pageSize -and $page -le 100)   # 100-page ceiling as a safety rail.
+
+    Write-Log ("Quarantined messages retrieved: {0}" -f $messages.Count) 'INFO'
+    if (-not $messages.Count) {
+        Write-Host ("`nNothing in quarantine for the last {0} day(s)." -f $Days) -ForegroundColor Green
+        return
+    }
+
+    $now = Get-Date
+
+    $rows = foreach ($m in $messages) {
+        $expires = $null
+        if ($m.Expires) {
+            $p = [datetime]::MinValue
+            if ([datetime]::TryParse([string]$m.Expires, [ref]$p)) { $expires = $p }
+        }
+        $daysToExpiry = if ($expires) { [int]($expires - $now).TotalDays } else { $null }
+
+        [pscustomobject]@{
+            Received       = $m.ReceivedTime
+            Sender         = $m.SenderAddress
+            SenderDomain   = Get-SenderDomain -Address $m.SenderAddress
+            Recipient      = (@($m.RecipientAddress) -join '; ')
+            Subject        = $m.Subject
+            QuarantineType = $m.QuarantineTypes       # Phish | HighConfPhish | Spam | Malware | ...
+            PolicyType     = $m.PolicyType
+            PolicyName     = $m.PolicyName
+            Released       = $m.Released
+            ReleaseStatus  = $m.ReleaseStatus
+            Reported       = $m.Reported
+            Expires        = if ($expires) { '{0:yyyy-MM-dd}' -f $expires } else { '' }
+            DaysToExpiry   = $daysToExpiry
+            MessageId      = $m.MessageId
+            Identity       = $m.Identity
+            # The highest-signal rows: phishing the filter was certain about.
+            IsHighConfPhish = ($m.QuarantineTypes -match 'HighConf')
+            IsMalware       = ($m.QuarantineTypes -match 'Malware')
+            ExpiringSoon    = ($null -ne $daysToExpiry) -and ($daysToExpiry -le $ExpiryWarnDays) -and (-not $m.Released)
+        }
+    }
+
+    # --- Campaign detection ---------------------------------------------------
+    $byDomain = $rows | Group-Object SenderDomain | Where-Object { $_.Count -ge $CampaignThreshold }
+    $campaigns = foreach ($g in $byDomain) {
+        $recips = @($g.Group.Recipient | ForEach-Object { $_ -split ';\s*' } | Where-Object { $_ } | Sort-Object -Unique)
+        [pscustomobject]@{
+            SenderDomain   = $g.Name
+            Messages       = $g.Count
+            DistinctSenders= @($g.Group.Sender | Sort-Object -Unique).Count
+            Recipients     = $recips.Count
+            RecipientList  = ($recips | Select-Object -First 10) -join '; '
+            Verdicts       = (@($g.Group.QuarantineType | Sort-Object -Unique) -join '; ')
+            FirstSeen      = ($g.Group.Received | Sort-Object | Select-Object -First 1)
+            LastSeen       = ($g.Group.Received | Sort-Object -Descending | Select-Object -First 1)
+            # Many messages at few people is targeting; many at many is bulk.
+            LooksTargeted  = ($recips.Count -le 5) -and ($g.Count -ge $CampaignThreshold)
+        }
+    }
+    $campaigns = @($campaigns | Sort-Object Messages -Descending)
+
+    $highConf = @($rows | Where-Object IsHighConfPhish)
+    $malware  = @($rows | Where-Object IsMalware)
+    $expiring = @($rows | Where-Object ExpiringSoon)
+    $released = @($rows | Where-Object { $_.Released -eq $true })
+
+    Write-Log ("Messages {0}: high-conf phish {1}, malware {2}, expiring {3}, released {4}, campaigns {5}." -f `
+        $rows.Count, $highConf.Count, $malware.Count, $expiring.Count, $released.Count, $campaigns.Count) 'INFO'
+
+    $rows | Sort-Object Received -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host ("`nQuarantine over the last {0} day(s): {1} message(s)" -f $Days, $rows.Count) -ForegroundColor Cyan
+    $rows | Group-Object QuarantineType | Sort-Object Count -Descending |
+        Select-Object @{N='Verdict';E={$_.Name}}, Count | Format-Table -AutoSize
+
+    Write-Host "`nMost-targeted recipients:" -ForegroundColor Cyan
+    $rows | ForEach-Object { $_.Recipient -split ';\s*' } | Where-Object { $_ } |
+        Group-Object | Sort-Object Count -Descending | Select-Object -First 10 `
+        @{N='Recipient';E={$_.Name}}, Count | Format-Table -AutoSize
+
+    $targeted = @($campaigns | Where-Object LooksTargeted)
+    if ($targeted) {
+        Write-Host "`nLooks targeted — repeated mail from one domain at a handful of people:" -ForegroundColor Red
+        $targeted | Format-Table SenderDomain, Messages, Recipients, RecipientList, Verdicts, LastSeen -AutoSize -Wrap
+    }
+    if ($campaigns) {
+        Write-Host "`nSender domains sending repeatedly:" -ForegroundColor Yellow
+        $campaigns | Select-Object -First 15 |
+            Format-Table SenderDomain, Messages, DistinctSenders, Recipients, Verdicts -AutoSize
+    }
+    if ($malware) {
+        Write-Host ("`n{0} malware message(s) quarantined." -f $malware.Count) -ForegroundColor Yellow
+    }
+    if ($expiring) {
+        Write-Host ("`n{0} message(s) expire within {1} day(s) and have not been released:" -f `
+            $expiring.Count, $ExpiryWarnDays) -ForegroundColor Yellow
+        $expiring | Select-Object -First 15 | Format-Table Received, Sender, Recipient, Subject, Expires -AutoSize -Wrap
+    }
+    if ($released) {
+        Write-Host "`nReleased from quarantine — each one was judged safe by somebody:" -ForegroundColor Cyan
+        $released | Format-Table Received, Sender, Recipient, Subject, QuarantineType -AutoSize -Wrap
+    }
+
+    Write-Host ("`n{0} message(s); {1} high-confidence phish; {2} campaign(s).`nReport: {3}`nLog: {4}" -f `
+        $rows.Count, $highConf.Count, $campaigns.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** A CSV of every quarantined message in the window with sender,
+recipient, verdict, policy, release state and expiry — plus console summaries
+by verdict, most-targeted recipient, and sender domains sending repeatedly,
+with apparent targeting called out separately from bulk.
+
+**How it works.**
+
+- **`LooksTargeted` is the whole point.** Many messages from one domain to
+  *many* recipients is ordinary bulk spam. The same volume aimed at three or
+  four named people is a campaign against those people, and that distinction is
+  invisible in the portal's message-by-message view.
+- **Paging is by page number, not continuation token.**
+  `Get-QuarantineMessage` takes `-Page` and `-PageSize`, returns fewer than a
+  full page when it runs out, and does not error past the end. The loop stops
+  on a short page and carries a 100-page ceiling so a misbehaving tenant
+  cannot spin forever.
+- **Expiry is tracked.** Quarantined messages are deleted automatically after
+  the retention period, so anything approaching it that nobody has released or
+  reviewed is a decision about to be made by default.
+- **Released messages are listed explicitly.** Each one is a human overriding
+  the filter. During an incident that list is the first place to look.
+- **Recipients are split before counting.** A message to four people is four
+  rows in the targeting summary, because the question is "who is being aimed
+  at", not "how many messages exist".
+- **It never releases or deletes.** Quarantine actions belong in a reviewed
+  process with an audit trail, not in a reporting script.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`; **Security Reader** or Quarantine
+  Administrator.
+- **The default quarantine retention is 30 days**, which is why `-Days` is
+  capped there. Anything older is gone and only the
+  [audit log](/docs/script-repository/microsoft-365/purview/unified-audit-log-export)
+  will tell you it existed.
+- `QuarantineTypes` values vary by what caught the message
+  (`Spam`, `Phish`, `HighConfPhish`, `Malware`, `SPOMalware`, bulk, and
+  transport-rule quarantines). The `IsHighConfPhish` match is deliberately
+  loose for that reason.
+- A large quarantine makes this slow — 1,000 messages per page and one call
+  per page. Narrow `-Days` before widening it.
+- **Quarantine is not a complete record of blocked mail.** Messages rejected at
+  the edge never reach it. For the full picture use message trace or
+  Threat Explorer.
+- `Reported` indicates a user submission to Microsoft, which is a useful signal
+  that someone noticed — but it is not a verdict.
+
+> **Warning — Treat targeting as an incident, not a report line**
+>
+> Repeated high-confidence phishing aimed at a handful of named people,
+> especially finance or executive staff, is an active campaign. Check those
+> recipients' sign-in logs and
+> [mailbox rules](/docs/script-repository/microsoft-365/exchange-online/mailbox-delegation-and-forwarding)
+> before you close the report.

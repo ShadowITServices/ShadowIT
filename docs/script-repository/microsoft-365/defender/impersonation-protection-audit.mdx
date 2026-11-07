@@ -1,0 +1,314 @@
+---
+title: Impersonation Protection Audit
+sidebar_label: Impersonation Protection
+sidebar_position: 4
+description: PowerShell that checks which executives and domains are named in Defender anti-phishing impersonation protection, and cross-references directory role holders to find the people who should be protected and are not.
+---
+
+# Impersonation Protection Audit
+
+Reports which users and domains are named in anti-phishing impersonation
+protection, checks mailbox intelligence and spoof settings, and
+cross-references Entra ID to find the people who **should** be protected and
+are not. Read-only.
+
+Impersonation protection is the one email control that works from a list of
+names, which means it goes stale the moment anybody joins or leaves the
+leadership team. It also has a hard cap — 350 protected users per policy — and
+it is routinely configured once during onboarding with the executives of the
+day and never touched again.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement, Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Audits Defender for Office 365 impersonation protection coverage against
+    the people who most need it.
+.DESCRIPTION
+    Reads anti-phishing policies for protected users and domains, mailbox
+    intelligence and spoof settings, then compares the protected-user list
+    against Entra directory role holders to identify gaps.
+.EXAMPLE
+    .\Get-ImpersonationAudit.ps1 -Verbose
+.NOTES
+    Required: Exchange View-Only Organization Management, plus Graph
+    RoleManagement.Read.Directory and User.Read.All. Read-only.
+    Impersonation protection requires Defender for Office 365 P1 or P2.
+#>
+
+[CmdletBinding()]
+param(
+    # Extra people who should always be protected, beyond role holders.
+    [string[]]$ShouldProtect = @(),
+
+    [switch]$SkipDirectoryCheck,
+
+    [string]$UserPrincipalName,
+    [string]$LogDir      = 'C:\Temp',
+    [string]$PolicyCsv   = 'C:\Temp\ImpersonationPolicies.csv',
+    [string]$GapCsv      = 'C:\Temp\ImpersonationGaps.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("ImpersonationAudit_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# Roles whose holders are worth impersonating. Not an exhaustive list of
+# privilege — a list of people an attacker would pretend to be.
+$HighValueRole = @(
+    'Global Administrator','Privileged Role Administrator','Security Administrator',
+    'Exchange Administrator','User Administrator','Billing Administrator',
+    'Helpdesk Administrator','Privileged Authentication Administrator'
+)
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting impersonation protection audit.' 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false }
+        else                    { Connect-ExchangeOnline -ShowBanner:$false }
+    }
+
+    # --- Anti-phishing policies ----------------------------------------------
+    $policies = @()
+    try { $policies = @(Get-AntiPhishPolicy -ErrorAction Stop) }
+    catch { throw ("Anti-phishing policies unreadable: {0}" -f $_.Exception.Message) }
+    Write-Log ("Anti-phishing policies: {0}" -f $policies.Count) 'INFO'
+
+    $rules = @()
+    try { $rules = @(Get-AntiPhishRule -ErrorAction Stop) }
+    catch { Write-Log ("Anti-phishing rules unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    $acceptedDomains = @()
+    try { $acceptedDomains = @(Get-AcceptedDomain | Select-Object -ExpandProperty DomainName) }
+    catch { Write-Log ("Accepted domains unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    $protectedUsers   = [System.Collections.Generic.HashSet[string]]::new()
+    $protectedDomains = [System.Collections.Generic.HashSet[string]]::new()
+
+    $policyRows = foreach ($p in $policies) {
+        $rule = $rules | Where-Object { $_.AntiPhishPolicy -eq $p.Name } | Select-Object -First 1
+        $live = ($p.Enabled -ne $false) -and (($null -eq $rule) -or ($rule.State -eq 'Enabled'))
+
+        # TargetedUsersToProtect arrives as "Display Name;user@domain".
+        $users = @()
+        foreach ($t in @($p.TargetedUsersToProtect)) {
+            $s = [string]$t
+            $addr = if ($s -match ';\s*(?<a>[^;]+@[^;]+)\s*$') { $Matches['a'] } else { $s }
+            $users += $addr.Trim()
+            if ($live) { [void]$protectedUsers.Add($addr.Trim().ToLowerInvariant()) }
+        }
+
+        $domains = @($p.TargetedDomainsToProtect | ForEach-Object { [string]$_ })
+        if ($live) { foreach ($d in $domains) { [void]$protectedDomains.Add($d.ToLowerInvariant()) } }
+
+        [pscustomobject]@{
+            Policy                 = $p.Name
+            IsDefault              = $p.IsDefault
+            PolicyEnabled          = $p.Enabled
+            RuleState              = if ($rule) { $rule.State } else { 'no rule' }
+            IsLive                 = $live
+            ImpersonationUsers     = $users.Count
+            ImpersonationDomains   = $domains.Count
+            ProtectsOwnDomains     = [bool]$p.EnableOrganizationDomainsProtection
+            MailboxIntelligence    = $p.EnableMailboxIntelligence
+            MailboxIntelProtection = $p.EnableMailboxIntelligenceProtection
+            SpoofIntelligence      = $p.EnableSpoofIntelligence
+            FirstContactSafetyTip  = $p.EnableFirstContactSafetyTips
+            UnauthenticatedSender  = $p.EnableUnauthenticatedSender
+            PhishThresholdLevel    = $p.PhishThresholdLevel
+            UserImpersonationAction= $p.TargetedUserProtectionAction
+            DomainImpersonationAction = $p.TargetedDomainProtectionAction
+            SpoofAction            = $p.AuthenticationFailAction
+            UserList               = ($users -join '; ')
+            DomainList             = ($domains -join '; ')
+            # 350 protected users per policy is a hard cap.
+            NearUserCap            = ($users.Count -ge 330)
+            # Protection configured but the policy never applies.
+            ConfiguredNotLive      = (-not $live) -and (($users.Count + $domains.Count) -gt 0)
+        }
+    }
+
+    # --- Who is missing? ------------------------------------------------------
+    $gapRows = @()
+    if (-not $SkipDirectoryCheck) {
+        if (-not (Get-MgContext)) {
+            Write-Log 'No Graph session; connecting.' 'INFO'
+            Connect-MgGraph -Scopes 'RoleManagement.Read.Directory','User.Read.All' -NoWelcome
+        }
+
+        $roleNames = @{}
+        $defs = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions'
+        foreach ($r in $defs.value) { $roleNames[$r.id] = $r.displayName }
+
+        $holders = @{}
+        $assigns = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments'
+        foreach ($a in $assigns.value) {
+            $nm = $roleNames[$a.roleDefinitionId]
+            if ($HighValueRole -notcontains $nm) { continue }
+            if (-not $holders.ContainsKey($a.principalId)) { $holders[$a.principalId] = @() }
+            $holders[$a.principalId] += $nm
+        }
+        Write-Log ("Holders of high-value roles: {0}" -f $holders.Count) 'INFO'
+
+        foreach ($pid in $holders.Keys) {
+            try {
+                $u = Invoke-MgGraphRequest -Method GET -Uri (
+                    "https://graph.microsoft.com/v1.0/users/{0}?`$select=userPrincipalName,displayName,mail,accountEnabled" -f $pid)
+                $addr = if ($u.mail) { $u.mail } else { $u.userPrincipalName }
+                if (-not $addr) { continue }
+
+                $gapRows += [pscustomobject]@{
+                    User       = $addr
+                    Name       = $u.displayName
+                    Enabled    = $u.accountEnabled
+                    Roles      = ($holders[$pid] | Sort-Object -Unique) -join '; '
+                    Protected  = $protectedUsers.Contains($addr.ToLowerInvariant())
+                    Reason     = 'Holds a high-value directory role'
+                }
+            }
+            catch { }   # Service principals and groups are not users; skip quietly.
+        }
+    }
+
+    foreach ($s in $ShouldProtect) {
+        if (-not ($gapRows | Where-Object { $_.User -eq $s })) {
+            $gapRows += [pscustomobject]@{
+                User = $s; Name = ''; Enabled = $null; Roles = ''
+                Protected = $protectedUsers.Contains($s.ToLowerInvariant())
+                Reason = 'Named in -ShouldProtect'
+            }
+        }
+    }
+
+    $unprotected   = @($gapRows | Where-Object { -not $_.Protected -and $_.Enabled -ne $false })
+    $ownDomainsOff = @($policyRows | Where-Object { $_.IsLive -and -not $_.ProtectsOwnDomains })
+    $notLive       = @($policyRows | Where-Object ConfiguredNotLive)
+
+    Write-Log ("Policies {0}; protected users {1}; protected domains {2}; unprotected role holders {3}." -f `
+        $policyRows.Count, $protectedUsers.Count, $protectedDomains.Count, $unprotected.Count) 'INFO'
+
+    $policyRows | Sort-Object Policy | Export-Csv -Path $PolicyCsv -NoTypeInformation -Encoding UTF8
+    $gapRows    | Sort-Object Protected, User | Export-Csv -Path $GapCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $PolicyCsv, $GapCsv) 'INFO'
+
+    Write-Host "`nAnti-phishing policies:" -ForegroundColor Cyan
+    $policyRows | Format-Table Policy, IsLive, ImpersonationUsers, ImpersonationDomains, `
+        ProtectsOwnDomains, MailboxIntelProtection, SpoofIntelligence -AutoSize
+
+    Write-Host ("`nProtected: {0} named user(s), {1} named domain(s)." -f `
+        $protectedUsers.Count, $protectedDomains.Count) -ForegroundColor Cyan
+
+    if ($unprotected) {
+        Write-Host "`nHigh-value accounts NOT protected from impersonation:" -ForegroundColor Red
+        $unprotected | Format-Table User, Name, Roles, Reason -AutoSize -Wrap
+    } elseif ($gapRows) {
+        Write-Host "`nEvery high-value account is covered by impersonation protection." -ForegroundColor Green
+    }
+
+    if ($ownDomainsOff) {
+        Write-Host "`nLive policies NOT protecting your own domains from impersonation:" -ForegroundColor Yellow
+        $ownDomainsOff | Format-Table Policy, ProtectsOwnDomains, ImpersonationDomains -AutoSize
+    }
+    if ($notLive) {
+        Write-Host "`nImpersonation lists configured on policies that never apply:" -ForegroundColor Yellow
+        $notLive | Format-Table Policy, PolicyEnabled, RuleState, ImpersonationUsers -AutoSize
+    }
+    $nearCap = @($policyRows | Where-Object NearUserCap)
+    if ($nearCap) {
+        Write-Host "`nApproaching the 350 protected-user limit:" -ForegroundColor Yellow
+        $nearCap | Format-Table Policy, ImpersonationUsers -AutoSize
+    }
+
+    Write-Host ("`n{0} polic(y/ies); {1} unprotected high-value account(s).`nReports: {2}; {3}`nLog: {4}" -f `
+        $policyRows.Count, $unprotected.Count, $PolicyCsv, $GapCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs. The first lists every anti-phishing policy with its
+protected user and domain counts, mailbox intelligence and spoof settings, the
+actions taken on detection, and whether the policy is actually live. The second
+lists high-value accounts with a `Protected` column — and the console names the
+ones that are false.
+
+**How it works.**
+
+- **The gap analysis is the point.** Reporting who *is* protected is easy and
+  reassuring. Comparing that list against the people an attacker would
+  impersonate — directory role holders, plus anyone you name in
+  `-ShouldProtect` — turns the report into a to-do list.
+- **Protected lists are only harvested from live policies.** A policy that is
+  disabled, or whose rule is disabled, protects nobody; counting its named
+  users would mask exactly the failure the report exists to find.
+- **`TargetedUsersToProtect` is parsed.** Entries arrive as
+  `Jane Smith;jane@contoso.com`, so a naive comparison against UPNs never
+  matches and every executive looks unprotected.
+- **Your own domains are a separate switch.**
+  `EnableOrganizationDomainsProtection` covers impersonation of your accepted
+  domains and is independent of the named-domain list. A policy with a long
+  domain list and this off is not protecting the domain that matters most.
+- **The 350-user cap is checked.** It is a per-policy hard limit, and silently
+  hitting it means additions stop taking effect.
+- **Role holders are resolved individually and failures are skipped quietly**,
+  because many role assignments belong to groups and service principals, which
+  have no mailbox to impersonate.
+
+**Prerequisites & caveats.**
+
+- Modules `ExchangeOnlineManagement` and `Microsoft.Graph.Authentication`;
+  Exchange View-Only Organization Management plus Graph
+  `RoleManagement.Read.Directory` and `User.Read.All`.
+- **Impersonation protection requires Defender for Office 365 P1 or P2.** On
+  EOP-only tenants `Get-AntiPhishPolicy` returns a policy with no impersonation
+  settings at all, and the correct conclusion is a licensing one.
+- **Directory roles are a proxy for value, not a definition of it.** The CFO
+  who holds no admin role is the single most impersonated person in most
+  organisations and will not appear in the gap list unless you add them with
+  `-ShouldProtect`. That parameter is where the real list lives.
+- Protection applies to the *display name and address* being impersonated, so
+  a protected user with an inconsistent display name across systems gets
+  patchier coverage than the count suggests.
+- Preset security policies (Standard/Strict) apply impersonation protection
+  with their own user lists, which are managed separately. Check the preset
+  state in the
+  [policy coverage report](../protection-policy-coverage) before concluding a
+  custom policy is the only thing in play.
+- The action on detection matters as much as the coverage.
+  `TargetedUserProtectionAction` of `NoAction` protects nobody while appearing
+  configured — it is in the CSV.
+
+> **Tip — Review it when the leadership team changes, not on a schedule**
+>
+> A quarterly review catches a departure three months late. Tie this to the
+> joiner-mover-leaver process for anyone senior, and the list stays current by
+> itself.

@@ -1,0 +1,249 @@
+---
+title: Site Collection Administrator Audit
+sidebar_label: Site Collection Admins
+sidebar_position: 5
+description: PowerShell that reports who holds site collection administrator rights across every SharePoint site, separating deliberate grants from the ones inherited through group ownership or added by a migration.
+---
+
+# Site Collection Administrator Audit
+
+Reports every site collection administrator across the tenant, resolves each to
+an account or group, and separates deliberate grants from the ones that arrive
+automatically. Read-only.
+
+Site collection administrator is the highest permission in SharePoint: full
+control of every list, library and permission in the site, bypassing every
+inherited restriction, with no way to be locked out by a broken permission
+inheritance. It is also the permission most often granted temporarily during a
+migration and never removed.
+
+## Script
+
+```powershell
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports site collection administrators across every SharePoint Online site.
+.DESCRIPTION
+    Enumerates site collections and their administrators, resolves each to an
+    account or group, validates it against Entra ID, and classifies the grant
+    as deliberate, group-derived, or stale.
+.EXAMPLE
+    .\Get-SpoSiteAdminAudit.ps1 -TenantName contoso -ClientId <guid> -Verbose
+.NOTES
+    Required role: SharePoint Administrator. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$TenantName,
+    [string]$ClientId,
+
+    # Accounts expected to administer everything — your admin and service accounts.
+    [string[]]$ExpectedAdmin = @(),
+
+    [switch]$IncludeOneDriveSites,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\SpoSiteAdmins.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("SpoSiteAdmins_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $adminUrl = "https://$TenantName-admin.sharepoint.com"
+    Write-Log 'Starting site collection administrator audit.' 'INFO'
+
+    $connectArgs = @{ Url = $adminUrl; Interactive = $true }
+    if ($ClientId) { $connectArgs['ClientId'] = $ClientId }
+    Connect-PnPOnline @connectArgs
+
+    # Entra state so a departed administrator is visible as such.
+    $accountState = @{}
+    try {
+        $next = 'v1.0/users?$select=userPrincipalName,accountEnabled&$top=999'
+        do {
+            $page = Invoke-PnPGraphMethod -Url $next -Method Get
+            foreach ($u in $page.value) {
+                if ($u.userPrincipalName) { $accountState[$u.userPrincipalName.ToLowerInvariant()] = [bool]$u.accountEnabled }
+            }
+            $next = $page.'@odata.nextLink'
+        } while ($next)
+        Write-Log ("Accounts indexed: {0}" -f $accountState.Count) 'INFO'
+    }
+    catch { Write-Log ("Entra index unavailable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    $sites = @(Get-PnPTenantSite -IncludeOneDriveSites:$IncludeOneDriveSites)
+    Write-Log ("Sites: {0}" -f $sites.Count) 'INFO'
+
+    $i = 0
+    $rows = foreach ($site in $sites) {
+        $i++
+        Write-Progress -Activity 'Reading site administrators' -Status $site.Url `
+                       -PercentComplete (($i / [math]::Max($sites.Count,1)) * 100)
+
+        $admins = @()
+        try {
+            # Site collection admins live on the site itself. The admin endpoint
+            # cannot answer for another site — Get-PnPTenantSite returns only
+            # the primary owner — so each site gets its own connection.
+            $siteArgs = @{ Url = $site.Url; Interactive = $true; ReturnConnection = $true }
+            if ($ClientId) { $siteArgs['ClientId'] = $ClientId }
+            $conn   = Connect-PnPOnline @siteArgs
+            $admins = @(Get-PnPSiteCollectionAdmin -Connection $conn -ErrorAction Stop)
+        }
+        catch {
+            Write-Log ("Admins unreadable for {0}: {1}" -f $site.Url, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                Url = $site.Url; Title = $site.Title; Status = 'Error'
+                AdminName = ''; AdminLogin = ''; PrincipalType = ''
+                AccountEnabled = $null; IsExpected = $null; IsStale = $null
+                IsGroupConnected = [bool]$site.GroupId; Detail = $_.Exception.Message
+            }
+            continue
+        }
+
+        foreach ($a in $admins) {
+            $login = [string]$a.LoginName
+            # Login names arrive as i:0#.f|membership|user@domain for users and
+            # c:0o.c|federateddirectoryclaimprovider|<guid> for groups.
+            $upn = if ($login -match '\|([^|]+@[^|]+)$') { $Matches[1] } else { '' }
+            $type = if ($upn) { 'User' } elseif ($login -match 'claimprovider') { 'Group' } else { 'Other' }
+
+            $enabled = if ($upn -and $accountState.ContainsKey($upn.ToLowerInvariant())) {
+                $accountState[$upn.ToLowerInvariant()]
+            } else { $null }
+
+            [pscustomobject]@{
+                Url              = $site.Url
+                Title            = $site.Title
+                Status           = 'OK'
+                AdminName        = $a.Title
+                AdminLogin       = if ($upn) { $upn } else { $login }
+                PrincipalType    = $type
+                AccountEnabled   = $enabled
+                IsExpected       = ($ExpectedAdmin.Count -gt 0) -and ($ExpectedAdmin -contains $upn)
+                # A site administrator whose account is disabled or gone is a
+                # permission nobody will ever use and nobody will ever remove.
+                IsStale          = ($type -eq 'User') -and (($enabled -eq $false) -or
+                                   ($accountState.Count -gt 0 -and $upn -and -not $accountState.ContainsKey($upn.ToLowerInvariant())))
+                IsGroupConnected = [bool]$site.GroupId
+                Detail           = ''
+            }
+        }
+    }
+    Write-Progress -Activity 'Reading site administrators' -Completed
+
+    $ok        = @($rows | Where-Object Status -eq 'OK')
+    $stale     = @($ok | Where-Object IsStale)
+    $unexpected= if ($ExpectedAdmin.Count) { @($ok | Where-Object { -not $_.IsExpected -and $_.PrincipalType -eq 'User' }) } else { @() }
+    $failed    = @($rows | Where-Object Status -eq 'Error')
+
+    Write-Log ("Admin rows {0}; stale {1}; unreadable sites {2}." -f $ok.Count, $stale.Count, $failed.Count) 'INFO'
+
+    $rows | Sort-Object @{Expression='IsStale';Descending=$true}, Url |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nAccounts holding site collection admin on the most sites:" -ForegroundColor Cyan
+    $ok | Where-Object { $_.PrincipalType -eq 'User' } | Group-Object AdminLogin |
+        Sort-Object Count -Descending | Select-Object -First 15 `
+        @{N='Administrator';E={$_.Name}}, @{N='Sites';E={$_.Count}} | Format-Table -AutoSize
+
+    if ($stale) {
+        Write-Host "`nSite administrators whose account is disabled or missing:" -ForegroundColor Red
+        $stale | Format-Table Url, AdminLogin, AccountEnabled -AutoSize
+    }
+    if ($unexpected) {
+        Write-Host ("`n{0} admin grant(s) to accounts outside -ExpectedAdmin:" -f $unexpected.Count) -ForegroundColor Yellow
+        $unexpected | Select-Object -First 25 | Format-Table Url, AdminLogin -AutoSize
+    }
+    if ($failed) {
+        Write-Host ("`n{0} site(s) could not be read — see the log." -f $failed.Count) -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} admin assignment(s) across {1} site(s); {2} stale.`nReport: {3}`nLog: {4}" -f `
+        $ok.Count, @($ok.Url | Select-Object -Unique).Count, $stale.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per administrator per site: who they are, whether
+they're a user or a group, whether the account is still enabled, whether the
+grant was expected, and whether it's stale. The console ranks accounts by how
+many sites they administer.
+
+**How it works.**
+
+- **Admins are read per site, not from the tenant site object.**
+  `Get-PnPTenantSite` returns only the *primary* owner. A site can have a dozen
+  site collection administrators and the tenant view shows one, which is why
+  this permission goes unaudited.
+- **Login names are parsed.** SharePoint stores claims identities like
+  `i:0#.f|membership|user@domain.com` for users and
+  `c:0o.c|federateddirectoryclaimprovider|<guid>` for groups. The script
+  extracts the UPN where there is one and classifies the principal otherwise,
+  so the CSV holds addresses rather than claims strings.
+- **Stale means the account is gone or disabled.** That grant will never be
+  used and will never be noticed; it is also the one that gets re-enabled
+  intact if the account is ever restored.
+- **The "most sites" ranking is the useful view.** One account administering
+  four hundred sites is either your service account or a finding, and either
+  way you want to know which.
+- **Unreadable sites are rows, not omissions.** A site that can't be read is
+  reported with `Status = Error` and the reason rather than silently reducing
+  the count.
+
+**Prerequisites & caveats.**
+
+- Module `PnP.PowerShell`, **SharePoint Administrator**, and the app
+  registration from the
+  [section overview](/docs/script-repository/microsoft-365/sharepoint-online/)
+  with Graph `User.Read.All` for the account validation.
+- **This is one call per site** and is the slowest script in the section. On a
+  large tenant run it out of hours, or narrow the site list first using the
+  [storage report](../storage-and-growth) to target the sites that matter.
+- SharePoint Administrators and Global Administrators hold **implicit** full
+  control over every site without appearing in any site's administrator list.
+  An empty result does not mean nobody can reach the site.
+- On **group-connected sites**, group owners are site collection administrators
+  by virtue of ownership. Those grants are correct and expected, and
+  `IsGroupConnected` marks them so you can filter them out.
+- `-ExpectedAdmin` only filters user principals. Group grants are always
+  reported, because a group's membership is the thing you'd actually need to
+  check.
+
+> **Tip — Read this with the orphaned sites report**
+>
+> A site that is [orphaned](../orphaned-and-inactive-sites) *and* has a stale
+> administrator has nobody at all who can manage its permissions. That pair is
+> the shortest and most urgent list SharePoint can give you.

@@ -1,0 +1,284 @@
+---
+title: External Sharing Review
+sidebar_label: External Sharing
+sidebar_position: 3
+description: PowerShell that finds which OneDrive personal drives are shared outside the organisation, who holds that access, and which shares belong to accounts that have already left.
+---
+
+# External Sharing Review
+
+Finds which personal OneDrive drives have external users with access, names
+them, and flags the shares that outlive their owner. Read-only.
+
+OneDrive is where external sharing actually happens. SharePoint sites are
+governed — someone configured them, someone owns them, and a sharing policy
+was considered. A personal drive is one right-click away from a link, and
+nobody reviews four hundred of them.
+
+## Script
+
+```powershell
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports external users holding access to OneDrive personal sites.
+.DESCRIPTION
+    Enumerates OneDrive site collections from the SharePoint admin endpoint,
+    reads each site's external users, and cross-references the drive owner's
+    account state so shares on departed users' drives are flagged.
+.EXAMPLE
+    .\Get-OneDriveExternalSharing.ps1 -TenantName contoso -ClientId <guid> -Verbose
+.NOTES
+    Required role: SharePoint Administrator. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$TenantName,
+    [string]$ClientId,
+
+    # Partner domains you expect to see. Others are flagged.
+    [string[]]$ExpectedDomain = @(),
+
+    # Skip drives smaller than this — usually never-used accounts.
+    [double]$MinimumSizeGb = 0,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\OneDriveExternalSharing.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("OneDriveExternalSharing_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-ExternalDomain {
+    <#
+        External users surface with mangled logins much like Entra guests:
+        alice_contoso.com#ext#@tenant.onmicrosoft.com. The tenant suffix is
+        useless; the real domain is in the prefix.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()][string]$Login, [AllowNull()][string]$Email)
+
+    if ($Email -and $Email -match '@') { return ($Email -split '@')[-1] }
+    if ([string]::IsNullOrWhiteSpace($Login)) { return '' }
+    $clean = $Login -replace '^.*\|', ''
+    if ($clean -match '^(?<local>.+)#ext#@') {
+        return ((($Matches['local'] -replace '_', '@') -split '@')[-1])
+    }
+    if ($clean -match '@') { return ($clean -split '@')[-1] }
+    return ''
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $adminUrl = "https://$TenantName-admin.sharepoint.com"
+    Write-Log 'Starting OneDrive external sharing review.' 'INFO'
+
+    $connectArgs = @{ Url = $adminUrl; Interactive = $true }
+    if ($ClientId) { $connectArgs['ClientId'] = $ClientId }
+    Connect-PnPOnline @connectArgs
+    Write-Log ("Connected to {0}." -f $adminUrl) 'INFO'
+
+    # Owner account state, so shares on a leaver's drive stand out.
+    $accountState = @{}
+    try {
+        $next = 'v1.0/users?$select=userPrincipalName,accountEnabled&$top=999'
+        do {
+            $page = Invoke-PnPGraphMethod -Url $next -Method Get
+            foreach ($u in $page.value) {
+                if ($u.userPrincipalName) { $accountState[$u.userPrincipalName.ToLowerInvariant()] = [bool]$u.accountEnabled }
+            }
+            $next = $page.'@odata.nextLink'
+        } while ($next)
+        Write-Log ("Accounts indexed: {0}" -f $accountState.Count) 'INFO'
+    }
+    catch { Write-Log ("Entra index unavailable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # OneDrive personal sites only. The template filter is what separates them
+    # from ordinary SharePoint sites.
+    $drives = @(Get-PnPTenantSite -IncludeOneDriveSites |
+        Where-Object { $_.Template -like 'SPSPERS*' -or $_.Url -match '-my\.sharepoint\.com/personal/' })
+    Write-Log ("OneDrive sites: {0}" -f $drives.Count) 'INFO'
+    if (-not $drives) {
+        Write-Host "`nNo OneDrive sites returned. Check the account has SharePoint Administrator." -ForegroundColor Yellow
+        return
+    }
+
+    $i = 0
+    $rows = foreach ($drive in $drives) {
+        $i++
+        Write-Progress -Activity 'Reading OneDrive external users' -Status $drive.Url `
+                       -PercentComplete (($i / $drives.Count) * 100)
+
+        $sizeGb = [math]::Round(([double]$drive.StorageUsageCurrent / 1024), 2)
+        if ($sizeGb -lt $MinimumSizeGb) { continue }
+
+        # The owner UPN is encoded in the personal site URL:
+        # .../personal/first_last_contoso_com  ->  first.last@contoso.com
+        $ownerUpn = ''
+        if ($drive.Url -match '/personal/(?<slug>[^/]+)') {
+            $slug = $Matches['slug']
+            # Last two underscore-separated parts are the domain's TLD and SLD.
+            if ($slug -match '^(?<user>.+)_(?<dom>[^_]+_[^_]+)$') {
+                $ownerUpn = ($Matches['user'] -replace '_', '.') + '@' + ($Matches['dom'] -replace '_', '.')
+            }
+        }
+        if (-not $ownerUpn -and $drive.Owner) { $ownerUpn = [string]$drive.Owner }
+
+        $ownerEnabled = if ($ownerUpn -and $accountState.ContainsKey($ownerUpn.ToLowerInvariant())) {
+            $accountState[$ownerUpn.ToLowerInvariant()]
+        } else { $null }
+
+        $external = @()
+        try {
+            $external = @(Get-PnPExternalUser -SiteUrl $drive.Url -PageSize 50 -ErrorAction Stop)
+        }
+        catch {
+            Write-Log ("External users unreadable for {0}: {1}" -f $drive.Url, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                DriveUrl = $drive.Url; OwnerUpn = $ownerUpn; OwnerEnabled = $ownerEnabled
+                SizeGb = $sizeGb; ExternalUser = ''; ExternalDomain = ''
+                ExpectedDomain = $null; OwnerDeparted = $null; Status = 'Error'
+                Detail = $_.Exception.Message
+            }
+            continue
+        }
+
+        if (-not $external) { continue }   # Nothing shared out; nothing to report.
+
+        foreach ($e in $external) {
+            $domain = Get-ExternalDomain -Login $e.LoginName -Email $e.Email
+            [pscustomobject]@{
+                DriveUrl       = $drive.Url
+                OwnerUpn       = $ownerUpn
+                OwnerEnabled   = $ownerEnabled
+                SizeGb         = $sizeGb
+                ExternalUser   = if ($e.Email) { $e.Email } else { $e.DisplayName }
+                ExternalDomain = $domain
+                ExpectedDomain = ($ExpectedDomain.Count -eq 0) -or ($ExpectedDomain -contains $domain)
+                AcceptedAs     = $e.AcceptedAs
+                WhenCreated    = $e.WhenCreated
+                # Data shared outside the business from a drive whose owner has
+                # left: nobody internal is watching it any more.
+                OwnerDeparted  = ($ownerEnabled -eq $false) -or
+                                 ($accountState.Count -gt 0 -and $ownerUpn -and -not $accountState.ContainsKey($ownerUpn.ToLowerInvariant()))
+                Status         = 'OK'
+                Detail         = ''
+            }
+        }
+    }
+    Write-Progress -Activity 'Reading OneDrive external users' -Completed
+
+    $ok         = @($rows | Where-Object Status -eq 'OK')
+    $departed   = @($ok | Where-Object OwnerDeparted)
+    $unexpected = @($ok | Where-Object { -not $_.ExpectedDomain })
+    $drivesWith = @($ok.DriveUrl | Select-Object -Unique)
+
+    Write-Log ("External share rows {0} across {1} drive(s); owner departed {2}; unexpected domain {3}." -f `
+        $ok.Count, $drivesWith.Count, $departed.Count, $unexpected.Count) 'INFO'
+
+    $rows | Sort-Object @{Expression='OwnerDeparted';Descending=$true}, ExternalDomain, DriveUrl |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if (-not $ok) {
+        Write-Host "`nNo OneDrive has external users." -ForegroundColor Green
+    }
+    else {
+        Write-Host "`nExternal users by domain:" -ForegroundColor Cyan
+        $ok | Group-Object ExternalDomain | Sort-Object Count -Descending | Select-Object -First 15 `
+            @{N='Domain';E={$_.Name}}, Count | Format-Table -AutoSize
+
+        if ($departed) {
+            Write-Host "`nExternal access on drives whose owner has left:" -ForegroundColor Red
+            $departed | Format-Table OwnerUpn, ExternalUser, ExternalDomain, SizeGb -AutoSize
+        }
+        if ($unexpected) {
+            Write-Host ("`n{0} share(s) to domains outside -ExpectedDomain:" -f $unexpected.Count) -ForegroundColor Yellow
+            $unexpected | Select-Object -First 25 | Format-Table OwnerUpn, ExternalUser, ExternalDomain -AutoSize
+        }
+    }
+
+    Write-Host ("`n{0} external share(s) across {1} drive(s).`nReport: {2}`nLog: {3}" -f `
+        $ok.Count, $drivesWith.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per external user per drive, with the drive's owner
+and whether that owner still has an account, the external user's real domain,
+when the share was created, and whether the domain is one you expect.
+
+**How it works.**
+
+- **Owner UPN is recovered from the site URL.** A personal site lives at
+  `/personal/first_last_contoso_com`, where every `@` and `.` became an
+  underscore. The script reverses that by treating the last two
+  underscore-separated segments as the domain. It's a reconstruction, not a
+  lookup, and it falls back to the site's `Owner` property when the pattern
+  doesn't match.
+- **External logins are decoded the same way Entra guests are.** A share to
+  `alice@contoso.com` is stored as
+  `alice_contoso.com#ext#@yourtenant.onmicrosoft.com`; splitting on `@` gives
+  your own domain every time, making a by-domain summary useless.
+- **`OwnerDeparted` is the row that matters.** External access to a live user's
+  drive is a decision that user made and can revoke. External access to a
+  departed user's drive is data leaving the business with nobody internal
+  watching it.
+- **Drives with no external users produce no rows.** The report is the
+  exceptions, not an inventory of everyone's OneDrive.
+- **Unreadable drives are rows with `Status = Error`**, so the count of clean
+  drives isn't inflated by ones that simply failed.
+
+**Prerequisites & caveats.**
+
+- Module `PnP.PowerShell`, **SharePoint Administrator**, plus the app
+  registration from the
+  [SharePoint section overview](/docs/script-repository/microsoft-365/sharepoint-online/),
+  with Graph `User.Read.All` for owner validation.
+- **This reports external *users*, not anonymous links.** An "Anyone with the
+  link" share has no user attached and will not appear here. For that you need
+  per-item inspection or the sharing reports in the SharePoint admin centre —
+  check the tenant's anonymous-link setting in the
+  [external sharing posture report](/docs/script-repository/microsoft-365/sharepoint-online/external-sharing-posture)
+  to know whether anonymous links are even possible.
+- `Get-PnPExternalUser` is paged and costs a call per drive. On a tenant with
+  hundreds of users this is slow; `-MinimumSizeGb` trims the empty drives.
+- An external user listed here has access to *something* in the drive, not to
+  all of it. Which item is a separate and much heavier question.
+- Removing an external user removes their access to that site only. The guest
+  account itself lives on in Entra — see the
+  [guest account review](/docs/script-repository/microsoft-365/entra/guest-account-review).
+
+> **Note — This is the pre-offboarding check**
+>
+> Run it against a leaver's drive before the account is disabled. Afterwards
+> the owner lookup still works but nobody can ask them what the share was for,
+> which is usually the information you actually need.

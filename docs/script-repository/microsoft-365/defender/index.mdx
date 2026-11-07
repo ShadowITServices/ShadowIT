@@ -1,0 +1,41 @@
+---
+title: Defender
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for Microsoft Defender for Office 365 and Exchange Online Protection — policy coverage, allow and block list audit, impersonation protection, and quarantine triage.
+---
+
+# Defender
+
+PowerShell for Microsoft Defender for Office 365 and Exchange Online
+Protection, using the `ExchangeOnlineManagement` module (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
+
+## Scripts
+
+- **[Protection Policy Coverage](./protection-policy-coverage)** — which
+  policies exist, which are scoped, and which protect nobody.
+- **[Allow and Block List Audit](./allow-and-block-list-audit)** — the
+  bypasses: trusted IPs, allowed senders and tenant allow/block entries that
+  skip filtering entirely.
+- **[Impersonation Protection Audit](./impersonation-protection-audit)** —
+  which executives and domains are protected from impersonation, and which are
+  not.
+- **[Quarantine Triage](./quarantine-triage)** — what is being caught, by
+  which policy, and what nobody has reviewed.
+
+## Read them in this order
+
+**Policy coverage** tells you which protections are configured and scoped.
+**Allow and block lists** tell you what bypasses them — and a bypass beats
+every policy above it, so a clean coverage report means nothing while a
+sender-domain allow list is open. **Impersonation** is the one control that
+needs maintaining by name rather than by rule, and it goes stale every time
+somebody joins or leaves the leadership team.
+
+> **Tip — Preset policies outrank everything**
+>
+> If the Standard or Strict preset is enabled and scoped broadly, custom
+> policies beneath it may never evaluate. The coverage script reports preset
+> state first for exactly this reason — read it before concluding a custom
+> policy is misconfigured.

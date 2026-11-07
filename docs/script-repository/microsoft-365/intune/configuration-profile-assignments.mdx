@@ -1,0 +1,310 @@
+---
+title: Configuration Profile Assignments
+sidebar_label: Profile Assignments
+sidebar_position: 4
+description: PowerShell that maps every Intune configuration and compliance profile to the groups it targets, resolves those groups to names and member counts, and flags profiles reaching nobody.
+---
+
+# Configuration Profile Assignments
+
+Maps every device configuration and compliance policy to the groups it targets,
+resolves each group to a name and a member count, and flags the profiles that
+**reach nobody** — unassigned, or assigned to an empty group. Read-only.
+
+A policy assigned to an empty group is identical to a policy that doesn't
+exist, except that it appears in every list, counts toward every "we have
+controls" statement, and nobody notices for years. The Intune console shows
+assignments per profile, one profile at a time, with groups as names and no
+membership counts.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports Intune configuration and compliance profile assignments with
+    resolved group names and member counts.
+.DESCRIPTION
+    Enumerates device configurations, configuration policies (settings
+    catalog), and compliance policies; expands each profile's assignments;
+    resolves group targets to names and member counts; and flags profiles
+    with no effective reach.
+.EXAMPLE
+    .\Get-IntuneProfileAssignments.ps1 -Verbose
+.NOTES
+    Required Graph perms: DeviceManagementConfiguration.Read.All,
+    Group.Read.All. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\IntuneProfileAssignments.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("IntuneProfileAssignments_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [switch]$Tolerate)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) { Write-Log ("Unavailable: {0} — {1}" -f $Uri, $_.Exception.Message) 'WARN'; return @() }
+        throw
+    }
+    return $items
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting Intune profile assignment report.' 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -Scopes 'DeviceManagementConfiguration.Read.All','Group.Read.All' -NoWelcome
+    }
+    Write-Log ("Connected as {0}." -f (Get-MgContext).Account) 'INFO'
+
+    # --- Group index ----------------------------------------------------------
+    # Names and member counts, so "assigned to a group" can be distinguished
+    # from "assigned to an empty group".
+    $groups = @{}
+    foreach ($g in (Get-GraphCollection -Uri (
+        'https://graph.microsoft.com/v1.0/groups?$select=id,displayName,groupTypes,membershipRule&$top=999'))) {
+        $groups[$g.id] = [pscustomobject]@{
+            Name    = $g.displayName
+            Dynamic = (@($g.groupTypes) -contains 'DynamicMembership')
+            Members = $null
+        }
+    }
+    Write-Log ("Groups indexed: {0}" -f $groups.Count) 'INFO'
+
+    function Get-GroupMemberCount {
+        [CmdletBinding()]
+        param([Parameter(Mandatory)][string]$GroupId)
+        if (-not $groups.ContainsKey($GroupId)) { return $null }
+        if ($null -ne $groups[$GroupId].Members) { return $groups[$GroupId].Members }
+        try {
+            # $count needs the ConsistencyLevel header; the plain members call
+            # would mean paging every member of every group.
+            $r = Invoke-MgGraphRequest -Method GET `
+                -Uri ('https://graph.microsoft.com/v1.0/groups/{0}/members/$count' -f $GroupId) `
+                -Headers @{ ConsistencyLevel = 'eventual' }
+            $groups[$GroupId].Members = [int]$r
+        }
+        catch {
+            Write-Log ("Member count unreadable for group {0}: {1}" -f $GroupId, $_.Exception.Message) 'WARN'
+            $groups[$GroupId].Members = -1
+        }
+        return $groups[$GroupId].Members
+    }
+
+    # --- Profile families -----------------------------------------------------
+    $families = @(
+        @{ Kind = 'DeviceConfiguration'
+           Uri  = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations'
+           Name = 'displayName' }
+        @{ Kind = 'SettingsCatalog'
+           Uri  = 'https://graph.microsoft.com/beta/deviceManagement/configurationPolicies'
+           Name = 'name' }
+        @{ Kind = 'CompliancePolicy'
+           Uri  = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies'
+           Name = 'displayName' }
+    )
+
+    $rows = foreach ($fam in $families) {
+        $profiles = Get-GraphCollection -Tolerate -Uri $fam.Uri
+        Write-Log ("{0}: {1} profile(s)." -f $fam.Kind, $profiles.Count) 'INFO'
+
+        foreach ($p in $profiles) {
+            $pname = [string]$p.($fam.Name)
+            $pid   = [string]$p.id
+
+            $assignments = Get-GraphCollection -Tolerate -Uri (
+                '{0}/{1}/assignments' -f $fam.Uri.TrimEnd('/'), $pid)
+
+            if (-not $assignments.Count) {
+                [pscustomobject]@{
+                    Kind = $fam.Kind; Profile = $pname; ProfileId = $pid
+                    TargetType = 'NONE'; TargetName = ''; TargetId = ''
+                    MemberCount = $null; IsExclusion = $false; IsDynamic = $null
+                    ReachesNobody = $true
+                    Platform = $p.platforms; LastModified = $p.lastModifiedDateTime
+                }
+                continue
+            }
+
+            foreach ($a in $assignments) {
+                $t = $a.target
+                $type = [string]$t.'@odata.type' -replace '^#microsoft\.graph\.', ''
+
+                $targetId = [string]$t.groupId
+                $isExcl   = ($type -eq 'exclusionGroupAssignmentTarget')
+
+                $name = switch ($type) {
+                    'allDevicesAssignmentTarget'  { 'All devices' }
+                    'allLicensedUsersAssignmentTarget' { 'All users' }
+                    default {
+                        if ($targetId -and $groups.ContainsKey($targetId)) { $groups[$targetId].Name }
+                        elseif ($targetId) { $targetId }      # Group deleted; keep the GUID visible.
+                        else { $type }
+                    }
+                }
+
+                $count = if ($targetId) { Get-GroupMemberCount -GroupId $targetId } else { $null }
+                $dyn   = if ($targetId -and $groups.ContainsKey($targetId)) { $groups[$targetId].Dynamic } else { $null }
+
+                [pscustomobject]@{
+                    Kind         = $fam.Kind
+                    Profile      = $pname
+                    ProfileId    = $pid
+                    TargetType   = $type
+                    TargetName   = $name
+                    TargetId     = $targetId
+                    MemberCount  = $count
+                    IsExclusion  = $isExcl
+                    IsDynamic    = $dyn
+                    # An inclusion target with zero members governs nothing.
+                    ReachesNobody = (-not $isExcl) -and ($count -eq 0)
+                    Platform     = $p.platforms
+                    LastModified = $p.lastModifiedDateTime
+                }
+            }
+        }
+    }
+
+    # A profile reaches nobody only if EVERY inclusion target reaches nobody.
+    $byProfile = $rows | Group-Object ProfileId
+    $deadProfiles = foreach ($grp in $byProfile) {
+        $inclusions = @($grp.Group | Where-Object { -not $_.IsExclusion })
+        $reaching   = @($inclusions | Where-Object { $_.TargetType -ne 'NONE' -and $_.MemberCount -ne 0 })
+        if (-not $reaching.Count) { $grp.Group[0] }
+    }
+    $deadProfiles = @($deadProfiles)
+
+    Write-Log ("Assignment rows {0}; profiles reaching nobody {1}." -f $rows.Count, $deadProfiles.Count) 'INFO'
+
+    $rows | Sort-Object Kind, Profile |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nProfiles by kind:" -ForegroundColor Cyan
+    $rows | Group-Object Kind |
+        Select-Object @{N='Kind';E={$_.Name}},
+                      @{N='Profiles';E={ @($_.Group.ProfileId | Select-Object -Unique).Count }},
+                      @{N='Assignments';E={ @($_.Group | Where-Object { $_.TargetType -ne 'NONE' }).Count }} |
+        Format-Table -AutoSize
+
+    if ($deadProfiles) {
+        Write-Host "`nProfiles that reach nobody — unassigned, or every target is empty:" -ForegroundColor Yellow
+        $deadProfiles | Format-Table Kind, Profile, TargetType, TargetName, MemberCount, LastModified -AutoSize -Wrap
+    } else {
+        Write-Host "`nEvery profile has at least one target with members." -ForegroundColor Green
+    }
+
+    $bigTargets = @($rows | Where-Object { $_.TargetType -eq 'allDevicesAssignmentTarget' -or
+                                           $_.TargetType -eq 'allLicensedUsersAssignmentTarget' })
+    if ($bigTargets) {
+        Write-Host "`nProfiles targeting ALL devices or ALL users:" -ForegroundColor Cyan
+        $bigTargets | Format-Table Kind, Profile, TargetName -AutoSize
+    }
+
+    Write-Host ("`n{0} assignment row(s); {1} profile(s) reach nobody.`nReport: {2}`nLog: {3}" -f `
+        $rows.Count, $deadProfiles.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per assignment per profile across device
+configurations, settings catalog policies, and compliance policies — with the
+target resolved to a name, its member count, whether it's an exclusion, and
+whether the profile reaches anybody.
+
+**How it works.**
+
+- **Reach is computed per profile, not per assignment.** A profile with three
+  targets where one has members is working fine. The script groups rows by
+  profile and only flags one where *every* inclusion target is empty or absent
+  — otherwise a profile with a redundant empty group looks broken when it
+  isn't.
+- **Exclusions are excluded from the reach calculation.** An exclusion group
+  with zero members is completely normal and means nothing is being excluded.
+  Counting it as "reaches nobody" would flag almost every well-built profile.
+- **Member counts use `$count` with `ConsistencyLevel: eventual`.** The
+  alternative is paging every member of every group, which on a tenant with
+  large groups turns a two-minute report into an hour. Counts are cached per
+  group so a group targeted by twelve profiles is counted once.
+- **Three families, one of which is beta.** Settings catalog policies live at
+  `/beta/deviceManagement/configurationPolicies` and use `name` rather than
+  `displayName`. Omitting them is the usual reason an assignment audit misses
+  half the modern estate.
+- **Deleted groups keep their GUID.** A target whose group no longer exists is
+  reported as the raw identifier rather than silently blanked — that profile is
+  assigned to something that isn't there.
+- **All-devices and all-users targets are listed separately**, because they are
+  the opposite risk: a profile reaching everything, which is worth knowing
+  before you change it.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes
+  `DeviceManagementConfiguration.Read.All`, `Group.Read.All`.
+- **This is assignment, not application.** A device in a targeted group may
+  still not have the profile applied — platform mismatch, filters, or simply
+  not having checked in. Use the
+  [compliance and sync report](../device-compliance-and-sync) for what devices
+  actually did.
+- **Assignment filters are not expanded.** A profile targeting All Devices with
+  a filter restricting it to a model reaches far fewer machines than this
+  implies. The filter is on the assignment object and is worth adding if your
+  tenant uses them heavily.
+- A dynamic group's member count is a point-in-time read, and a membership rule
+  that is still evaluating will under-report. `IsDynamic` marks those rows.
+- `-1` in `MemberCount` means the count could not be read, not that the group
+  is empty — those rows will not be flagged as unreachable, which errs toward
+  under-reporting.
+- The beta endpoint for settings catalog can change without notice. If that
+  family comes back empty on a tenant you know uses it, check the endpoint
+  first.
+
+> **Tip — Cross-check the dead list against your documentation**
+>
+> Profiles reaching nobody are usually one of three things: a pilot that ended,
+> a replacement that was built but never cut over, or a control somebody
+> believes is in force. The third one is why this report is worth running.

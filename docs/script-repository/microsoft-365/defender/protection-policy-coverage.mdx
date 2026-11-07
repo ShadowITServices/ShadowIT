@@ -1,16 +1,11 @@
 ---
-title: Defender
-sidebar_label: Defender
+title: Protection Policy Coverage
+sidebar_label: Policy Coverage
+sidebar_position: 2
 description: PowerShell that maps Defender for Office 365 and EOP policy coverage — which policies exist, which are actually scoped to recipients, and which protect nobody because they were never given a rule.
 ---
 
-# Defender
-
-PowerShell for Microsoft Defender for Office 365 and Exchange Online Protection,
-using the `ExchangeOnlineManagement` module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
-
-## Protection policy coverage report
+# Protection Policy Coverage
 
 Enumerates every anti-phishing, anti-spam, anti-malware, Safe Links and Safe
 Attachments policy in the tenant, pairs each with the rule that scopes it, and
@@ -22,7 +17,7 @@ PowerShell or copy one between tenants and you can easily end up with a
 perfectly configured Safe Attachments policy attached to no recipients at all.
 It looks right in every list, and it is doing nothing.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules ExchangeOnlineManagement
@@ -253,7 +248,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** Prints the state of the preset security policies, then one
 row per protection policy across six families — anti-phishing, anti-spam

@@ -1,0 +1,276 @@
+---
+title: Sensitivity Label Publication
+sidebar_label: Sensitivity Labels
+sidebar_position: 5
+description: PowerShell that reports Purview sensitivity labels with their protection settings and which label policies publish them to whom — so labels nobody can apply, and users with no labels, are both visible.
+---
+
+# Sensitivity Label Publication
+
+Reports every sensitivity label with its encryption, marking and container
+settings, and joins it to the label policies that publish it — so you can see
+which labels nobody can apply and which users have no labels at all.
+Read-only.
+
+A sensitivity label does nothing until a label policy publishes it to someone.
+The two are configured on different screens, and a tenant will happily hold a
+carefully designed five-tier taxonomy published to one pilot group of four
+people, while everyone else sees no labels in Word at all.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports Purview sensitivity labels, their protection settings, and the
+    label policies that publish them.
+.DESCRIPTION
+    Joins Get-Label to Get-LabelPolicy to determine publication, decodes each
+    label's encryption, content marking and container settings, and flags
+    unpublished labels and policies with no labels.
+.EXAMPLE
+    .\Get-SensitivityLabelReport.ps1 -Verbose
+.NOTES
+    Required role: Compliance Administrator or Security Reader in the
+    compliance portal. Connect with Connect-IPPSSession. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$LabelCsv  = 'C:\Temp\SensitivityLabels.csv',
+    [string]$PolicyCsv = 'C:\Temp\SensitivityLabelPolicies.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("SensitivityLabels_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-LabelSetting {
+    <#
+        Label behaviour lives in a LocaleSettings/Settings bag of key-value
+        pairs rather than as properties. Pull one key out by name.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Label, [Parameter(Mandatory)][string]$Key)
+    $s = @($Label.Settings) | Where-Object { $_ -match [regex]::Escape($Key) } | Select-Object -First 1
+    if (-not $s) { return '' }
+    # Entries render as [key, value].
+    if ("$s" -match '\[\s*([^,]+)\s*,\s*(.*?)\s*\]$') { return $Matches[2] }
+    return "$s"
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting sensitivity label report.' 'INFO'
+
+    $connected = $false
+    try { $null = Get-Label -ErrorAction Stop | Select-Object -First 1; $connected = $true }
+    catch { $connected = $false }
+
+    if (-not $connected) {
+        Write-Log 'No Security & Compliance session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-IPPSSession -UserPrincipalName $UserPrincipalName }
+        else                    { Connect-IPPSSession }
+    }
+
+    $labels   = @(Get-Label)
+    $policies = @(Get-LabelPolicy)
+    Write-Log ("Labels: {0}; label policies: {1}" -f $labels.Count, $policies.Count) 'INFO'
+
+    if (-not $labels.Count) {
+        Write-Host "`nNo sensitivity labels exist in this tenant." -ForegroundColor Yellow
+        return
+    }
+
+    # Which policies publish which labels. A policy lists labels by GUID.
+    $publishedBy = @{}
+    foreach ($p in $policies) {
+        foreach ($l in @($p.Labels)) {
+            $key = [string]$l
+            if (-not $publishedBy.ContainsKey($key)) { $publishedBy[$key] = @() }
+            $publishedBy[$key] += $p.Name
+        }
+    }
+
+    # --- Labels ---------------------------------------------------------------
+    $labelRows = foreach ($l in $labels) {
+        # A sublabel is only usable if its parent is published too.
+        $isSub   = [bool]$l.ParentId
+        $parent  = if ($isSub) { ($labels | Where-Object { $_.Guid -eq $l.ParentId } | Select-Object -First 1).DisplayName } else { '' }
+
+        $pubs = @()
+        foreach ($k in @([string]$l.Guid, [string]$l.Name, [string]$l.ImmutableId)) {
+            if ($k -and $publishedBy.ContainsKey($k)) { $pubs += $publishedBy[$k] }
+        }
+        $pubs = @($pubs | Sort-Object -Unique)
+
+        [pscustomobject]@{
+            Label            = $l.DisplayName
+            Name             = $l.Name
+            Guid             = $l.Guid
+            Enabled          = (-not $l.Disabled)
+            IsSublabel       = $isSub
+            Parent           = $parent
+            Priority         = $l.Priority
+            Tooltip          = $l.Tooltip
+            Encrypts         = [bool](Get-LabelSetting -Label $l -Key 'encrypt')
+            ContentMarking   = [bool](Get-LabelSetting -Label $l -Key 'contentheader') -or
+                               [bool](Get-LabelSetting -Label $l -Key 'contentfooter') -or
+                               [bool](Get-LabelSetting -Label $l -Key 'watermark')
+            ContainerLabel   = ($l.ContentType -match 'Site|UnifiedGroup')
+            AppliesToFiles   = ($l.ContentType -match 'File|Email')
+            PublishedBy      = ($pubs -join '; ')
+            PublishedCount   = $pubs.Count
+            # A label nobody can see is configuration, not a control.
+            Unpublished      = ($pubs.Count -eq 0)
+            WhenChanged      = $l.WhenChanged
+        }
+    }
+
+    # --- Label policies -------------------------------------------------------
+    $policyRows = foreach ($p in $policies) {
+        $labelCount = @($p.Labels).Count
+        $scopeUsers = @($p.ExchangeLocation) + @($p.ModernGroupLocation)
+        $allUsers   = ($scopeUsers -contains 'All')
+
+        [pscustomobject]@{
+            Policy          = $p.Name
+            Enabled         = $p.Enabled
+            Mode            = $p.Mode
+            LabelCount      = $labelCount
+            PublishedTo     = if ($allUsers) { 'All users' }
+                              elseif ($scopeUsers.Count) { "{0} named target(s)" -f $scopeUsers.Count }
+                              else { 'NOBODY' }
+            IsTenantWide    = $allUsers
+            MandatoryLabel  = [bool](@($p.Settings) -match 'mandatory')
+            DefaultLabel    = (@($p.Settings) -match 'defaultlabelid') -join ''
+            Priority        = $p.Priority
+            HasNoLabels     = ($labelCount -eq 0)
+            ReachesNobody   = (-not $allUsers) -and ($scopeUsers.Count -eq 0)
+            WhenChanged     = $p.WhenChanged
+        }
+    }
+
+    $unpublished = @($labelRows  | Where-Object Unpublished)
+    $emptyPolicy = @($policyRows | Where-Object { $_.HasNoLabels -or $_.ReachesNobody })
+    $tenantWide  = @($policyRows | Where-Object IsTenantWide)
+    $encrypting  = @($labelRows  | Where-Object Encrypts)
+
+    Write-Log ("Labels {0} ({1} unpublished, {2} encrypting); policies {3} ({4} ineffective)." -f `
+        $labelRows.Count, $unpublished.Count, $encrypting.Count, $policyRows.Count, $emptyPolicy.Count) 'INFO'
+
+    $labelRows  | Sort-Object Priority | Export-Csv -Path $LabelCsv  -NoTypeInformation -Encoding UTF8
+    $policyRows | Sort-Object Priority | Export-Csv -Path $PolicyCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $LabelCsv, $PolicyCsv) 'INFO'
+
+    Write-Host "`nLabels:" -ForegroundColor Cyan
+    $labelRows | Sort-Object Priority |
+        Format-Table Label, Parent, Enabled, Encrypts, ContentMarking, PublishedCount -AutoSize
+
+    Write-Host "`nLabel policies:" -ForegroundColor Cyan
+    $policyRows | Sort-Object Priority |
+        Format-Table Policy, Enabled, LabelCount, PublishedTo, MandatoryLabel -AutoSize
+
+    if ($unpublished) {
+        Write-Host "`nLabels published by no policy — nobody can apply these:" -ForegroundColor Yellow
+        $unpublished | Format-Table Label, Parent, Enabled, Encrypts, WhenChanged -AutoSize
+    } else {
+        Write-Host "`nEvery label is published by at least one policy." -ForegroundColor Green
+    }
+
+    if ($emptyPolicy) {
+        Write-Host "`nLabel policies that publish nothing, or publish to nobody:" -ForegroundColor Yellow
+        $emptyPolicy | Format-Table Policy, LabelCount, PublishedTo, Enabled -AutoSize
+    }
+    if (-not $tenantWide) {
+        Write-Host "`nNo label policy targets all users — most of the tenant sees no labels at all." -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} label(s), {1} polic(y/ies); {2} label(s) unpublished.`nReports: {3}; {4}`nLog: {5}" -f `
+        $labelRows.Count, $policyRows.Count, $unpublished.Count, $LabelCsv, $PolicyCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs: labels with their parent, enabled state,
+encryption, content marking, scope and which policies publish them; and label
+policies with how many labels they carry, who they reach, and whether labelling
+is mandatory.
+
+**How it works.**
+
+- **Publication is the join that matters.** `Get-Label` returns the taxonomy;
+  `Get-LabelPolicy` returns who can see it. A label with `PublishedCount = 0`
+  is configuration that no user will ever encounter — and it is the most common
+  finding in a tenant where labelling "has been set up".
+- **Label settings are extracted from a bag, not read as properties.**
+  Encryption, headers, footers and watermarks live in a `Settings` collection
+  of key-value entries rather than as first-class properties, which is why a
+  naive `Select-Object` on a label shows none of the interesting behaviour.
+- **Sublabels record their parent.** A sublabel is unusable unless its parent
+  is published, so a report listing them flat makes an unusable taxonomy look
+  complete.
+- **`ReachesNobody` and `HasNoLabels` are separate.** A policy with no labels
+  publishes nothing; a policy scoped to nobody publishes to nobody. Both are
+  dead, for different reasons, and both are fixed differently.
+- **The absence of a tenant-wide policy is called out explicitly.** If no
+  policy targets all users, most staff see no labels in Office at all,
+  regardless of how well-designed the taxonomy is.
+- **Encrypting labels are counted**, because those are the ones with real
+  consequences — content that leaves the tenant stays protected and stays
+  unopenable, including by people who later need it.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement` connected with **`Connect-IPPSSession`**.
+- **Label object shapes vary between module versions.** `Settings` is parsed
+  by pattern matching rather than by a stable schema, so `Encrypts` and
+  `ContentMarking` are best-effort indicators. Check one label in the portal
+  against the CSV before relying on those two columns.
+- Policies reference labels by GUID, name, or immutable ID depending on how
+  they were created, so the script tries all three when matching. A label
+  showing unpublished that you know is published is most likely a fourth
+  identifier form — inspect `$p.Labels` directly.
+- **Auto-labelling policies are a separate object** (`Get-AutoSensitivityLabelPolicy`)
+  and are not covered here. A tenant can be applying labels automatically with
+  none of them published for manual use.
+- Container labels (sites and groups) and file labels have different effects
+  and are distinguished by `ContentType`. A taxonomy that only has file labels
+  cannot protect a Teams site.
+- This reports the label definitions, not what has been applied. Content
+  explorer in the compliance portal answers that.
+
+> **Tip — Start from the policy side, not the label side**
+>
+> "How many labels do we have" is the question people ask. "What does a
+> standard user see in Word on Monday" is the one that matters, and the policy
+> CSV answers it: find the policies targeting All users, and the labels they
+> carry are the whole visible taxonomy.

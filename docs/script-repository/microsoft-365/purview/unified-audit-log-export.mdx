@@ -1,15 +1,11 @@
 ---
-title: Purview
-sidebar_label: Purview
+title: Unified Audit Log Export
+sidebar_label: Audit Log Export
+sidebar_position: 2
 description: PowerShell that exports the Microsoft 365 unified audit log correctly — time-sliced, session-paged, and deduplicated — so a search returns everything rather than the first 5,000 unsorted records.
 ---
 
-# Purview
-
-PowerShell for Microsoft Purview, using the `ExchangeOnlineManagement` module
-(see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
-
-## Unified audit log export
+# Unified Audit Log Export
 
 Exports the unified audit log for a date range, handling the three things that
 quietly make naive searches wrong: the per-call result cap, the unsorted
@@ -22,7 +18,7 @@ unsorted, with no indication that there were forty thousand more. During an
 incident that is not a limitation — it's a wrong answer that looks like a right
 one.
 
-### Script
+## Script
 
 ```powershell
 #Requires -Modules ExchangeOnlineManagement
@@ -249,7 +245,7 @@ finally {
 }
 ```
 
-### Summary
+## Summary
 
 **What it does.** Exports unified audit log records for a date range to CSV,
 optionally filtered by operation, user, or record type, with the paging done

@@ -18,6 +18,13 @@
 /study/az-104          /study/AZ-104/      301
 /study/az-104/         /study/AZ-104/      301
 
+# The Entra enterprise-applications sub-folder was flattened so every script
+# sits directly under its workload. The workload URLs themselves are unchanged
+# (they became folder index pages at the same path).
+/docs/script-repository/microsoft-365/entra/enterprise-applications/auditing-stale-enterprise-applications    /docs/script-repository/microsoft-365/entra/stale-enterprise-applications/   301
+/docs/script-repository/microsoft-365/entra/enterprise-applications/auditing-stale-enterprise-applications/   /docs/script-repository/microsoft-365/entra/stale-enterprise-applications/   301
+/docs/script-repository/microsoft-365/entra/enterprise-applications/*                                         /docs/script-repository/microsoft-365/entra/                                 301
+
 # The SC-300 program was retired. Send its URLs to the study index rather than
 # to AZ-104 — a different exam is not the page anyone was looking for.
 /study/sc-300          /study/             301

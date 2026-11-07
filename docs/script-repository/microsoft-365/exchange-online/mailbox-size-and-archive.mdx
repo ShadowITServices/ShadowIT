@@ -1,0 +1,270 @@
+---
+title: Mailbox Size and Archive Report
+sidebar_label: Size & Archive
+sidebar_position: 4
+description: PowerShell that reports mailbox and archive sizes against quota, projects which mailboxes will hit the wall first, and flags the ones where archiving or auto-expanding archive is not actually working.
+---
+
+# Mailbox Size and Archive Report
+
+Reports primary and archive mailbox sizes against their quotas, flags the
+mailboxes closest to the wall, and identifies the ones where archiving is
+enabled but isn't moving anything. Read-only.
+
+Mailbox quota is one of the few Microsoft 365 limits that fails loudly and at
+the worst time — the user cannot send or receive, and by then the fix takes
+hours to propagate. The signal is available weeks earlier and nobody looks,
+because the admin centre shows sizes one mailbox at a time.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports Exchange Online mailbox and archive sizes against quota, with
+    headroom, archive state, and retention-policy coverage.
+.DESCRIPTION
+    Joins Get-EXOMailbox with Get-EXOMailboxStatistics for both the primary and
+    the archive mailbox, parses Exchange's "1.23 GB (1,320,702,443 bytes)" size
+    strings into real numbers, and flags mailboxes near quota and archives that
+    are enabled but empty.
+.EXAMPLE
+    .\Get-MailboxSizeReport.ps1 -WarnPercent 85 -Verbose
+.NOTES
+    Required role: View-Only Recipients. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [int]$WarnPercent = 85,
+
+    [ValidateSet('All','UserMailbox','SharedMailbox','RoomMailbox','EquipmentMailbox')]
+    [string]$MailboxType = 'All',
+
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\MailboxSizeReport.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("MailboxSizeReport_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function ConvertFrom-ExchangeSize {
+    <#
+        Exchange renders sizes as "1.23 GB (1,320,702,443 bytes)" — a string,
+        not a number, and localised. The byte count in the parentheses is the
+        only part worth parsing. Returns GB as a double, or $null.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()][object]$Value)
+
+    if ($null -eq $Value) { return $null }
+    $s = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($s) -or $s -eq 'Unlimited') { return $null }
+
+    if ($s -match '\(([\d,\.\s]+)\s*bytes\)') {
+        $digits = $Matches[1] -replace '[^\d]', ''
+        if ($digits) { return [math]::Round(([double]$digits / 1GB), 3) }
+    }
+    # Some builds return a ByteQuantifiedSize object that casts cleanly.
+    try { return [math]::Round((([double]$Value.ToBytes()) / 1GB), 3) } catch { }
+    return $null
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting mailbox size report. WarnPercent={0}, Type={1}." -f $WarnPercent, $MailboxType) 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false }
+        else                    { Connect-ExchangeOnline -ShowBanner:$false }
+    }
+
+    $mbxArgs = @{ ResultSize = 'Unlimited'; Properties = @(
+        'ProhibitSendReceiveQuota','ArchiveStatus','ArchiveQuota','AutoExpandingArchiveEnabled',
+        'RetentionPolicy','LitigationHoldEnabled','RecipientTypeDetails') }
+    if ($MailboxType -ne 'All') { $mbxArgs['RecipientTypeDetails'] = $MailboxType }
+
+    Write-Log 'Enumerating mailboxes.' 'DEBUG'
+    $mailboxes = @(Get-EXOMailbox @mbxArgs)
+    Write-Log ("Mailboxes: {0}" -f $mailboxes.Count) 'INFO'
+
+    $i = 0
+    $results = foreach ($mbx in $mailboxes) {
+        $i++
+        Write-Progress -Activity 'Reading mailbox statistics' -Status $mbx.UserPrincipalName `
+                       -PercentComplete (($i / [math]::Max($mailboxes.Count,1)) * 100)
+
+        try {
+            $stats = Get-EXOMailboxStatistics -Identity $mbx.Identity -ErrorAction Stop
+
+            $usedGb  = ConvertFrom-ExchangeSize $stats.TotalItemSize
+            $quotaGb = ConvertFrom-ExchangeSize $mbx.ProhibitSendReceiveQuota
+            $pct     = if ($usedGb -ne $null -and $quotaGb) { [math]::Round((($usedGb / $quotaGb) * 100), 1) } else { $null }
+
+            # Archive statistics are a separate call and only exist if the
+            # archive does. Absence is normal, not an error.
+            $archiveGb = $null; $archiveItems = $null
+            if ($mbx.ArchiveStatus -eq 'Active') {
+                try {
+                    $a = Get-EXOMailboxStatistics -Identity $mbx.Identity -Archive -ErrorAction Stop
+                    $archiveGb    = ConvertFrom-ExchangeSize $a.TotalItemSize
+                    $archiveItems = $a.ItemCount
+                } catch {
+                    Write-Log ("Archive stats unreadable for {0}: {1}" -f $mbx.UserPrincipalName, $_.Exception.Message) 'WARN'
+                }
+            }
+
+            [pscustomobject]@{
+                Mailbox          = $mbx.UserPrincipalName
+                DisplayName      = $mbx.DisplayName
+                Type             = $mbx.RecipientTypeDetails
+                UsedGb           = $usedGb
+                QuotaGb          = $quotaGb
+                PercentUsed      = $pct
+                HeadroomGb       = if ($usedGb -ne $null -and $quotaGb) { [math]::Round(($quotaGb - $usedGb), 2) } else { $null }
+                NearQuota        = ($null -ne $pct -and $pct -ge $WarnPercent)
+                ItemCount        = $stats.ItemCount
+                LastLogon        = if ($stats.LastLogonTime) { '{0:yyyy-MM-dd}' -f $stats.LastLogonTime } else { 'NEVER' }
+                ArchiveStatus    = $mbx.ArchiveStatus
+                ArchiveGb        = $archiveGb
+                ArchiveItems     = $archiveItems
+                AutoExpanding    = $mbx.AutoExpandingArchiveEnabled
+                RetentionPolicy  = $mbx.RetentionPolicy
+                LitigationHold   = $mbx.LitigationHoldEnabled
+                # An enabled archive with nothing in it means the retention
+                # policy that should move mail is missing or not running.
+                ArchiveNotWorking = ($mbx.ArchiveStatus -eq 'Active') -and
+                                    (($null -eq $archiveItems) -or ($archiveItems -eq 0))
+                # Big mailbox, no archive: the next quota incident.
+                ShouldArchive     = ($mbx.ArchiveStatus -ne 'Active') -and
+                                    ($null -ne $pct) -and ($pct -ge $WarnPercent)
+                Status           = 'OK'
+            }
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $mbx.UserPrincipalName, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                Mailbox = $mbx.UserPrincipalName; DisplayName = $mbx.DisplayName
+                Type = $mbx.RecipientTypeDetails
+                UsedGb = $null; QuotaGb = $null; PercentUsed = $null; HeadroomGb = $null
+                NearQuota = $null; ItemCount = $null; LastLogon = ''
+                ArchiveStatus = $mbx.ArchiveStatus; ArchiveGb = $null; ArchiveItems = $null
+                AutoExpanding = $null; RetentionPolicy = ''; LitigationHold = $null
+                ArchiveNotWorking = $null; ShouldArchive = $null
+                Status = 'Error'
+            }
+        }
+    }
+    Write-Progress -Activity 'Reading mailbox statistics' -Completed
+
+    $near      = @($results | Where-Object NearQuota)
+    $brokenArc = @($results | Where-Object ArchiveNotWorking)
+    $needArc   = @($results | Where-Object ShouldArchive)
+    $totalGb   = [math]::Round((($results | Measure-Object UsedGb -Sum).Sum), 2)
+
+    Write-Log ("Mailboxes {0}; near quota {1}; archive not working {2}; should archive {3}; total {4} GB." -f `
+        $results.Count, $near.Count, $brokenArc.Count, $needArc.Count, $totalGb) 'INFO'
+
+    $results | Sort-Object PercentUsed -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nLargest mailboxes by quota usage:" -ForegroundColor Cyan
+    $results | Sort-Object PercentUsed -Descending | Select-Object -First 15 |
+        Format-Table Mailbox, Type, UsedGb, QuotaGb, PercentUsed, HeadroomGb, ArchiveStatus -AutoSize
+
+    if ($near) {
+        Write-Host "`nAt or above $WarnPercent% of quota:" -ForegroundColor Yellow
+        $near | Format-Table Mailbox, UsedGb, QuotaGb, PercentUsed, ArchiveStatus, AutoExpanding -AutoSize
+    }
+    if ($brokenArc) {
+        Write-Host "`nArchive enabled but empty — check the retention policy actually moves mail:" -ForegroundColor Yellow
+        $brokenArc | Format-Table Mailbox, UsedGb, PercentUsed, RetentionPolicy -AutoSize
+    }
+    if ($needArc) {
+        Write-Host "`nNear quota with no archive enabled:" -ForegroundColor Yellow
+        $needArc | Format-Table Mailbox, UsedGb, QuotaGb, PercentUsed -AutoSize
+    }
+
+    Write-Host ("`n{0} mailbox(es), {1} GB total; {2} near quota.`nReport: {3}`nLog: {4}" -f `
+        $results.Count, $totalGb, $near.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per mailbox with primary size, quota, percentage used
+and remaining headroom; archive status, size and item count; the retention
+policy applied; and three derived flags — `NearQuota`, `ArchiveNotWorking`, and
+`ShouldArchive`.
+
+**How it works.**
+
+- **Exchange sizes are parsed, not cast.** `TotalItemSize` is a *string* like
+  `1.23 GB (1,320,702,443 bytes)`, and the formatted part is localised. The
+  script extracts the byte count from the parentheses, strips separators, and
+  converts — with a fallback to `ToBytes()` for builds that return a real
+  object. Sorting the raw strings, which is the obvious thing to do, orders
+  mailboxes alphabetically by their size text.
+- **`ArchiveNotWorking` is the finding worth having.** An archive in `Active`
+  state with zero items means the archive was enabled and the retention policy
+  that should move mail into it either isn't assigned or isn't running. The
+  mailbox looks protected and is still filling up.
+- **Archive statistics are a second, guarded call.** `-Archive` fails on
+  mailboxes without one, so it only runs where `ArchiveStatus` is `Active`, and
+  a failure is logged rather than fatal.
+- **`HeadroomGb` is in the output deliberately.** A percentage hides scale: 90%
+  of a 50 GB mailbox is 5 GB of room, 90% of a 100 GB archive is 10 GB. The
+  absolute number tells you how long you have.
+- **`LitigationHold` is carried through**, because a mailbox on hold cannot be
+  trimmed by deleting items — the recoverable items folder keeps growing and
+  the usual advice does not apply.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`; **View-Only Recipients**.
+- One or two statistics calls per mailbox. On a large tenant this is the slow
+  part; filter with `-MailboxType` when you only care about user mailboxes.
+- `ProhibitSendReceiveQuota` can be `Unlimited`, in which case `PercentUsed` is
+  null and the mailbox never appears in the near-quota list. That's correct,
+  but it means the count of flagged mailboxes is not the whole story.
+- **Auto-expanding archive grows in increments and is not instant.** A mailbox
+  with `AutoExpanding = True` close to its archive quota is usually fine, but
+  the expansion can take days to provision, so it is not a reason to ignore the
+  warning.
+- `LastLogonTime` from mailbox statistics is unreliable as an activity measure —
+  background processes and mobile sync both update it.
+
+> **Tip — Run it monthly and keep the CSVs**
+>
+> One run tells you who is near quota. Twelve monthly runs tell you the growth
+> rate, which is what actually lets you plan a licence change rather than react
+> to a blocked mailbox.

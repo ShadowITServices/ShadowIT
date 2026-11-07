@@ -1,0 +1,296 @@
+---
+title: Allow and Block List Audit
+sidebar_label: Allow & Block Lists
+sidebar_position: 3
+description: PowerShell that enumerates every mechanism in Exchange Online Protection that bypasses filtering — IP allow lists, allowed sender domains, tenant allow entries and safe-sender lists — and ranks them by how much they let through.
+---
+
+# Allow and Block List Audit
+
+Enumerates every configured bypass in Exchange Online Protection — connection
+filter IP allow lists, allowed senders and domains on anti-spam policies, and
+tenant allow/block list entries — and ranks them by how much filtering they
+skip. Read-only.
+
+Allow lists are the most effective way to defeat your own email security, and
+they are almost always added for good reasons: a payroll provider whose mail
+kept getting quarantined, a monitoring system, a client whose domain was
+misconfigured. Each one is a permanent hole that no policy above it can close,
+and nothing ever prompts a review.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Audits every filtering bypass configured in Exchange Online Protection.
+.DESCRIPTION
+    Reports connection filter IP allow lists, allowed sender and domain entries
+    on anti-spam policies, tenant allow/block list entries with their expiry,
+    and transport rules that set SCL to -1. Ranks findings by the breadth of
+    the bypass.
+.EXAMPLE
+    .\Get-AllowListAudit.ps1 -Verbose
+.NOTES
+    Required role: View-Only Organization Management or Security Reader.
+    Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\AllowBlockListAudit.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("AllowBlockListAudit_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+$rows = [System.Collections.Generic.List[object]]::new()
+
+function Add-Row {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Mechanism,
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Entry,
+        [Parameter(Mandatory)][ValidateSet('Critical','High','Medium','Low')][string]$Severity,
+        [Parameter(Mandatory)][string]$Bypasses,
+        [AllowNull()]$Expires = $null,
+        [AllowNull()]$Note = ''
+    )
+    $rows.Add([pscustomobject]@{
+        Mechanism = $Mechanism
+        Source    = $Source
+        Entry     = $Entry
+        Severity  = $Severity
+        Bypasses  = $Bypasses
+        Expires   = if ($Expires) { '{0:yyyy-MM-dd}' -f ([datetime]$Expires) } else { 'never' }
+        Permanent = (-not $Expires)
+        Note      = $Note
+    })
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting allow and block list audit.' 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false }
+        else                    { Connect-ExchangeOnline -ShowBanner:$false }
+    }
+
+    # --- Connection filter: IP allow list ------------------------------------
+    # The broadest bypass available. Mail from these addresses skips spam
+    # filtering completely, including the phishing verdicts.
+    try {
+        foreach ($cf in @(Get-HostedConnectionFilterPolicy -ErrorAction Stop)) {
+            foreach ($ip in @($cf.IPAllowList)) {
+                Add-Row -Mechanism 'Connection filter IP allow' -Source $cf.Name -Entry ([string]$ip) `
+                    -Severity 'Critical' `
+                    -Bypasses 'All spam and phishing filtering for mail from this address' `
+                    -Note $(if ($ip -match '/\d{1,2}$') { 'CIDR range — covers every host in it' } else { '' })
+            }
+            foreach ($ip in @($cf.IPBlockList)) {
+                Add-Row -Mechanism 'Connection filter IP block' -Source $cf.Name -Entry ([string]$ip) `
+                    -Severity 'Low' -Bypasses 'None — this is a block'
+            }
+            if ($cf.EnableSafeList) {
+                Add-Row -Mechanism 'Safe list' -Source $cf.Name -Entry 'EnableSafeList = True' `
+                    -Severity 'Medium' `
+                    -Bypasses "Microsoft's third-party safe sender list is trusted"
+            }
+        }
+    }
+    catch { Write-Log ("Connection filter unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # --- Anti-spam policy allow lists ----------------------------------------
+    try {
+        foreach ($sp in @(Get-HostedContentFilterPolicy -ErrorAction Stop)) {
+            foreach ($s in @($sp.AllowedSenders)) {
+                Add-Row -Mechanism 'Allowed sender' -Source $sp.Name -Entry ([string]$s.Sender) `
+                    -Severity 'High' -Bypasses 'Spam filtering for this exact sender address'
+            }
+            foreach ($d in @($sp.AllowedSenderDomains)) {
+                Add-Row -Mechanism 'Allowed sender DOMAIN' -Source $sp.Name -Entry ([string]$d.Domain) `
+                    -Severity 'Critical' `
+                    -Bypasses 'Spam filtering for ANY sender at this domain' `
+                    -Note 'Trivially spoofable. Microsoft advises against domain allow entries.'
+            }
+            foreach ($d in @($sp.BlockedSenderDomains)) {
+                Add-Row -Mechanism 'Blocked sender domain' -Source $sp.Name -Entry ([string]$d.Domain) `
+                    -Severity 'Low' -Bypasses 'None — this is a block'
+            }
+        }
+    }
+    catch { Write-Log ("Anti-spam policies unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # --- Tenant allow/block list ---------------------------------------------
+    # The supported place for exceptions, because entries here expire.
+    foreach ($type in @('Sender','Url','FileHash')) {
+        try {
+            foreach ($e in @(Get-TenantAllowBlockListItems -ListType $type -ErrorAction Stop)) {
+                $isAllow = ($e.Action -eq 'Allow')
+                Add-Row -Mechanism ("TABL {0} {1}" -f $type, $e.Action) -Source 'Tenant allow/block list' `
+                    -Entry ([string]$e.Value) `
+                    -Severity $(if ($isAllow) { 'High' } else { 'Low' }) `
+                    -Bypasses $(if ($isAllow) { "Filtering verdicts for this $type" } else { 'None — this is a block' }) `
+                    -Expires $e.ExpirationDate `
+                    -Note $e.Notes
+            }
+        }
+        catch { Write-Log ("Tenant allow/block list ({0}) unreadable: {1}" -f $type, $_.Exception.Message) 'WARN' }
+    }
+
+    # --- Transport rules that skip filtering ---------------------------------
+    try {
+        foreach ($r in @(Get-TransportRule -ErrorAction Stop | Where-Object { $_.SetSCL -eq -1 })) {
+            Add-Row -Mechanism 'Transport rule SCL=-1' -Source $r.Name `
+                -Entry ("state={0}; mode={1}" -f $r.State, $r.Mode) `
+                -Severity $(if ($r.State -eq 'Enabled') { 'Critical' } else { 'Medium' }) `
+                -Bypasses 'Spam filtering for every message the rule matches' `
+                -Note 'Check the rule conditions — a broad condition is a tenant-wide bypass.'
+        }
+    }
+    catch { Write-Log ("Transport rules unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # --- Outbound spam: forwarding -------------------------------------------
+    try {
+        foreach ($o in @(Get-HostedOutboundSpamFilterPolicy -ErrorAction Stop)) {
+            if ($o.AutoForwardingMode -eq 'On') {
+                Add-Row -Mechanism 'Automatic forwarding enabled' -Source $o.Name `
+                    -Entry 'AutoForwardingMode = On' -Severity 'High' `
+                    -Bypasses 'Allows mailboxes to auto-forward externally' `
+                    -Note 'Pairs with the Exchange mailbox forwarding audit.'
+            }
+        }
+    }
+    catch { Write-Log ("Outbound spam policies unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # --- Report ---------------------------------------------------------------
+    $critical = @($rows | Where-Object { $_.Severity -eq 'Critical' })
+    $allows   = @($rows | Where-Object { $_.Bypasses -ne 'None — this is a block' })
+    $expired  = @($rows | Where-Object { $_.Expires -ne 'never' -and ([datetime]$_.Expires) -lt (Get-Date) })
+
+    Write-Log ("Entries {0}: bypasses {1}, critical {2}, expired {3}." -f `
+        $rows.Count, $allows.Count, $critical.Count, $expired.Count) 'INFO'
+
+    $severityOrder = @{ 'Critical' = 0; 'High' = 1; 'Medium' = 2; 'Low' = 3 }
+    $rows | Sort-Object @{Expression={ $severityOrder[$_.Severity] }}, Mechanism |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if (-not $rows.Count) {
+        Write-Host "`nNo allow or block entries configured anywhere." -ForegroundColor Green
+    }
+    else {
+        Write-Host "`nBy mechanism:" -ForegroundColor Cyan
+        $rows | Group-Object Mechanism | Sort-Object Count -Descending |
+            Select-Object @{N='Mechanism';E={$_.Name}}, Count | Format-Table -AutoSize
+
+        if ($critical) {
+            Write-Host "`nCritical — these skip filtering for everything matching them:" -ForegroundColor Red
+            $critical | Format-Table Mechanism, Source, Entry, Expires, Bypasses -AutoSize -Wrap
+        }
+
+        $permanent = @($allows | Where-Object Permanent)
+        if ($permanent) {
+            Write-Host ("`n{0} bypass(es) never expire. Each one needs an owner and a review date." -f $permanent.Count) -ForegroundColor Yellow
+        }
+        if ($expired) {
+            Write-Host "`nExpired entries still present:" -ForegroundColor Yellow
+            $expired | Format-Table Mechanism, Entry, Expires -AutoSize
+        }
+    }
+
+    Write-Host ("`n{0} entr(y/ies); {1} bypass filtering, {2} critical.`nReport: {3}`nLog: {4}" -f `
+        $rows.Count, $allows.Count, $critical.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per allow or block entry across six mechanisms, each
+with a severity, a plain statement of **what it bypasses**, and whether it
+expires. Blocks are reported too, at low severity, so the CSV is a complete
+inventory rather than only the scary half.
+
+**How it works.**
+
+- **Severity reflects breadth, not mechanism.** An allowed sender *domain* is
+  Critical and an allowed sender *address* is High, because the domain entry
+  accepts anything claiming to be from that domain and sender addresses are
+  trivially spoofed. A connection-filter IP allow is Critical for the same
+  reason, more so when it's a CIDR range.
+- **Every row says what it bypasses in words.** `IPAllowList: 203.0.113.5` is
+  data. "All spam and phishing filtering for mail from this address" is the
+  thing someone can make a decision about.
+- **Expiry is the distinguishing feature of the tenant allow/block list.**
+  Entries there expire by design, which is why Microsoft treats it as the
+  supported place for exceptions. Everything else on this report is permanent
+  until a human removes it, and `Permanent` counts those.
+- **Expired-but-present entries are flagged.** They do nothing, but they
+  indicate a list nobody prunes, and they make the real list harder to read.
+- **`SetSCL = -1` transport rules appear here as well as in the
+  [mail flow audit](/docs/script-repository/microsoft-365/exchange-online/mail-flow-rules-and-connectors).**
+  That duplication is deliberate: it is a mail-flow object and a filtering
+  bypass, and someone auditing bypasses should not have to know it lives
+  somewhere else.
+- **Blocks are included at `Low`.** They are not risks, but a block list is
+  part of the picture and its absence is itself informative.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`; **View-Only Organization Management** or
+  Security Reader.
+- **The connection filter IP allow list is the single most dangerous setting
+  here.** Mail from a listed address is treated as trusted and skips the
+  filtering stack. An address that changes hands — a decommissioned supplier's
+  IP reassigned by their hosting provider — becomes an open relay into your
+  tenant with no further action by anyone.
+- Microsoft's own guidance is that **allowed sender domains should not be
+  used**; the tenant allow/block list, with its expiry, is the supported
+  mechanism. A long list of domain allows is usually historical.
+- This does not read **individual users' safe sender lists**. A user who has
+  safe-listed their own attacker is invisible here and reachable only per
+  mailbox.
+- `Get-TenantAllowBlockListItems` supports more list types than the three
+  queried here as Microsoft adds them; a type that errors is logged and
+  skipped.
+- Severity is a judgement encoded in the script, not a Microsoft
+  classification. A payroll provider's IP may be an entirely reasonable
+  Critical entry — the point is that it should be a decision with an owner,
+  not an artefact.
+
+> **Tip — Give every bypass an expiry and an owner**
+>
+> The useful output is the permanent list. Move what you can into the tenant
+> allow/block list so it expires on its own, and for the rest, record who asked
+> and when it should be reviewed. Without that, the list only ever grows.

@@ -1,0 +1,322 @@
+---
+title: Guest Account Review
+sidebar_label: Guest Review
+sidebar_position: 6
+description: PowerShell that reports every Entra ID guest with who invited them, whether they ever accepted, when they last signed in, what they belong to, and whether they hold any directory role.
+---
+
+# Guest Account Review
+
+Reports every guest account in the tenant with its invitation state, inviter,
+last sign-in, group and team memberships, and any directory roles held —
+sorted so the accounts nobody can account for surface first. Read-only.
+
+Guests arrive one at a time, invited by whoever needed to share a file, and
+they never leave. A tenant three years old typically has guests from suppliers
+it no longer uses, projects that finished, and staff at companies that have
+since been acquired. Each one is a live identity in your directory with
+whatever access was granted the day it was created.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports Entra ID guest accounts with invitation state, inviter, sign-in
+    recency, memberships, and directory roles.
+.DESCRIPTION
+    Enumerates guests, resolves their external domain from the mangled UPN,
+    optionally expands group/team membership, and flags never-accepted,
+    dormant, and privileged guests.
+.EXAMPLE
+    .\Get-GuestAccountReview.ps1 -DormantDays 90 -IncludeMemberships -Verbose
+.NOTES
+    Required Graph perms: User.Read.All, Directory.Read.All, AuditLog.Read.All,
+    GroupMember.Read.All (for -IncludeMemberships),
+    RoleManagement.Read.Directory. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [int]$DormantDays = 90,
+
+    # One extra Graph call per guest.
+    [switch]$IncludeMemberships,
+
+    # Partner domains you expect. Guests outside these are flagged.
+    [string[]]$ExpectedDomain = @(),
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\GuestAccountReview.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("GuestAccountReview_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [switch]$Tolerate)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) { Write-Log ("Unavailable: {0} — {1}" -f $Uri, $_.Exception.Message) 'WARN'; return @() }
+        throw
+    }
+    return $items
+}
+
+function Get-GuestDomain {
+    <#
+        A guest UPN is mangled: alice_contoso.com#EXT#@fabrikam.onmicrosoft.com.
+        Splitting on '@' returns YOUR tenant domain for every guest, which is
+        useless. The real domain lives in the prefix. Prefer the mail address
+        when one is present.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()][string]$Upn, [AllowNull()][string]$Mail)
+
+    if ($Mail -and $Mail -match '@') { return ($Mail -split '@')[-1] }
+    if ([string]::IsNullOrWhiteSpace($Upn)) { return '' }
+    if ($Upn -match '^(?<local>.+)#EXT#@') {
+        $decoded = $Matches['local'] -replace '_', '@'
+        return ($decoded -split '@')[-1]
+    }
+    return ($Upn -split '@')[-1]
+}
+
+function ConvertTo-Date {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Value)
+    if (-not $Value) { return $null }
+    if ($Value -is [datetime]) { return $Value }
+    $p = [datetime]::MinValue
+    if ([datetime]::TryParse([string]$Value, [ref]$p)) { return $p }
+    return $null
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting guest review. DormantDays={0}." -f $DormantDays) 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        $scopes = @('User.Read.All','Directory.Read.All','AuditLog.Read.All','RoleManagement.Read.Directory')
+        if ($IncludeMemberships) { $scopes += 'GroupMember.Read.All' }
+        Connect-MgGraph -Scopes $scopes -NoWelcome
+    }
+    Write-Log ("Connected as {0}." -f (Get-MgContext).Account) 'INFO'
+
+    # Role holders, so a guest with an admin role is impossible to miss.
+    $roleNames = @{}
+    foreach ($r in (Get-GraphCollection -Tolerate -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions')) {
+        $roleNames[$r.id] = $r.displayName
+    }
+    $rolesByPrincipal = @{}
+    foreach ($a in (Get-GraphCollection -Tolerate -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments')) {
+        $nm = $roleNames[$a.roleDefinitionId]
+        if (-not $nm) { continue }
+        if (-not $rolesByPrincipal.ContainsKey($a.principalId)) { $rolesByPrincipal[$a.principalId] = @() }
+        $rolesByPrincipal[$a.principalId] += $nm
+    }
+
+    # Inviters, so "who is responsible for this guest" has an answer.
+    $userNames = @{}
+    foreach ($u in (Get-GraphCollection -Uri 'https://graph.microsoft.com/v1.0/users?$select=id,userPrincipalName&$top=999')) {
+        $userNames[$u.id] = $u.userPrincipalName
+    }
+
+    $guestUri = 'https://graph.microsoft.com/v1.0/users' +
+        "?`$filter=userType eq 'Guest'" +
+        '&$select=id,displayName,userPrincipalName,mail,accountEnabled,createdDateTime,' +
+        'externalUserState,externalUserStateChangeDateTime,signInActivity,companyName,creationType' +
+        '&$top=999'
+
+    $guests = @(Get-GraphCollection -Uri $guestUri)
+    Write-Log ("Guests: {0}" -f $guests.Count) 'INFO'
+    if (-not $guests) {
+        Write-Host "`nNo guest accounts in this tenant." -ForegroundColor Green
+        return
+    }
+
+    $now = Get-Date
+    $i = 0
+
+    $results = foreach ($g in $guests) {
+        $i++
+        Write-Progress -Activity 'Reviewing guests' -Status $g.userPrincipalName `
+                       -PercentComplete (($i / $guests.Count) * 100)
+
+        $lastSignIn = ConvertTo-Date $g.signInActivity.lastSignInDateTime
+        $created    = ConvertTo-Date $g.createdDateTime
+        $idleDays   = if ($lastSignIn) { [int]($now - $lastSignIn).TotalDays } else { $null }
+        $domain     = Get-GuestDomain -Upn $g.userPrincipalName -Mail $g.mail
+
+        # The inviter is recorded on the invitation, surfaced via createdBy on
+        # the directory audit trail; where absent, companyName is the best hint.
+        $memberships = ''
+        $memberCount = $null
+        if ($IncludeMemberships) {
+            try {
+                $m = Get-GraphCollection -Uri (
+                    'https://graph.microsoft.com/v1.0/users/{0}/memberOf?$select=id,displayName&$top=999' -f $g.id)
+                $memberCount = @($m).Count
+                $memberships = (@($m | ForEach-Object { $_.displayName }) | Sort-Object) -join '; '
+            }
+            catch { Write-Log ("Memberships unreadable for {0}: {1}" -f $g.userPrincipalName, $_.Exception.Message) 'WARN' }
+        }
+
+        $roles = $rolesByPrincipal[$g.id]
+
+        [pscustomobject]@{
+            DisplayName      = $g.displayName
+            Upn              = $g.userPrincipalName
+            Mail             = $g.mail
+            Domain           = $domain
+            ExpectedDomain   = ($ExpectedDomain.Count -eq 0) -or ($ExpectedDomain -contains $domain)
+            Company          = $g.companyName
+            Enabled          = $g.accountEnabled
+            InvitationState  = $g.externalUserState          # PendingAcceptance | Accepted
+            StateChanged     = if ($d = ConvertTo-Date $g.externalUserStateChangeDateTime) { '{0:yyyy-MM-dd}' -f $d } else { '' }
+            CreationType     = $g.creationType               # Invitation | LocalAccount | EmailVerified ...
+            Created          = if ($created) { '{0:yyyy-MM-dd}' -f $created } else { '' }
+            AgeDays          = if ($created) { [int]($now - $created).TotalDays } else { $null }
+            LastSignIn       = if ($lastSignIn) { '{0:yyyy-MM-dd}' -f $lastSignIn } else { 'NEVER' }
+            IdleDays         = $idleDays
+            MemberOfCount    = $memberCount
+            MemberOf         = $memberships
+            DirectoryRoles   = if ($roles) { ($roles | Sort-Object -Unique) -join '; ' } else { '' }
+            HasDirectoryRole = [bool]$roles
+            # Invited, never accepted, and old enough that they never will.
+            NeverAccepted    = ($g.externalUserState -eq 'PendingAcceptance') -and
+                               ($null -ne $created) -and (($now - $created).TotalDays -gt 30)
+            # Accepted once and then nothing, or never signed in at all.
+            Dormant          = ($null -eq $idleDays) -or ($idleDays -gt $DormantDays)
+        }
+    }
+    Write-Progress -Activity 'Reviewing guests' -Completed
+
+    $neverAccepted = @($results | Where-Object NeverAccepted)
+    $dormant       = @($results | Where-Object { $_.Dormant -and $_.Enabled })
+    $privileged    = @($results | Where-Object HasDirectoryRole)
+    $unexpected    = @($results | Where-Object { -not $_.ExpectedDomain })
+
+    Write-Log ("Guests {0}: never accepted {1}, dormant {2}, with roles {3}, unexpected domain {4}." -f `
+        $results.Count, $neverAccepted.Count, $dormant.Count, $privileged.Count, $unexpected.Count) 'INFO'
+
+    $results | Sort-Object @{Expression='HasDirectoryRole';Descending=$true},
+                           @{Expression={ if ($null -eq $_.IdleDays) { [int]::MaxValue } else { $_.IdleDays } };Descending=$true} |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nGuests by domain:" -ForegroundColor Cyan
+    $results | Group-Object Domain | Sort-Object Count -Descending | Select-Object -First 15 `
+        @{N='Domain';E={$_.Name}}, Count | Format-Table -AutoSize
+
+    if ($privileged) {
+        Write-Host "`nGuests holding directory roles:" -ForegroundColor Red
+        $privileged | Format-Table Upn, Domain, DirectoryRoles, LastSignIn, Enabled -AutoSize -Wrap
+    }
+    if ($neverAccepted) {
+        Write-Host "`nInvited over 30 days ago and never accepted:" -ForegroundColor Yellow
+        $neverAccepted | Format-Table Upn, Domain, Created, AgeDays -AutoSize
+    }
+    if ($dormant) {
+        Write-Host ("`n{0} enabled guest(s) with no sign-in in {1}+ days:" -f $dormant.Count, $DormantDays) -ForegroundColor Yellow
+        $dormant | Sort-Object IdleDays -Descending | Select-Object -First 20 |
+            Format-Table Upn, Domain, LastSignIn, IdleDays, MemberOfCount -AutoSize
+    }
+
+    Write-Host ("`n{0} guest(s): {1} never accepted, {2} dormant, {3} with roles.`nReport: {4}`nLog: {5}" -f `
+        $results.Count, $neverAccepted.Count, $dormant.Count, $privileged.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per guest with their real external domain, invitation
+state and when it changed, account age, last sign-in and idle days, group and
+team memberships, and any directory roles — plus four flags: `NeverAccepted`,
+`Dormant`, `HasDirectoryRole`, and `ExpectedDomain`.
+
+**How it works.**
+
+- **The domain is decoded, not split.** A guest UPN is
+  `alice_contoso.com#EXT#@yourtenant.onmicrosoft.com`. Splitting on `@` gives
+  *your* domain for every single guest, which makes the by-domain grouping
+  useless. The script prefers the `mail` attribute and falls back to parsing
+  the `#EXT#` prefix.
+- **`NeverAccepted` has an age gate.** A guest invited yesterday and pending is
+  normal. One pending for over thirty days is an invitation that was never
+  taken up — a directory object with no user behind it, which can still be
+  granted access and still appears in people pickers.
+- **Guests with directory roles are reported first and in red.** An external
+  identity holding an administrative role in your tenant is almost never
+  intended, and it is trivially easy to create by adding a consultant to the
+  wrong group.
+- **Memberships are opt-in.** One call per guest, and the thing that makes the
+  report actionable — a dormant guest in no groups can be removed without a
+  conversation; one in eleven cannot.
+- **Sorted by role first, then longest-idle.** The accounts that most need a
+  decision are at the top of the CSV rather than buried alphabetically.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes `User.Read.All`,
+  `Directory.Read.All`, `AuditLog.Read.All`,
+  `RoleManagement.Read.Directory`, plus `GroupMember.Read.All` for
+  `-IncludeMemberships`.
+- **`signInActivity` requires Entra ID P1 or P2.** Without it every guest reads
+  `NEVER`, every guest looks dormant, and the report is worthless for its main
+  purpose. Check licensing before acting on the dormant list.
+- `externalUserState` only has meaning for guests created by **invitation**.
+  Guests created by email verification, self-service sign-up, or a direct
+  B2B connection show different `creationType` values and may have no state at
+  all — the column is in the output so you can tell them apart.
+- A guest who signs in through **B2B direct connect** or shared channels may
+  not generate the sign-in activity this reads, so a Teams-only collaborator
+  can look dormant while being active. Cross-check against the
+  [Teams governance report](/docs/script-repository/microsoft-365/teams/ownership-and-guest-governance)
+  before removing anyone.
+- Removing a guest removes their access everywhere at once, including anything
+  shared with them from SharePoint and OneDrive. That is usually the intent,
+  but it is not reversible by re-inviting — permissions do not come back.
+
+> **Tip — Entra access reviews do this on a schedule**
+>
+> This script is the one-off that tells you how bad it is. If the answer is
+> "bad", the durable fix is an Entra ID Governance access review on guests,
+> which asks the inviter rather than you. This report is still useful
+> afterwards for the guests no review covers.

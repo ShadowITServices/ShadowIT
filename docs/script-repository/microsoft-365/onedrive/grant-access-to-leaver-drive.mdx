@@ -1,0 +1,263 @@
+---
+title: Grant Access to a Leaver's OneDrive
+sidebar_label: Leaver Drive Access
+sidebar_position: 4
+description: PowerShell that grants a named manager access to a departed user's OneDrive by adding them as a site collection administrator, with -WhatIf, an audit trail, and a matching removal mode.
+---
+
+# Grant Access to a Leaver's OneDrive
+
+Grants a named manager access to a departed user's OneDrive by adding them as a
+site collection administrator on that drive, records who was granted what and
+when, and can remove the access again afterwards. **Changes state**; supports
+`-WhatIf`.
+
+This is the step offboarding always needs and nobody has written down. The
+portal route is six clicks per user through the OneDrive admin centre, it
+doesn't record why, and the access it grants is permanent until somebody
+remembers. The usual result is a manager with standing administrative access
+to a dozen former colleagues' drives.
+
+## Script
+
+```powershell
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Grants (or removes) a manager's access to a departed user's OneDrive.
+.DESCRIPTION
+    Resolves the leaver's OneDrive site, confirms their account is actually
+    disabled or absent before acting, and adds the grantee as a site collection
+    administrator. Every grant is appended to a CSV register so access can be
+    reviewed and withdrawn later.
+.EXAMPLE
+    .\Grant-LeaverDriveAccess.ps1 -LeaverUpn bob@contoso.com -GrantTo manager@contoso.com -WhatIf
+.EXAMPLE
+    .\Grant-LeaverDriveAccess.ps1 -LeaverUpn bob@contoso.com -GrantTo manager@contoso.com -Remove
+.NOTES
+    Required role: SharePoint Administrator. CHANGES PERMISSIONS.
+#>
+
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+param(
+    [Parameter(Mandatory)][string]$TenantName,
+    [Parameter(Mandatory)][string]$LeaverUpn,
+    [Parameter(Mandatory)][string]$GrantTo,
+
+    [string]$ClientId,
+
+    # Remove the grant instead of adding it.
+    [switch]$Remove,
+
+    # Act even if the leaver's account is still enabled. Off by default: this
+    # script exists for departures, not for reading a colleague's drive.
+    [switch]$AllowActiveAccount,
+
+    # Free text recorded in the register. Make it a ticket reference.
+    [string]$Reason = '',
+
+    [string]$LogDir      = 'C:\Temp',
+    [string]$RegisterCsv = 'C:\Temp\LeaverDriveAccessRegister.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("LeaverDriveAccess_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-PersonalSiteUrl {
+    <#
+        Personal site URLs replace every '@' and '.' in the UPN with an
+        underscore: bob.smith@contoso.com -> bob_smith_contoso_com.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Upn, [Parameter(Mandatory)][string]$Tenant)
+    $slug = ($Upn -replace '[@.]', '_')
+    "https://$Tenant-my.sharepoint.com/personal/$slug"
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $adminUrl = "https://$TenantName-admin.sharepoint.com"
+    $action   = if ($Remove) { 'Remove' } else { 'Grant' }
+    Write-Log ("Starting {0}: leaver={1}, grantee={2}." -f $action, $LeaverUpn, $GrantTo) 'INFO'
+
+    $connectArgs = @{ Url = $adminUrl; Interactive = $true }
+    if ($ClientId) { $connectArgs['ClientId'] = $ClientId }
+    Connect-PnPOnline @connectArgs
+    Write-Log ("Connected to {0}." -f $adminUrl) 'INFO'
+
+    # --- Confirm the leaver has actually left --------------------------------
+    $leaverEnabled = $null
+    try {
+        $u = Invoke-PnPGraphMethod -Method Get -Url (
+            "v1.0/users/{0}?`$select=userPrincipalName,accountEnabled,displayName" -f $LeaverUpn)
+        $leaverEnabled = [bool]$u.accountEnabled
+        Write-Log ("Leaver {0} ({1}) accountEnabled={2}." -f $u.displayName, $LeaverUpn, $leaverEnabled) 'INFO'
+    }
+    catch {
+        Write-Log ("Leaver not found in Entra: {0}" -f $_.Exception.Message) 'WARN'
+    }
+
+    if ($leaverEnabled -eq $true -and -not $AllowActiveAccount -and -not $Remove) {
+        throw ("{0} is still an ENABLED account. This script is for departures. " -f $LeaverUpn) +
+              'Pass -AllowActiveAccount only with a documented reason.'
+    }
+
+    # --- Confirm the grantee exists ------------------------------------------
+    try {
+        $g = Invoke-PnPGraphMethod -Method Get -Url (
+            "v1.0/users/{0}?`$select=userPrincipalName,accountEnabled" -f $GrantTo)
+        if (-not $g.accountEnabled) { throw "Grantee $GrantTo exists but is disabled." }
+        Write-Log ("Grantee {0} confirmed." -f $GrantTo) 'INFO'
+    }
+    catch {
+        throw ("Grantee {0} could not be confirmed: {1}" -f $GrantTo, $_.Exception.Message)
+    }
+
+    # --- Locate the drive -----------------------------------------------------
+    $siteUrl = Get-PersonalSiteUrl -Upn $LeaverUpn -Tenant $TenantName
+    Write-Log ("Expected personal site: {0}" -f $siteUrl) 'DEBUG'
+
+    $site = $null
+    try { $site = Get-PnPTenantSite -Identity $siteUrl -ErrorAction Stop }
+    catch {
+        throw ("No OneDrive found at {0}. The drive may never have been provisioned, " -f $siteUrl) +
+              'or it may already have been deleted after the retention period.'
+    }
+
+    $sizeGb = [math]::Round(([double]$site.StorageUsageCurrent / 1024), 2)
+    Write-Host ("`nDrive:   {0}" -f $site.Url)        -ForegroundColor Cyan
+    Write-Host ("Owner:   {0} (enabled: {1})" -f $LeaverUpn, $leaverEnabled) -ForegroundColor Cyan
+    Write-Host ("Size:    {0} GB" -f $sizeGb)         -ForegroundColor Cyan
+    Write-Host ("Action:  {0} site collection admin for {1}" -f $action, $GrantTo) -ForegroundColor Cyan
+
+    # --- Act ------------------------------------------------------------------
+    $target = "{0} on {1}" -f $GrantTo, $site.Url
+    $verb   = if ($Remove) { 'Remove site collection administrator' } else { 'Add site collection administrator' }
+
+    if ($PSCmdlet.ShouldProcess($target, $verb)) {
+        if ($Remove) {
+            Set-PnPTenantSite -Identity $site.Url -Owners $GrantTo -RemoveOwners $GrantTo -ErrorAction Stop
+            Write-Log ("REMOVED {0} from {1}" -f $GrantTo, $site.Url) 'INFO'
+        }
+        else {
+            Set-PnPTenantSite -Identity $site.Url -Owners $GrantTo -ErrorAction Stop
+            Write-Log ("GRANTED {0} on {1}" -f $GrantTo, $site.Url) 'INFO'
+        }
+
+        # --- Register -----------------------------------------------------------
+        # The access itself is invisible once granted. The register is the only
+        # record of who asked, why, and when it should be withdrawn.
+        [pscustomobject]@{
+            TimestampUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')
+            Action       = $action
+            LeaverUpn    = $LeaverUpn
+            GrantedTo    = $GrantTo
+            DriveUrl     = $site.Url
+            DriveSizeGb  = $sizeGb
+            Reason       = $Reason
+            PerformedBy  = $env:USERNAME
+            Host         = $env:COMPUTERNAME
+        } | Export-Csv -Path $RegisterCsv -NoTypeInformation -Encoding UTF8 -Append
+
+        Write-Host ("`n{0} complete. Registered in {1}" -f $action, $RegisterCsv) -ForegroundColor Green
+        if (-not $Remove) {
+            Write-Host ("Access URL for {0}:`n  {1}" -f $GrantTo, $site.Url) -ForegroundColor Green
+            Write-Host 'Withdraw it when the handover is done:' -ForegroundColor Yellow
+            Write-Host ("  .\Grant-LeaverDriveAccess.ps1 -TenantName {0} -LeaverUpn {1} -GrantTo {2} -Remove" -f `
+                $TenantName, $LeaverUpn, $GrantTo) -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Log ("WHATIF: would {0} {1}" -f $verb, $target) 'INFO'
+    }
+
+    Write-Host ("`nLog: {0}" -f $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Resolves a leaver's OneDrive, verifies they have actually
+left and that the grantee is a real enabled account, adds the grantee as a site
+collection administrator, and appends the grant to a register CSV. `-Remove`
+reverses it.
+
+**How it works.**
+
+- **It refuses to run against an enabled account by default.** The script's
+  whole justification is that the owner has gone. Pointed at a current
+  employee it is a tool for reading a colleague's files, so that path requires
+  `-AllowActiveAccount` and a conscious decision.
+- **The site URL is derived, then verified.** A personal site slug is the UPN
+  with every `@` and `.` replaced by `_`. The script builds the URL, then
+  confirms it with `Get-PnPTenantSite` and fails with a useful message — the
+  drive was never provisioned, or retention has already removed it — rather
+  than a null reference.
+- **The grantee is validated before anything changes.** A typo in `-GrantTo`
+  would otherwise create a grant to a principal that doesn't exist, which fails
+  silently in some paths and succeeds uselessly in others.
+- **Every action is registered.** Site collection admin access leaves no
+  reviewable trail in the admin centre, so the script appends who, what, when,
+  why, and which operator to a CSV. Without it, nobody can answer "who still
+  has access to drives of people who left" a year later.
+- **It prints the removal command.** The grant is meant to be temporary and
+  the single most common failure is forgetting, so the exact command to undo it
+  is on screen at the moment of granting.
+- **`ConfirmImpact = 'High'`** means it prompts unless you pass
+  `-Confirm:$false`, and `-WhatIf` shows the full target string without acting.
+
+**Prerequisites & caveats.**
+
+- Module `PnP.PowerShell`, **SharePoint Administrator**, plus the app
+  registration from the
+  [SharePoint section overview](/docs/script-repository/microsoft-365/sharepoint-online/)
+  with Graph `User.Read.All`.
+- **Site collection administrator is total access.** The grantee can read,
+  change, and delete everything in the drive and alter its permissions. There
+  is no read-only equivalent at this level.
+- **A deleted user's OneDrive is on a retention timer** — by default 30 days
+  after deletion, extended by any Purview retention policy. If the account was
+  deleted rather than disabled, check the drive still exists before promising
+  anyone a handover.
+- `Set-PnPTenantSite -Owners` **adds** an administrator rather than replacing
+  the set, so an existing admin is not displaced. Verify with the
+  [site collection admin audit](/docs/script-repository/microsoft-365/sharepoint-online/site-collection-admin-audit)
+  if you need certainty.
+- Changes can take a few minutes to appear for the grantee. A failed first
+  attempt is usually propagation, not an error.
+- The register lives wherever `-RegisterCsv` points, by default `C:\Temp` on
+  the operator's workstation. Put it somewhere shared and durable if more than
+  one person runs this.
+
+> **Warning — Access to a leaver's drive is a records decision**
+>
+> In most organisations a departed employee's OneDrive contains personal as
+> well as business content, and handing a manager full control of it has
+> privacy implications. Have the authority written down before you run this,
+> and use `-Reason` to record where it came from.

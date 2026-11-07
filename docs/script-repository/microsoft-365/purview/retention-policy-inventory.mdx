@@ -1,0 +1,287 @@
+---
+title: Retention Policy Inventory
+sidebar_label: Retention Policies
+sidebar_position: 3
+description: PowerShell that exports every Purview retention policy and label with its locations, duration, end-of-life action and enabled state — so what is actually being kept, and for how long, fits on one page.
+---
+
+# Retention Policy Inventory
+
+Exports every retention policy and retention label with the workloads it
+covers, how long it keeps content, what happens at the end of that period, and
+whether it is actually switched on. Read-only.
+
+Retention is the control most often described confidently and understood
+vaguely. "We keep everything for seven years" is a statement about a policy
+that may exclude OneDrive, may be scoped to twelve mailboxes, and may be in a
+disabled state since a migration. The configuration is spread across policies,
+rules, labels and label policies, on four different screens.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Inventories Purview retention policies, their rules, and retention labels.
+.DESCRIPTION
+    Joins retention compliance policies to their rules to recover duration and
+    end-of-life action, reports which workloads each covers and whether the
+    scope is the whole organisation or a named subset, and separately lists
+    retention labels and their publication.
+.EXAMPLE
+    .\Get-RetentionInventory.ps1 -Verbose
+.NOTES
+    Required role: Compliance Administrator or View-Only Organization
+    Management in the compliance portal. Connect with Connect-IPPSSession.
+    Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$UserPrincipalName,
+    [string]$LogDir     = 'C:\Temp',
+    [string]$PolicyCsv  = 'C:\Temp\RetentionPolicies.csv',
+    [string]$LabelCsv   = 'C:\Temp\RetentionLabels.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("RetentionInventory_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-Scope {
+    <#
+        Renders a policy's workload scope. "All" on a location means the whole
+        organisation; a populated inclusion list means a named subset, which is
+        a very different compliance statement.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Policy)
+
+    $parts = @()
+    $map = @(
+        @{ Label = 'Exchange';   All = 'ExchangeLocation';        Inc = 'ExchangeLocation';        Exc = 'ExchangeLocationException' }
+        @{ Label = 'SharePoint'; All = 'SharePointLocation';      Inc = 'SharePointLocation';      Exc = 'SharePointLocationException' }
+        @{ Label = 'OneDrive';   All = 'OneDriveLocation';        Inc = 'OneDriveLocation';        Exc = 'OneDriveLocationException' }
+        @{ Label = 'M365Groups'; All = 'ModernGroupLocation';     Inc = 'ModernGroupLocation';     Exc = 'ModernGroupLocationException' }
+        @{ Label = 'TeamsChat';  All = 'TeamsChatLocation';       Inc = 'TeamsChatLocation';       Exc = 'TeamsChatLocationException' }
+        @{ Label = 'TeamsChannel';All= 'TeamsChannelLocation';    Inc = 'TeamsChannelLocation';    Exc = 'TeamsChannelLocationException' }
+        @{ Label = 'SkypeIM';    All = 'SkypeLocation';           Inc = 'SkypeLocation';           Exc = 'SkypeLocationException' }
+    )
+
+    foreach ($m in $map) {
+        $v = @($Policy.($m.Inc))
+        if (-not $v -or $v.Count -eq 0) { continue }
+        $e = @($Policy.($m.Exc))
+        $desc = if ($v -contains 'All') {
+            if ($e.Count) { "{0}: all except {1}" -f $m.Label, $e.Count } else { "{0}: all" -f $m.Label }
+        } else {
+            "{0}: {1} named" -f $m.Label, $v.Count
+        }
+        $parts += $desc
+    }
+    if (-not $parts.Count) { return 'NONE' }
+    return ($parts -join '; ')
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting retention inventory.' 'INFO'
+
+    # Purview cmdlets live on the Security & Compliance endpoint, not the
+    # Exchange Online one. They are the same module, different session.
+    $connected = $false
+    try { $null = Get-RetentionCompliancePolicy -ErrorAction Stop | Select-Object -First 1; $connected = $true }
+    catch { $connected = $false }
+
+    if (-not $connected) {
+        Write-Log 'No Security & Compliance session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-IPPSSession -UserPrincipalName $UserPrincipalName }
+        else                    { Connect-IPPSSession }
+    }
+
+    # --- Policies and rules ---------------------------------------------------
+    Write-Log 'Enumerating retention policies.' 'DEBUG'
+    $policies = @(Get-RetentionCompliancePolicy)
+    $rules    = @(Get-RetentionComplianceRule)
+    Write-Log ("Policies: {0}; rules: {1}" -f $policies.Count, $rules.Count) 'INFO'
+
+    $policyRows = foreach ($p in $policies) {
+        # The duration and the end-of-life action live on the RULE, not the
+        # policy. A policy on its own says where, never how long.
+        $rule = $rules | Where-Object { $_.Policy -eq $p.Guid -or $_.Policy -eq $p.Name } | Select-Object -First 1
+
+        [pscustomobject]@{
+            Name            = $p.Name
+            Enabled         = $p.Enabled
+            Mode            = $p.Mode                       # Enforce | TestWithNotifications | ...
+            Scope           = Get-Scope -Policy $p
+            RetentionDays   = if ($rule) { $rule.RetentionDuration } else { $null }
+            DurationType    = if ($rule) { $rule.RetentionDurationDisplayHint } else { '' }
+            RetentionAction = if ($rule) { $rule.RetentionComplianceAction } else { '' }   # Keep | Delete | KeepAndDelete
+            ExpirationFrom  = if ($rule) { $rule.ExpirationDateOption } else { '' }
+            HasRule         = [bool]$rule
+            IsTeamsPolicy   = [bool](@($p.TeamsChatLocation) + @($p.TeamsChannelLocation)).Count
+            IsSimulating    = ($p.Mode -like 'Test*')
+            DistributionStatus = $p.DistributionStatus
+            WhenCreated     = $p.WhenCreated
+            WhenChanged     = $p.WhenChanged
+            Comment         = $p.Comment
+            # A policy switched off, still simulating, or with no rule, is not
+            # retaining anything — however convincing it looks in a list.
+            NotInForce      = (-not $p.Enabled) -or ($p.Mode -like 'Test*') -or (-not $rule)
+        }
+    }
+
+    # --- Labels and their publication ----------------------------------------
+    $labels     = @()
+    $labelRules = @()
+    $labelPols  = @()
+    try {
+        $labels     = @(Get-ComplianceTag)
+        $labelPols  = @(Get-RetentionCompliancePolicy -RetentionRuleTypes)
+        Write-Log ("Retention labels: {0}; label policies: {1}" -f $labels.Count, $labelPols.Count) 'INFO'
+    }
+    catch { Write-Log ("Retention labels unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    $labelRows = foreach ($l in $labels) {
+        [pscustomobject]@{
+            Label            = $l.Name
+            Enabled          = $l.Disabled -ne $true
+            RetentionDays    = $l.RetentionDuration
+            RetentionAction  = $l.RetentionAction
+            IsRecordLabel    = $l.IsRecordLabel
+            IsRegulatory     = $l.IsRegulatoryRecord
+            ReviewRequired   = $l.ReviewerEmail -ne $null -and @($l.ReviewerEmail).Count -gt 0
+            HasAutoApply     = $l.HasRetentionAction -and $l.AutoApprovalMode
+            Published        = @($labelPols | Where-Object { @($_.RetentionRuleTypes) -contains $l.Name }).Count -gt 0
+            Notes            = $l.Notes
+            WhenCreated      = $l.WhenCreated
+            # A record label cannot be removed once applied. Worth knowing
+            # before anyone publishes one tenant-wide.
+            Irreversible     = [bool]$l.IsRecordLabel -or [bool]$l.IsRegulatoryRecord
+        }
+    }
+
+    # --- Report ---------------------------------------------------------------
+    $notInForce = @($policyRows | Where-Object NotInForce)
+    $deleting   = @($policyRows | Where-Object { $_.RetentionAction -match 'Delete' })
+    $noScope    = @($policyRows | Where-Object { $_.Scope -eq 'NONE' })
+
+    Write-Log ("Policies {0}: not in force {1}, delete-capable {2}, no scope {3}. Labels {4}." -f `
+        $policyRows.Count, $notInForce.Count, $deleting.Count, $noScope.Count, $labelRows.Count) 'INFO'
+
+    $policyRows | Sort-Object Name | Export-Csv -Path $PolicyCsv -NoTypeInformation -Encoding UTF8
+    $labelRows  | Sort-Object Label | Export-Csv -Path $LabelCsv  -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $PolicyCsv, $LabelCsv) 'INFO'
+
+    Write-Host "`nRetention policies:" -ForegroundColor Cyan
+    $policyRows | Sort-Object Name |
+        Format-Table Name, Enabled, Mode, RetentionDays, RetentionAction, Scope -AutoSize -Wrap
+
+    if ($notInForce) {
+        Write-Host "`nNot actually retaining anything — disabled, simulating, or no rule:" -ForegroundColor Yellow
+        $notInForce | Format-Table Name, Enabled, Mode, HasRule, Scope -AutoSize -Wrap
+    }
+    if ($deleting) {
+        Write-Host "`nPolicies that DELETE content at the end of the period:" -ForegroundColor Red
+        $deleting | Format-Table Name, RetentionDays, RetentionAction, Scope -AutoSize -Wrap
+    }
+    if ($noScope) {
+        Write-Host ("`n{0} polic(y/ies) cover no workload at all." -f $noScope.Count) -ForegroundColor Yellow
+    }
+    if ($labelRows) {
+        Write-Host "`nRetention labels:" -ForegroundColor Cyan
+        $labelRows | Sort-Object Label |
+            Format-Table Label, Enabled, RetentionDays, RetentionAction, IsRecordLabel, Published -AutoSize
+        $unpublished = @($labelRows | Where-Object { -not $_.Published })
+        if ($unpublished) {
+            Write-Host ("`n{0} label(s) exist but are published to nobody." -f $unpublished.Count) -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host ("`n{0} polic(y/ies), {1} label(s).`nReports: {2}; {3}`nLog: {4}" -f `
+        $policyRows.Count, $labelRows.Count, $PolicyCsv, $LabelCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs. The first lists every retention policy with its
+enabled state, mode, workload scope, duration, end-of-life action and whether
+it has a rule at all. The second lists every retention label with its duration,
+action, record status, and whether it is published anywhere.
+
+**How it works.**
+
+- **Duration comes from the rule, not the policy.** The policy object says
+  *where* retention applies; `Get-RetentionComplianceRule` says *how long* and
+  *what happens next*. Reporting policies alone produces an inventory with no
+  durations in it, which is the thing anyone reading it actually wants.
+- **Scope is summarised as "all" versus "named".** A location set to `All` is
+  an organisation-wide commitment; a list of twelve mailboxes is not, and both
+  look like a populated field. `Get-Scope` renders the difference, including
+  the exception count where one exists.
+- **`NotInForce` catches three states that all mean nothing is retained**: the
+  policy is disabled, it is in a `Test` mode simulating rather than acting, or
+  it has no rule. Any of them produces a policy that appears in every list and
+  retains nothing.
+- **Delete-capable policies are called out in red.** A retention policy with a
+  `Delete` action is a data-destruction schedule, and it is worth being
+  certain that was intended before it starts running.
+- **`Irreversible` flags record labels.** A record or regulatory record label
+  cannot be removed or changed once applied to content. Publishing one broadly
+  is a decision that cannot be walked back.
+- **Unpublished labels are reported.** A label nobody can apply is a label that
+  exists only in the admin's mind and the configuration.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`, connected with **`Connect-IPPSSession`**
+  — not `Connect-ExchangeOnline`. The script detects the wrong session by
+  trying a Purview cmdlet first.
+- **Adaptive scopes are not expanded.** A policy using an adaptive scope
+  targets a query rather than a list, and `Get-Scope` will show it as a named
+  set without resolving who matches. Those need
+  `Get-AdaptiveScope` to interpret.
+- `DistributionStatus` matters more than it looks: a policy that is `Pending`
+  has not finished reaching its locations and is not yet in force everywhere
+  the scope claims.
+- **Retention wins over deletion, and the longest retention wins over all.**
+  Several policies on the same content do not conflict — the most retentive
+  applies. A short delete policy does not shorten a long keep policy.
+- Teams chat and channel retention are **separate locations** from Exchange and
+  SharePoint even though the data lives in those workloads. A policy covering
+  "all Exchange" does not cover Teams chat.
+- Label settings read here are the label *definition*. What has actually been
+  applied to content is a different question answered by content explorer.
+
+> **Tip — This is the document the auditor asks for**
+>
+> "Show me your retention schedule" is answered by the policy CSV with the
+> durations and actions filled in, not by a screenshot of the portal. Date it
+> and keep it with the run log.

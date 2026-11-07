@@ -1,0 +1,303 @@
+---
+title: Conditional Access Inventory
+sidebar_label: Conditional Access
+sidebar_position: 5
+description: PowerShell that exports every Conditional Access policy with its state, conditions, grant controls, and resolved exclusions — so the accounts quietly carved out of enforcement are visible as names, not GUIDs.
+---
+
+# Conditional Access Inventory
+
+Exports every Conditional Access policy with its state, conditions and grant
+controls, resolves every included and excluded object to a **name**, and
+reports the accounts that accumulate exclusions across policies. Read-only.
+
+Conditional Access decays through exclusions. Each one is reasonable at the
+time — a break-glass account, a service account that can't do MFA, a director
+travelling, a migration that needed legacy auth for a fortnight. None of them
+gets removed, the portal shows them as GUIDs, and two years later nobody can
+say who is actually outside the policy that the compliance questionnaire says
+protects everyone.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Inventories Conditional Access policies with resolved include/exclude
+    targets, grant controls, and a per-principal exclusion tally.
+.DESCRIPTION
+    Reads all CA policies, resolves every user, group and role GUID to a
+    display name via a bulk directory index, and emits one row per policy plus
+    a second CSV counting how many enabled policies each principal is excluded
+    from.
+.EXAMPLE
+    .\Get-ConditionalAccessInventory.ps1 -Verbose
+.NOTES
+    Required Graph perms: Policy.Read.All, Directory.Read.All,
+    RoleManagement.Read.Directory. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$LogDir       = 'C:\Temp',
+    [string]$PolicyCsv    = 'C:\Temp\ConditionalAccessPolicies.csv',
+    [string]$ExclusionCsv = 'C:\Temp\ConditionalAccessExclusions.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("ConditionalAccess_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [switch]$Tolerate)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) { Write-Log ("Unavailable: {0} — {1}" -f $Uri, $_.Exception.Message) 'WARN'; return @() }
+        throw
+    }
+    return $items
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting Conditional Access inventory.' 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -Scopes 'Policy.Read.All','Directory.Read.All','RoleManagement.Read.Directory' -NoWelcome
+    }
+    Write-Log ("Connected as {0}." -f (Get-MgContext).Account) 'INFO'
+
+    # --- Name index -----------------------------------------------------------
+    # CA policies store GUIDs. A report full of GUIDs is unreadable, and
+    # unreadable reports do not get reviewed.
+    $names = @{
+        'All'                = 'All users'
+        'None'               = 'None'
+        'GuestsOrExternalUsers' = 'Guests / external users'
+    }
+    foreach ($u in (Get-GraphCollection -Uri 'https://graph.microsoft.com/v1.0/users?$select=id,userPrincipalName&$top=999')) {
+        $names[$u.id] = $u.userPrincipalName
+    }
+    foreach ($g in (Get-GraphCollection -Uri 'https://graph.microsoft.com/v1.0/groups?$select=id,displayName&$top=999')) {
+        $names[$g.id] = "[group] $($g.displayName)"
+    }
+    foreach ($r in (Get-GraphCollection -Tolerate -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions')) {
+        $names[$r.id] = "[role] $($r.displayName)"
+    }
+    foreach ($s in (Get-GraphCollection -Tolerate -Uri 'https://graph.microsoft.com/v1.0/servicePrincipals?$select=id,appId,displayName&$top=999')) {
+        $names[$s.appId] = "[app] $($s.displayName)"
+    }
+    Write-Log ("Directory objects indexed: {0}" -f $names.Count) 'INFO'
+
+    function Resolve-Names {
+        param([AllowNull()][object[]]$Ids)
+        @($Ids | Where-Object { $_ } | ForEach-Object {
+            if ($names.ContainsKey($_)) { $names[$_] } else { $_ }   # Unresolved GUIDs stay visible.
+        })
+    }
+
+    # --- Policies -------------------------------------------------------------
+    $policies = Get-GraphCollection -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies'
+    Write-Log ("Policies: {0}" -f $policies.Count) 'INFO'
+    if (-not $policies) {
+        Write-Host "`nNo Conditional Access policies exist in this tenant." -ForegroundColor Red
+        return
+    }
+
+    $exclusionTally = @{}
+
+    $rows = foreach ($p in $policies) {
+        $c = $p.conditions
+
+        $incUsers = Resolve-Names $c.users.includeUsers
+        $excUsers = Resolve-Names $c.users.excludeUsers
+        $incGroups= Resolve-Names $c.users.includeGroups
+        $excGroups= Resolve-Names $c.users.excludeGroups
+        $incRoles = Resolve-Names $c.users.includeRoles
+        $excRoles = Resolve-Names $c.users.excludeRoles
+
+        $allExclusions = @($excUsers) + @($excGroups) + @($excRoles)
+
+        # Only exclusions from *enabled* policies weaken anything today.
+        if ($p.state -eq 'enabled') {
+            foreach ($e in $allExclusions) {
+                if (-not $exclusionTally.ContainsKey($e)) { $exclusionTally[$e] = @() }
+                $exclusionTally[$e] += $p.displayName
+            }
+        }
+
+        $grants = @($p.grantControls.builtInControls)
+        if ($p.grantControls.authenticationStrength) {
+            $grants += "authStrength:$($p.grantControls.authenticationStrength.displayName)"
+        }
+
+        [pscustomobject]@{
+            Name              = $p.displayName
+            State             = $p.state                    # enabled | disabled | enabledForReportingButNotEnforced
+            IsEnforcing       = ($p.state -eq 'enabled')
+            IncludeUsers      = ($incUsers  -join '; ')
+            IncludeGroups     = ($incGroups -join '; ')
+            IncludeRoles      = ($incRoles  -join '; ')
+            ExcludeUsers      = ($excUsers  -join '; ')
+            ExcludeGroups     = ($excGroups -join '; ')
+            ExcludeRoles      = ($excRoles  -join '; ')
+            ExclusionCount    = $allExclusions.Count
+            IncludeApps       = ((Resolve-Names $c.applications.includeApplications) -join '; ')
+            ExcludeApps       = ((Resolve-Names $c.applications.excludeApplications) -join '; ')
+            UserRiskLevels    = (@($c.userRiskLevels)    -join '; ')
+            SignInRiskLevels  = (@($c.signInRiskLevels)  -join '; ')
+            Platforms         = (@($c.platforms.includePlatforms) -join '; ')
+            Locations         = ((Resolve-Names $c.locations.includeLocations) -join '; ')
+            ClientAppTypes    = (@($c.clientAppTypes)    -join '; ')
+            GrantOperator     = $p.grantControls.operator  # AND | OR
+            GrantControls     = ($grants -join '; ')
+            SessionControls   = (@($p.sessionControls.PSObject.Properties |
+                                  Where-Object { $_.Value } | ForEach-Object { $_.Name }) -join '; ')
+            Created           = $p.createdDateTime
+            Modified          = $p.modifiedDateTime
+            # A policy in report-only mode enforces nothing. It is a very common
+            # state to leave a policy in and forget about.
+            ReportOnly        = ($p.state -eq 'enabledForReportingButNotEnforced')
+            # 'OR' with multiple controls means ANY one satisfies the policy —
+            # frequently not what the author intended.
+            PermissiveGrant   = ($p.grantControls.operator -eq 'OR') -and (@($grants).Count -gt 1)
+        }
+    }
+
+    # --- Exclusion tally ------------------------------------------------------
+    $exclusionRows = foreach ($k in $exclusionTally.Keys) {
+        [pscustomobject]@{
+            Principal       = $k
+            ExcludedFrom    = $exclusionTally[$k].Count
+            Policies        = ($exclusionTally[$k] | Sort-Object) -join '; '
+        }
+    }
+    $exclusionRows = @($exclusionRows | Sort-Object ExcludedFrom -Descending)
+
+    $enabled    = @($rows | Where-Object IsEnforcing)
+    $reportOnly = @($rows | Where-Object ReportOnly)
+    $disabled   = @($rows | Where-Object { $_.State -eq 'disabled' })
+    $permissive = @($rows | Where-Object PermissiveGrant)
+
+    Write-Log ("Policies {0}: enabled {1}, report-only {2}, disabled {3}. Distinct excluded principals: {4}." -f `
+        $rows.Count, $enabled.Count, $reportOnly.Count, $disabled.Count, $exclusionRows.Count) 'INFO'
+
+    $rows          | Sort-Object State, Name | Export-Csv -Path $PolicyCsv    -NoTypeInformation -Encoding UTF8
+    $exclusionRows                            | Export-Csv -Path $ExclusionCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $PolicyCsv, $ExclusionCsv) 'INFO'
+
+    Write-Host "`nPolicies:" -ForegroundColor Cyan
+    $rows | Sort-Object State, Name |
+        Format-Table Name, State, GrantControls, ExclusionCount -AutoSize -Wrap
+
+    if ($reportOnly) {
+        Write-Host "`nReport-only — these enforce nothing:" -ForegroundColor Yellow
+        $reportOnly | Format-Table Name, GrantControls, Modified -AutoSize
+    }
+    if ($disabled) {
+        Write-Host "`nDisabled:" -ForegroundColor Yellow
+        $disabled | Format-Table Name, Modified -AutoSize
+    }
+    if ($permissive) {
+        Write-Host "`nGrant operator is OR with multiple controls — any ONE satisfies the policy:" -ForegroundColor Yellow
+        $permissive | Format-Table Name, GrantControls -AutoSize -Wrap
+    }
+    if ($exclusionRows) {
+        Write-Host "`nPrincipals excluded from the most enabled policies:" -ForegroundColor Yellow
+        $exclusionRows | Select-Object -First 15 | Format-Table Principal, ExcludedFrom, Policies -AutoSize -Wrap
+    }
+
+    Write-Host ("`n{0} polic(y/ies): {1} enforcing, {2} report-only, {3} disabled.`nReports: {4}; {5}`nLog: {6}" -f `
+        $rows.Count, $enabled.Count, $reportOnly.Count, $disabled.Count,
+        $PolicyCsv, $ExclusionCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs. The first has one row per policy — state,
+conditions, platforms, locations, client app types, grant controls, session
+controls, and every include and exclude resolved to a readable name. The second
+inverts it: one row per excluded principal, with a count of how many *enabled*
+policies they are carved out of and which ones.
+
+**How it works.**
+
+- **Everything is resolved to a name.** CA stores GUIDs for users, groups,
+  roles and applications. A bulk index of all four is built first, then every
+  reference is looked up. Unresolved GUIDs are left in place rather than
+  blanked, so a reference to a deleted object is visible instead of silently
+  disappearing.
+- **The exclusion tally is the second report, and the more useful one.**
+  Reading policies one at a time hides the pattern; a single account excluded
+  from six enabled policies is effectively outside Conditional Access
+  altogether, and nothing in the portal shows that.
+- **Only enabled policies count toward the tally.** An exclusion on a disabled
+  policy weakens nothing today, and including it inflates the number until the
+  report stops being believed.
+- **Three states, not two.** `enabledForReportingButNotEnforced` is report-only:
+  the policy appears in every list, logs what it *would* do, and enforces
+  nothing. Policies are routinely left there after testing.
+- **`PermissiveGrant` catches an easy mistake.** Multiple grant controls joined
+  by `OR` mean any one of them satisfies the policy — "require MFA **or**
+  compliant device" is a much weaker statement than most authors intend, and it
+  is one radio button away from `AND`.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes `Policy.Read.All`,
+  `Directory.Read.All`, `RoleManagement.Read.Directory`.
+- **Group exclusions are not expanded.** A row saying `[group] CA-Exclusions`
+  is one row whatever its membership. That membership is the next question and
+  frequently the more alarming one.
+- This inventories configuration; it does not evaluate it. To ask "what applies
+  to this user signing in from here", use the **What If** tool in the portal —
+  no export can replace it, because policy evaluation depends on the sign-in.
+- **Break-glass accounts are supposed to be excluded**, so they will top the
+  exclusion tally and that is correct. The report cannot tell a break-glass
+  account from an oversight; you can, and the ones you cannot explain are the
+  finding.
+- Policies created by Microsoft security defaults do not appear here — security
+  defaults and Conditional Access are mutually exclusive, and if this returns
+  no policies at all, check whether security defaults are on.
+
+> **Tip — Export it before every change, and keep it**
+>
+> CA has no built-in version history. A dated CSV from before a change is the
+> only way to answer "what did this look like last Tuesday" after an outage —
+> and the exclusion CSV is the one an auditor will actually ask for.

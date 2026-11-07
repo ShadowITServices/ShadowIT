@@ -23,6 +23,24 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
  * are hidden from navigation. Keep the key named `tutorialSidebar` because the
  * navbar item in docusaurus.config.ts references that sidebarId.
  */
+const M365 = 'script-repository/microsoft-365';
+
+/**
+ * Every script-repository workload has the same shape: a folder with an
+ * index.mdx overview and one page per script. Building those categories from a
+ * helper keeps the 37 doc IDs readable and makes a typo a build error rather
+ * than a quietly missing sidebar entry.
+ */
+function workloadCategory(label: string, dir: string, scripts: string[]) {
+  return {
+    type: 'category' as const,
+    label,
+    collapsed: true,
+    link: {type: 'doc' as const, id: `${dir}/index`},
+    items: scripts.map((s) => `${dir}/${s}`),
+  };
+}
+
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     'intro',
@@ -91,51 +109,67 @@ const sidebars: SidebarsConfig = {
       collapsed: true,
       link: {type: 'doc', id: 'script-repository/index'},
       items: [
-        {
-          type: 'category',
-          label: 'Windows',
-          collapsed: true,
-          link: {type: 'doc', id: 'script-repository/windows/index'},
-          items: [
-            'script-repository/windows/local-administrator-inventory',
-            'script-repository/windows/patch-and-reboot-state',
-            'script-repository/windows/stale-profile-cleanup',
-          ],
-        },
+        workloadCategory('Windows', 'script-repository/windows', [
+          'local-administrator-inventory',
+          'patch-and-reboot-state',
+          'stale-profile-cleanup',
+          'service-and-task-audit',
+          'certificate-expiry-report',
+        ]),
         {
           type: 'category',
           label: 'Microsoft 365',
           collapsed: true,
           link: {type: 'doc', id: 'script-repository/microsoft-365/index'},
           items: [
-            {
-              type: 'category',
-              label: 'Entra ID',
-              collapsed: true,
-              link: {type: 'doc', id: 'script-repository/microsoft-365/entra/index'},
-              items: [
-                {
-                  type: 'category',
-                  label: 'Enterprise Applications',
-                  collapsed: true,
-                  link: {
-                    type: 'doc',
-                    id: 'script-repository/microsoft-365/entra/enterprise-applications/index',
-                  },
-                  items: [
-                    'script-repository/microsoft-365/entra/enterprise-applications/auditing-stale-enterprise-applications',
-                  ],
-                },
-                'script-repository/microsoft-365/entra/privileged-role-assignments',
-              ],
-            },
-            'script-repository/microsoft-365/exchange-online',
-            'script-repository/microsoft-365/sharepoint-online',
-            'script-repository/microsoft-365/onedrive',
-            'script-repository/microsoft-365/teams',
-            'script-repository/microsoft-365/intune',
-            'script-repository/microsoft-365/purview',
-            'script-repository/microsoft-365/defender',
+            workloadCategory('Entra ID', `${M365}/entra`, [
+              'stale-enterprise-applications',
+              'privileged-role-assignments',
+              'authentication-methods-coverage',
+              'conditional-access-inventory',
+              'guest-account-review',
+            ]),
+            workloadCategory('Exchange Online', `${M365}/exchange-online`, [
+              'mailbox-delegation-and-forwarding',
+              'mail-flow-rules-and-connectors',
+              'mailbox-size-and-archive',
+              'shared-mailbox-signin-exposure',
+            ]),
+            workloadCategory('SharePoint Online', `${M365}/sharepoint-online`, [
+              'external-sharing-posture',
+              'storage-and-growth',
+              'orphaned-and-inactive-sites',
+              'site-collection-admin-audit',
+            ]),
+            workloadCategory('OneDrive', `${M365}/onedrive`, [
+              'storage-and-orphaned-data',
+              'external-sharing-review',
+              'grant-access-to-leaver-drive',
+            ]),
+            workloadCategory('Teams', `${M365}/teams`, [
+              'ownership-and-guest-governance',
+              'inactive-teams-report',
+              'policy-assignment-audit',
+              'external-access-configuration',
+            ]),
+            workloadCategory('Intune', `${M365}/intune`, [
+              'device-compliance-and-sync',
+              'bitlocker-key-escrow',
+              'configuration-profile-assignments',
+              'application-deployment-status',
+            ]),
+            workloadCategory('Purview', `${M365}/purview`, [
+              'unified-audit-log-export',
+              'retention-policy-inventory',
+              'dlp-policy-coverage',
+              'sensitivity-label-publication',
+            ]),
+            workloadCategory('Defender', `${M365}/defender`, [
+              'protection-policy-coverage',
+              'allow-and-block-list-audit',
+              'impersonation-protection-audit',
+              'quarantine-triage',
+            ]),
           ],
         },
       ],

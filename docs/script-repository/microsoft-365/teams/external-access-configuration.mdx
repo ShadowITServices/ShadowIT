@@ -1,0 +1,262 @@
+---
+title: External Access Configuration
+sidebar_label: External Access
+sidebar_position: 5
+description: PowerShell that reports Teams federation and guest access settings — which domains can reach your users, what guests may do once admitted, and whether unmanaged Teams users can start a conversation.
+---
+
+# External Access Configuration
+
+Reports the tenant's federation and guest-access configuration: which external
+domains can reach your users, whether anonymous and unmanaged Teams accounts
+can initiate contact, and what a guest may do once admitted. Read-only.
+
+These settings are tenant-wide, set once, and almost never revisited. The
+default is open federation with every Teams tenant on earth, which is how
+Teams-based phishing works — an attacker with a trial tenant messages your
+staff directly, inside the tool they trust, bypassing every email control you
+own.
+
+## Script
+
+```powershell
+#Requires -Modules MicrosoftTeams
+<#
+.SYNOPSIS
+    Reports Microsoft Teams external access (federation) and guest access
+    configuration with the permissive settings called out.
+.DESCRIPTION
+    Reads tenant federation configuration, the guest-facing client and meeting
+    policies, and the external access policy, then assesses each against a
+    conservative baseline and explains what each finding permits.
+.EXAMPLE
+    .\Get-TeamsExternalAccess.ps1 -Verbose
+.NOTES
+    Required role: Teams Administrator (or Global Reader). Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\TeamsExternalAccess.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("TeamsExternalAccess_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+$findings = [System.Collections.Generic.List[object]]::new()
+
+function Add-Finding {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Area,
+        [Parameter(Mandatory)][string]$Setting,
+        [AllowNull()]$Value,
+        [Parameter(Mandatory)][ValidateSet('OK','Review','Permissive')][string]$Assessment,
+        [Parameter(Mandatory)][string]$MeansWhat
+    )
+    $findings.Add([pscustomobject]@{
+        Area       = $Area
+        Setting    = $Setting
+        Value      = if ($null -eq $Value) { '' } else { [string]$Value }
+        Assessment = $Assessment
+        MeansWhat  = $MeansWhat
+    })
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting Teams external access configuration report.' 'INFO'
+
+    try { $null = Get-CsTenant -ErrorAction Stop }
+    catch {
+        Write-Log 'No Teams session; connecting.' 'INFO'
+        Connect-MicrosoftTeams | Out-Null
+    }
+
+    # --- Federation -----------------------------------------------------------
+    $fed = Get-CsTenantFederationConfiguration
+    $allowed = @($fed.AllowedDomains)
+    $blocked = @($fed.BlockedDomains)
+
+    # AllowedDomains is an object, not a list, when the mode is "allow all".
+    $allowList = @()
+    if ($fed.AllowedDomains -and $fed.AllowedDomains.AllowedDomain) {
+        $allowList = @($fed.AllowedDomains.AllowedDomain | ForEach-Object { $_.Domain })
+    }
+    $blockList = @($blocked | ForEach-Object { $_.Domain })
+
+    $openFederation = $fed.AllowFederatedUsers -and ($allowList.Count -eq 0)
+
+    Add-Finding -Area 'Federation' -Setting 'AllowFederatedUsers' -Value $fed.AllowFederatedUsers `
+        -Assessment $(if ($openFederation) { 'Permissive' } elseif ($fed.AllowFederatedUsers) { 'Review' } else { 'OK' }) `
+        -MeansWhat $(if ($openFederation) {
+            'Any Microsoft 365 tenant in the world can message your users directly in Teams.'
+        } elseif ($fed.AllowFederatedUsers) {
+            "Federation is restricted to an allow list of $($allowList.Count) domain(s)."
+        } else { 'Federation with other organisations is off.' })
+
+    Add-Finding -Area 'Federation' -Setting 'AllowedDomains' `
+        -Value $(if ($allowList.Count) { $allowList -join '; ' } else { '(all domains)' }) `
+        -Assessment $(if ($allowList.Count) { 'OK' } else { 'Permissive' }) `
+        -MeansWhat 'An explicit allow list is the only configuration that limits who can reach your staff.'
+
+    Add-Finding -Area 'Federation' -Setting 'BlockedDomains' `
+        -Value $(if ($blockList.Count) { $blockList -join '; ' } else { '(none)' }) `
+        -Assessment 'OK' `
+        -MeansWhat 'A block list only helps against domains you already know about.'
+
+    Add-Finding -Area 'Federation' -Setting 'AllowTeamsConsumer' -Value $fed.AllowTeamsConsumer `
+        -Assessment $(if ($fed.AllowTeamsConsumer) { 'Permissive' } else { 'OK' }) `
+        -MeansWhat 'Personal Microsoft accounts (Teams for consumers) can start conversations with your staff.'
+
+    Add-Finding -Area 'Federation' -Setting 'AllowTeamsConsumerInbound' -Value $fed.AllowTeamsConsumerInbound `
+        -Assessment $(if ($fed.AllowTeamsConsumerInbound) { 'Review' } else { 'OK' }) `
+        -MeansWhat 'Controls whether consumer accounts may initiate, or only respond.'
+
+    Add-Finding -Area 'Federation' -Setting 'AllowPublicUsers' -Value $fed.AllowPublicUsers `
+        -Assessment $(if ($fed.AllowPublicUsers) { 'Review' } else { 'OK' }) `
+        -MeansWhat 'Legacy public IM provider connectivity.'
+
+    # --- Guest access ---------------------------------------------------------
+    try {
+        $guestMsg = Get-CsTeamsClientConfiguration -ErrorAction Stop
+        Add-Finding -Area 'Guest' -Setting 'AllowGuestUser' -Value $guestMsg.AllowGuestUser `
+            -Assessment $(if ($guestMsg.AllowGuestUser) { 'Review' } else { 'OK' }) `
+            -MeansWhat 'Master switch for guests in Teams. Off here overrides every per-team setting.'
+    }
+    catch { Write-Log ("Client configuration unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    try {
+        $gm = Get-CsTeamsMessagingPolicy -Identity Global -ErrorAction Stop
+        Add-Finding -Area 'Guest' -Setting 'Global AllowUserDeleteMessage' -Value $gm.AllowUserDeleteMessage `
+            -Assessment $(if ($gm.AllowUserDeleteMessage) { 'Review' } else { 'OK' }) `
+            -MeansWhat 'Users deleting their own messages removes evidence during an investigation.'
+    }
+    catch { Write-Log ("Messaging policy unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    try {
+        $mp = Get-CsTeamsMeetingPolicy -Identity Global -ErrorAction Stop
+        Add-Finding -Area 'Meetings' -Setting 'AutoAdmittedUsers' -Value $mp.AutoAdmittedUsers `
+            -Assessment $(if ($mp.AutoAdmittedUsers -eq 'Everyone') { 'Permissive' } else { 'OK' }) `
+            -MeansWhat 'Everyone means anonymous joiners skip the lobby entirely.'
+
+        Add-Finding -Area 'Meetings' -Setting 'AllowAnonymousUsersToJoinMeeting' -Value $mp.AllowAnonymousUsersToJoinMeeting `
+            -Assessment $(if ($mp.AllowAnonymousUsersToJoinMeeting) { 'Review' } else { 'OK' }) `
+            -MeansWhat 'Anyone with the link can join without authenticating.'
+
+        Add-Finding -Area 'Meetings' -Setting 'AllowAnonymousUsersToStartMeeting' -Value $mp.AllowAnonymousUsersToStartMeeting `
+            -Assessment $(if ($mp.AllowAnonymousUsersToStartMeeting) { 'Permissive' } else { 'OK' }) `
+            -MeansWhat 'An unauthenticated participant can start the meeting before any employee arrives.'
+
+        Add-Finding -Area 'Meetings' -Setting 'AllowExternalParticipantGiveRequestControl' -Value $mp.AllowExternalParticipantGiveRequestControl `
+            -Assessment $(if ($mp.AllowExternalParticipantGiveRequestControl) { 'Review' } else { 'OK' }) `
+            -MeansWhat 'External participants can request control of a shared screen.'
+    }
+    catch { Write-Log ("Meeting policy unreadable: {0}" -f $_.Exception.Message) 'WARN' }
+
+    # --- Report ---------------------------------------------------------------
+    $permissive = @($findings | Where-Object { $_.Assessment -eq 'Permissive' })
+    $review     = @($findings | Where-Object { $_.Assessment -eq 'Review' })
+
+    Write-Log ("Findings {0}: permissive {1}, review {2}." -f $findings.Count, $permissive.Count, $review.Count) 'INFO'
+
+    $findings | Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nExternal access configuration:" -ForegroundColor Cyan
+    $findings | Format-Table Area, Setting, Value, Assessment -AutoSize -Wrap
+
+    if ($permissive) {
+        Write-Host "`nPermissive settings — each one is deliberate or it is a gap:" -ForegroundColor Red
+        $permissive | Format-Table Setting, Value, MeansWhat -AutoSize -Wrap
+    }
+    if ($review) {
+        Write-Host "`nWorth a decision:" -ForegroundColor Yellow
+        $review | Format-Table Setting, Value, MeansWhat -AutoSize -Wrap
+    }
+    if (-not $permissive -and -not $review) {
+        Write-Host "`nNothing flagged — external access is configured conservatively." -ForegroundColor Green
+    }
+
+    Write-Host ("`n{0} setting(s) assessed; {1} permissive, {2} to review.`nReport: {3}`nLog: {4}" -f `
+        $findings.Count, $permissive.Count, $review.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per setting across federation, guest access and
+meeting policy, each with its current value, an assessment of `OK`, `Review` or
+`Permissive`, and a plain sentence saying **what that setting actually permits**.
+
+**How it works.**
+
+- **Every finding carries a `MeansWhat`.** A report that says
+  `AllowTeamsConsumer: True` tells a reader nothing unless they already know.
+  Saying "personal Microsoft accounts can start conversations with your staff"
+  lets someone who isn't a Teams administrator make the decision.
+- **Open federation is detected as a combination.** `AllowFederatedUsers = True`
+  on its own is normal; it only becomes `Permissive` when the allow list is
+  *empty*, which means every Microsoft 365 tenant in the world. That pairing is
+  the default and is the finding most tenants have.
+- **`AllowedDomains` is unwrapped carefully.** It is an object with a nested
+  `AllowedDomain` collection when a list exists and something quite different
+  when the mode is "allow all" — reading it naively yields a type name instead
+  of domains.
+- **Three assessments, not two.** `Permissive` is a gap; `Review` is a setting
+  with a legitimate business case that should be a decision rather than a
+  default. Collapsing them produces a list people stop reading.
+- **Each read is independently guarded**, so a cmdlet unavailable on this
+  tenant's licensing logs a warning and the rest of the assessment completes.
+
+**Prerequisites & caveats.**
+
+- Module `MicrosoftTeams`; **Teams Administrator** or Global Reader.
+- **This reads the Global policies only.** A user on a custom meeting policy is
+  governed by that instead — the
+  [policy assignment audit](../policy-assignment-audit) shows who that is. A
+  restrictive Global policy with half the staff on a permissive custom one is a
+  real and invisible pattern.
+- Teams external access and **Entra B2B external collaboration settings** are
+  different controls that overlap. Guests blocked in Entra cannot be added to a
+  team regardless of what Teams says, so read this alongside the
+  [guest account review](/docs/script-repository/microsoft-365/entra/guest-account-review).
+- Property names on `Get-CsTenantFederationConfiguration` have changed as
+  features shipped, particularly around Teams consumer interoperability. A
+  blank value may mean the property was renamed rather than unset.
+- The assessments encode a conservative baseline, not a compliance standard.
+  A professional services firm that collaborates constantly with clients will
+  legitimately run with federation open to specific partners.
+
+> **Note — Allow-listing federation is the highest-value change here**
+>
+> Moving from open federation to an allow list of partner domains removes an
+> entire phishing channel. It is also the change most likely to break something
+> on the Monday morning after, so collect the domains your staff actually talk
+> to from the Teams usage reports first.

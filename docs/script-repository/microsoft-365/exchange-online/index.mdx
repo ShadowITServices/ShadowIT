@@ -1,0 +1,39 @@
+---
+title: Exchange Online
+sidebar_label: Overview
+sidebar_position: 1
+description: PowerShell for Exchange Online administration — mailbox delegation and forwarding, mail flow rules and connectors, mailbox sizing and archiving, and shared mailbox sign-in exposure.
+---
+
+# Exchange Online
+
+PowerShell for administering Exchange Online with the `ExchangeOnlineManagement`
+module. Connect once (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/))
+and every script here reuses the session.
+
+## Scripts
+
+- **[Mailbox Delegation and Forwarding Audit](./mailbox-delegation-and-forwarding)** —
+  who can read or send as each mailbox, and every route mail can leave by.
+- **[Mail Flow Rule and Connector Audit](./mail-flow-rules-and-connectors)** —
+  transport rules and connectors, with tenant-wide redirection and BCC
+  exfiltration paths flagged.
+- **[Mailbox Size and Archive Report](./mailbox-size-and-archive)** — quota
+  headroom, archive state, and the mailboxes that will hit the wall first.
+- **[Shared Mailbox Sign-In Exposure](./shared-mailbox-signin-exposure)** —
+  shared mailboxes whose underlying account can still sign in.
+
+## Reading them together
+
+The first two are a pair. A mailbox-level audit finds a forward configured on a
+mailbox or a rule inside it; a transport-rule audit finds redirection applied
+across the whole tenant from the mail-flow layer. Running one without the other
+leaves a path open, and it is routinely the second one that is missed — a
+transport rule needs no access to any mailbox at all.
+
+> **Tip — The connection is the slow part**
+>
+> `Connect-ExchangeOnline` takes several seconds and each script checks for an
+> existing session with `Get-ConnectionInformation` before reconnecting. Run
+> them in the same console and only the first pays the cost.

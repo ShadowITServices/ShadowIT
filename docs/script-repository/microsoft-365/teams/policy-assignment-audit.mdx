@@ -1,0 +1,246 @@
+---
+title: Policy Assignment Audit
+sidebar_label: Policy Assignments
+sidebar_position: 4
+description: PowerShell that reports which Teams meeting, messaging, calling and external-access policies each user actually holds, and which custom policies are assigned to nobody.
+---
+
+# Policy Assignment Audit
+
+Reports the meeting, messaging, calling, app-permission and external-access
+policies each user actually holds, and identifies custom policies assigned to
+nobody at all. Read-only.
+
+Teams policy is invisible by design. A user on the Global policy and a user on
+a carefully restricted custom policy look identical in the admin centre's user
+list, and the only way to see the difference is to open each user in turn.
+Meanwhile custom policies accumulate — created for a pilot, assigned to three
+people, never removed and never extended.
+
+## Script
+
+```powershell
+#Requires -Modules MicrosoftTeams
+<#
+.SYNOPSIS
+    Reports effective Teams policy assignments per user and identifies custom
+    policies with no assignments.
+.DESCRIPTION
+    Reads per-user policy assignments across the main policy types, resolves
+    blank assignments to the Global (default) policy, and inverts the data to
+    show which custom policies are unused.
+.EXAMPLE
+    .\Get-TeamsPolicyAudit.ps1 -Verbose
+.NOTES
+    Required role: Teams Administrator (or Global Reader). Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$LogDir     = 'C:\Temp',
+    [string]$UserCsv    = 'C:\Temp\TeamsPolicyByUser.csv',
+    [string]$PolicyCsv  = 'C:\Temp\TeamsPolicyUsage.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("TeamsPolicyAudit_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# A blank per-user assignment means "inherit the Global policy". Rendering that
+# as an empty cell is how people conclude a user has no policy at all.
+function Resolve-PolicyName {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Value)
+    $s = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($s)) { return 'Global (default)' }
+    # Assignments come back as Tag:PolicyName.
+    return ($s -replace '^Tag:', '')
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting Teams policy assignment audit.' 'INFO'
+
+    try { $null = Get-CsTenant -ErrorAction Stop }
+    catch {
+        Write-Log 'No Teams session; connecting.' 'INFO'
+        Connect-MicrosoftTeams | Out-Null
+    }
+
+    # --- Defined policies -----------------------------------------------------
+    # Each family is read separately; a family unavailable on this tenant's
+    # licensing is an absence, not an error.
+    $families = @(
+        @{ Name = 'Meeting';        Getter = { Get-CsTeamsMeetingPolicy -ErrorAction Stop };            UserProp = 'TeamsMeetingPolicy' }
+        @{ Name = 'Messaging';      Getter = { Get-CsTeamsMessagingPolicy -ErrorAction Stop };          UserProp = 'TeamsMessagingPolicy' }
+        @{ Name = 'Calling';        Getter = { Get-CsTeamsCallingPolicy -ErrorAction Stop };            UserProp = 'TeamsCallingPolicy' }
+        @{ Name = 'AppPermission';  Getter = { Get-CsTeamsAppPermissionPolicy -ErrorAction Stop };      UserProp = 'TeamsAppPermissionPolicy' }
+        @{ Name = 'ExternalAccess'; Getter = { Get-CsExternalAccessPolicy -ErrorAction Stop };          UserProp = 'ExternalAccessPolicy' }
+        @{ Name = 'MeetingBroadcast';Getter= { Get-CsTeamsMeetingBroadcastPolicy -ErrorAction Stop };   UserProp = 'TeamsMeetingBroadcastPolicy' }
+    )
+
+    $defined = @{}
+    foreach ($f in $families) {
+        try {
+            $p = @(& $f.Getter)
+            $defined[$f.Name] = @($p | ForEach-Object { ($_.Identity -replace '^Tag:', '') })
+            Write-Log ("{0}: {1} polic(y/ies) defined." -f $f.Name, $p.Count) 'INFO'
+        }
+        catch {
+            Write-Log ("{0}: unavailable ({1})" -f $f.Name, $_.Exception.Message) 'WARN'
+            $defined[$f.Name] = @()
+        }
+    }
+
+    # --- Per-user assignments -------------------------------------------------
+    Write-Log 'Reading per-user policy assignments.' 'DEBUG'
+    $props = @('UserPrincipalName','DisplayName','Enabled') + @($families.UserProp)
+    $users = @(Get-CsOnlineUser -ResultSize Unlimited | Select-Object $props)
+    Write-Log ("Users: {0}" -f $users.Count) 'INFO'
+
+    $usage = @{}
+    foreach ($f in $families) { $usage[$f.Name] = @{} }
+
+    $userRows = foreach ($u in $users) {
+        $row = [ordered]@{
+            User        = $u.UserPrincipalName
+            DisplayName = $u.DisplayName
+            Enabled     = $u.Enabled
+        }
+        $customCount = 0
+
+        foreach ($f in $families) {
+            $name = Resolve-PolicyName -Value $u.($f.UserProp)
+            $row[$f.Name] = $name
+
+            if ($name -ne 'Global (default)') { $customCount++ }
+
+            if (-not $usage[$f.Name].ContainsKey($name)) { $usage[$f.Name][$name] = 0 }
+            $usage[$f.Name][$name]++
+        }
+
+        $row['CustomPolicyCount'] = $customCount
+        $row['AllGlobal']         = ($customCount -eq 0)
+        [pscustomobject]$row
+    }
+
+    # --- Policy usage, including the unused ----------------------------------
+    $policyRows = foreach ($f in $families) {
+        foreach ($name in $defined[$f.Name]) {
+            $count = if ($usage[$f.Name].ContainsKey($name)) { $usage[$f.Name][$name] } else { 0 }
+            [pscustomobject]@{
+                Family      = $f.Name
+                Policy      = $name
+                AssignedTo  = $count
+                IsGlobal    = ($name -eq 'Global')
+                # A custom policy with nobody on it governs nothing and is
+                # usually a pilot that ended.
+                Unused      = ($count -eq 0) -and ($name -ne 'Global')
+            }
+        }
+    }
+
+    $unused    = @($policyRows | Where-Object Unused)
+    $allGlobal = @($userRows   | Where-Object AllGlobal)
+
+    Write-Log ("Users {0}; all-global {1}. Policies {2}; unused {3}." -f `
+        $userRows.Count, $allGlobal.Count, $policyRows.Count, $unused.Count) 'INFO'
+
+    $userRows   | Sort-Object User            | Export-Csv -Path $UserCsv   -NoTypeInformation -Encoding UTF8
+    $policyRows | Sort-Object Family, AssignedTo | Export-Csv -Path $PolicyCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $UserCsv, $PolicyCsv) 'INFO'
+
+    Write-Host "`nPolicy usage by family:" -ForegroundColor Cyan
+    $policyRows | Sort-Object Family, AssignedTo -Descending |
+        Format-Table Family, Policy, AssignedTo, Unused -AutoSize
+
+    if ($unused) {
+        Write-Host "`nCustom policies assigned to nobody:" -ForegroundColor Yellow
+        $unused | Format-Table Family, Policy -AutoSize
+        Write-Host 'These govern nothing. Either assign them or remove them.' -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} of {1} user(s) are on the Global default for every policy family." -f `
+        $allGlobal.Count, $userRows.Count) -ForegroundColor Cyan
+
+    Write-Host ("`nReports: {0}; {1}`nLog: {2}" -f $UserCsv, $PolicyCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs. The first has one row per user showing the
+effective policy they hold in each of six families. The second inverts it: one
+row per defined policy with how many users hold it, and a flag for the ones
+holding nobody.
+
+**How it works.**
+
+- **Blank is resolved to "Global (default)", not left empty.** A user with no
+  explicit assignment inherits the Global policy. Reporting that as an empty
+  cell is how people conclude a user is unpoliced — they are policed, by
+  whatever Global happens to say, which is the thing most worth checking.
+- **`Tag:` prefixes are stripped.** Teams stores assignments as
+  `Tag:RestrictedMeetings`. Leaving the prefix in makes the CSV harder to join
+  against the policy list and harder to read.
+- **Unused policies come from the defined list, not the assignments.** Counting
+  assignments alone can only show policies someone holds; a policy with zero
+  users never appears. The script enumerates what is *defined* and joins the
+  counts on, so the zeroes are visible.
+- **Each family is read independently and tolerates absence.** Calling and
+  broadcast policies depend on licensing, so a tenant without Teams Phone logs
+  those as unavailable and still reports everything else.
+- **`AllGlobal` per user** answers "how much of this tenant is actually
+  governed by anything bespoke" in one column — often the honest answer is
+  "almost none of it", which is fine if it is deliberate.
+
+**Prerequisites & caveats.**
+
+- Module `MicrosoftTeams`; **Teams Administrator** or Global Reader.
+- `Get-CsOnlineUser` on a large tenant is slow and returns a very wide object;
+  the script selects only the properties it needs, which helps but does not
+  make it fast.
+- **Group policy assignment is not shown.** Teams supports assigning policies
+  to groups, and the effective policy is resolved at sign-in by precedence
+  rules. A user with no direct assignment may still be governed by a
+  group-assigned policy rather than Global — this report cannot see that
+  distinction, so treat "Global (default)" as "no *direct* assignment".
+- **Policy packages** assign several policies at once. They appear here as
+  their individual policies, which is accurate but loses the grouping.
+- Property names on `Get-CsOnlineUser` have changed across module versions. If
+  a column comes back empty for every user, check the property name in the
+  `$families` table against your installed module before concluding nothing is
+  assigned.
+- Six families is not all of them. Live events, voice routing, app setup, and
+  several others exist; the table at the top of the script is the place to add
+  them.
+
+> **Tip — The unused list is the quick win**
+>
+> Custom policies assigned to nobody are pure maintenance cost: they appear in
+> every dropdown, confuse the next administrator, and look like controls in an
+> audit while enforcing nothing.

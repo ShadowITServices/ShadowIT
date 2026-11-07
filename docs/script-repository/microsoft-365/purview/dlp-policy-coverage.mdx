@@ -1,0 +1,282 @@
+---
+title: DLP Policy Coverage
+sidebar_label: DLP Coverage
+sidebar_position: 4
+description: PowerShell that reports Purview DLP policies with their locations, rules and actions, separating enforcing policies from the ones still in test mode and showing which workloads nothing covers.
+---
+
+# DLP Policy Coverage
+
+Reports every data loss prevention policy with the workloads it covers, the
+rules beneath it, what those rules actually *do*, and whether the policy is
+enforcing or still simulating. Then it names the workloads nothing covers.
+Read-only.
+
+DLP policies are routinely deployed in test mode — correctly, because the false
+positive rate on day one is high — and then left there. A policy in
+`TestWithNotifications` generates reports, satisfies a project milestone, and
+blocks nothing. The portal shows the mode in a column people stop reading once
+the policy list is longer than a screen.
+
+## Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports Microsoft Purview DLP policies, their rules and actions, and which
+    workloads are not covered by any enforcing policy.
+.DESCRIPTION
+    Joins DLP compliance policies to their rules, summarises each rule's
+    actions (block, notify, encrypt, restrict), reports enforcement mode, and
+    computes per-workload coverage from enforcing policies only.
+.EXAMPLE
+    .\Get-DlpCoverage.ps1 -Verbose
+.NOTES
+    Required role: Compliance Administrator or View-Only DLP Compliance
+    Management. Connect with Connect-IPPSSession. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$PolicyCsv = 'C:\Temp\DlpPolicies.csv',
+    [string]$RuleCsv   = 'C:\Temp\DlpRules.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("DlpCoverage_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# The workloads a tenant would normally want covered. Used to compute gaps.
+$Workloads = @(
+    @{ Key = 'ExchangeLocation';    Label = 'Exchange email' }
+    @{ Key = 'SharePointLocation';  Label = 'SharePoint'     }
+    @{ Key = 'OneDriveLocation';    Label = 'OneDrive'       }
+    @{ Key = 'TeamsLocation';       Label = 'Teams chat'     }
+    @{ Key = 'EndpointDlpLocation'; Label = 'Endpoints'      }
+)
+
+function Test-CoversWorkload {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Policy, [Parameter(Mandatory)][string]$Key)
+    $v = @($Policy.$Key)
+    return ($v.Count -gt 0)
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting DLP coverage report.' 'INFO'
+
+    $connected = $false
+    try { $null = Get-DlpCompliancePolicy -ErrorAction Stop | Select-Object -First 1; $connected = $true }
+    catch { $connected = $false }
+
+    if (-not $connected) {
+        Write-Log 'No Security & Compliance session; connecting.' 'INFO'
+        if ($UserPrincipalName) { Connect-IPPSSession -UserPrincipalName $UserPrincipalName }
+        else                    { Connect-IPPSSession }
+    }
+
+    $policies = @(Get-DlpCompliancePolicy)
+    $rules    = @(Get-DlpComplianceRule)
+    Write-Log ("DLP policies: {0}; rules: {1}" -f $policies.Count, $rules.Count) 'INFO'
+
+    if (-not $policies.Count) {
+        Write-Host "`nNo DLP policies exist in this tenant. Nothing is being inspected." -ForegroundColor Red
+        return
+    }
+
+    # --- Policies -------------------------------------------------------------
+    $policyRows = foreach ($p in $policies) {
+        $mine = @($rules | Where-Object { $_.ParentPolicyName -eq $p.Name })
+
+        $covered = @()
+        foreach ($w in $Workloads) {
+            if (Test-CoversWorkload -Policy $p -Key $w.Key) { $covered += $w.Label }
+        }
+
+        # Enforcement lives in Mode. Enable is a separate on/off switch.
+        $enforcing = $p.Enabled -and ($p.Mode -eq 'Enable')
+
+        [pscustomobject]@{
+            Name          = $p.Name
+            Enabled       = $p.Enabled
+            Mode          = $p.Mode          # Enable | TestWithNotifications | TestWithoutNotifications | Disable
+            IsEnforcing   = $enforcing
+            IsSimulating  = ($p.Mode -like 'Test*')
+            Workloads     = ($covered -join '; ')
+            WorkloadCount = $covered.Count
+            RuleCount     = $mine.Count
+            Priority      = $p.Priority
+            HasNoRules    = ($mine.Count -eq 0)
+            CreatedBy     = $p.CreatedBy
+            WhenChanged   = $p.WhenChanged
+            Comment       = $p.Comment
+            # Looks deployed, inspects nothing.
+            NotInForce    = (-not $enforcing) -or ($mine.Count -eq 0) -or ($covered.Count -eq 0)
+        }
+    }
+
+    # --- Rules ----------------------------------------------------------------
+    $ruleRows = foreach ($r in $rules) {
+        $actions = @()
+        if ($r.BlockAccess)                      { $actions += "block ($($r.BlockAccessScope))" }
+        if ($r.NotifyUser)                       { $actions += 'notify user' }
+        if ($r.NotifyEmailCustomText)            { $actions += 'custom notification' }
+        if ($r.GenerateIncidentReport)           { $actions += 'incident report' }
+        if ($r.NotifyPolicyTipCustomText)        { $actions += 'policy tip' }
+        if ($r.EncryptRMSTemplate)               { $actions += "encrypt ($($r.EncryptRMSTemplate))" }
+        if ($r.RemoveRMSTemplate)                { $actions += 'remove encryption' }
+        if ($r.Quarantine)                       { $actions += 'quarantine' }
+
+        [pscustomobject]@{
+            Policy          = $r.ParentPolicyName
+            Rule            = $r.Name
+            Disabled        = $r.Disabled
+            Priority        = $r.Priority
+            SensitiveTypes  = (@($r.ContentContainsSensitiveInformation |
+                                 ForEach-Object { $_.name }) | Where-Object { $_ }) -join '; '
+            MinCount        = (@($r.ContentContainsSensitiveInformation |
+                                 ForEach-Object { $_.mincount }) | Where-Object { $_ }) -join '; '
+            AccessScope     = $r.AccessScope
+            Actions         = ($actions -join '; ')
+            BlocksAnything  = [bool]$r.BlockAccess
+            OnlyNotifies    = (-not $r.BlockAccess) -and ([bool]$r.NotifyUser)
+            ReportSeverity  = $r.ReportSeverityLevel
+        }
+    }
+
+    # --- Coverage gaps --------------------------------------------------------
+    $enforcingPolicies = @($policies | Where-Object { $_.Enabled -and $_.Mode -eq 'Enable' })
+    $gaps = foreach ($w in $Workloads) {
+        $covering = @($enforcingPolicies | Where-Object { Test-CoversWorkload -Policy $_ -Key $w.Key })
+        [pscustomobject]@{
+            Workload           = $w.Label
+            EnforcingPolicies  = $covering.Count
+            PolicyNames        = (@($covering | ForEach-Object { $_.Name }) -join '; ')
+            Uncovered          = ($covering.Count -eq 0)
+        }
+    }
+
+    $notInForce = @($policyRows | Where-Object NotInForce)
+    $simulating = @($policyRows | Where-Object IsSimulating)
+    $uncovered  = @($gaps | Where-Object Uncovered)
+
+    Write-Log ("Policies {0}: enforcing {1}, simulating {2}, not in force {3}. Uncovered workloads {4}." -f `
+        $policyRows.Count, $enforcingPolicies.Count, $simulating.Count, $notInForce.Count, $uncovered.Count) 'INFO'
+
+    $policyRows | Sort-Object Name | Export-Csv -Path $PolicyCsv -NoTypeInformation -Encoding UTF8
+    $ruleRows   | Sort-Object Policy, Priority | Export-Csv -Path $RuleCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $PolicyCsv, $RuleCsv) 'INFO'
+
+    Write-Host "`nWorkload coverage by ENFORCING policies:" -ForegroundColor Cyan
+    $gaps | Format-Table Workload, EnforcingPolicies, PolicyNames -AutoSize -Wrap
+
+    Write-Host "`nDLP policies:" -ForegroundColor Cyan
+    $policyRows | Sort-Object Name |
+        Format-Table Name, Mode, IsEnforcing, RuleCount, Workloads -AutoSize -Wrap
+
+    if ($uncovered) {
+        Write-Host "`nWorkloads with NO enforcing DLP policy:" -ForegroundColor Red
+        $uncovered | Format-Table Workload -AutoSize
+    }
+    if ($simulating) {
+        Write-Host "`nStill in test mode — these report and do not act:" -ForegroundColor Yellow
+        $simulating | Format-Table Name, Mode, Workloads, WhenChanged -AutoSize -Wrap
+    }
+    if ($notInForce) {
+        Write-Host "`nNot inspecting anything (disabled, no rules, or no workloads):" -ForegroundColor Yellow
+        $notInForce | Format-Table Name, Enabled, Mode, RuleCount, WorkloadCount -AutoSize
+    }
+
+    $notifyOnly = @($ruleRows | Where-Object OnlyNotifies)
+    if ($notifyOnly) {
+        Write-Host ("`n{0} rule(s) notify the user but block nothing." -f $notifyOnly.Count) -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} polic(y/ies), {1} rule(s); {2} workload(s) uncovered.`nReports: {3}; {4}`nLog: {5}" -f `
+        $policyRows.Count, $ruleRows.Count, $uncovered.Count, $PolicyCsv, $RuleCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Two CSVs plus a coverage table. Policies with their mode,
+workloads, rule count and whether they are actually enforcing; rules with their
+sensitive information types, thresholds and the specific actions they take; and
+a per-workload summary of how many *enforcing* policies cover each one.
+
+**How it works.**
+
+- **Coverage is computed from enforcing policies only.** A workload covered
+  solely by a policy in `TestWithNotifications` is uncovered in every way that
+  matters — content leaves, a report is generated, nothing is stopped. Counting
+  simulating policies toward coverage is how a DLP programme reports itself
+  complete while blocking nothing.
+- **`Enabled` and `Mode` are both checked.** They are separate switches: a
+  policy can be enabled and simulating. Reading either alone gets it wrong half
+  the time.
+- **Rule actions are decoded into words.** `BlockAccess: True`,
+  `BlockAccessScope: All` and `NotifyUser` as raw fields require the reader to
+  know the model. "block (All); notify user; incident report" does not.
+- **`OnlyNotifies` is separated from blocking.** A policy tip that a user can
+  override is a useful control and a very different one from a block, and the
+  distinction disappears in a summary that counts "policies with actions".
+- **`NotInForce` catches three failures**: not enforcing, no rules beneath it,
+  or no workload locations. All three produce a policy that appears deployed.
+- **Sensitive information types and their minimum counts are carried through**,
+  because "detects credit card numbers" with a minimum count of 10 and the same
+  rule with a count of 1 behave entirely differently in practice.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement` connected with **`Connect-IPPSSession`**.
+- **Endpoint DLP needs devices onboarded.** A policy covering endpoints with no
+  onboarded devices covers nothing; this report sees the policy, not the
+  onboarding state.
+- The five workloads in `$Workloads` are the common set, not all of them. Power
+  BI, on-premises repositories and third-party apps via Defender for Cloud Apps
+  are also DLP locations and are not assessed here.
+- **Rule conditions are summarised, not evaluated.** Two rules detecting the
+  same information type with different confidence levels and proximity windows
+  behave very differently, and no inventory can tell you which fires in
+  practice. Use DLP simulation and the activity explorer for that.
+- Policy priority matters: for a given location, the first matching rule in
+  priority order determines the outcome. Both CSVs carry priority so the order
+  can be reconstructed.
+- `ContentContainsSensitiveInformation` is a nested structure, and its shape
+  has varied across module versions. If the `SensitiveTypes` column is empty
+  for rules you know have types, inspect one rule object directly before
+  concluding the rules are empty.
+
+> **Warning — Moving a policy out of test mode is a change with user impact**
+>
+> The test-mode list is the obvious thing to act on and the one most likely to
+> cause a Monday morning. Read the simulation reports for each policy first;
+> the false positive rate is exactly what test mode exists to measure.
