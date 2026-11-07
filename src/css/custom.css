@@ -217,9 +217,9 @@ html {
 
 .footer__links {
   display: grid;
-  grid-template-columns: repeat(3, auto);
+  grid-template-columns: repeat(5, auto);
   justify-content: center;
-  column-gap: clamp(2rem, 7vw, 5rem);
+  column-gap: clamp(1.25rem, 4vw, 3.25rem);
   row-gap: 0;
   margin: 0 0 0.4rem;
 }
@@ -269,6 +269,16 @@ html {
   opacity: 0.6;
 }
 
+/* Five columns don't fit a laptop viewport once "Extension Privacy Policy" is
+ * in one of them. Drop to three, then to one, rather than letting the grid
+ * overflow the page. */
+@media screen and (max-width: 1100px) {
+  .footer__links {
+    grid-template-columns: repeat(3, auto);
+    row-gap: 1.1rem;
+  }
+}
+
 /* On narrow screens, stack the columns so links don't get cramped. Line-height
  * goes back up here: stacked links become tap targets, and 0.8125rem text at
  * 1.55 is below the comfortable 44px touch height. */
@@ -297,6 +307,15 @@ html {
  * glyph inherits `currentColor` — it then tracks the link's hover and active
  * colours and works in both themes without a second asset.
  * ------------------------------------------------------------------------- */
+/* Five left-hand items plus Remote, search and Private Site makes the bar tight
+ * in the ~1000–1100px band before the theme collapses to the hamburger. Without
+ * this the dropdown caret wraps below its label and the navbar grows a second
+ * line. Let items sit tight rather than break. */
+.navbar__link,
+.navbar__item {
+  white-space: nowrap;
+}
+
 .navbar-icon-link svg {
   display: none;
 }

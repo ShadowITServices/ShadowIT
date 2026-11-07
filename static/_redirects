@@ -18,6 +18,11 @@
 /study/az-104          /study/AZ-104/      301
 /study/az-104/         /study/AZ-104/      301
 
+# The SC-300 program was retired. Send its URLs to the study index rather than
+# to AZ-104 — a different exam is not the page anyone was looking for.
+/study/sc-300          /study/             301
+/study/sc-300/         /study/             301
+
 # The three audience sections moved beneath a new Executing Strategy parent.
 # Splats keep the tier pages (/strategy, /tactical, /operational) working too.
 /docs/business-owners               /docs/executing-strategy/business-owners/                   301

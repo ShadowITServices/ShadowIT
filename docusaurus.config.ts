@@ -125,14 +125,32 @@ const config: Config = {
         src: 'img/logo.png',
       },
       items: [
+        // Left group, in reading order: Home | About | Study | Docs | Tools.
+        //
+        // Dropdowns open on hover on desktop — the theme adds
+        // `dropdown--hoverable`, so no custom CSS is needed — and render as
+        // collapsible sections on mobile. `activeBasePath` keeps the parent
+        // highlighted across every page beneath it.
         {to: '/', label: 'Home', position: 'left', activeBaseRegex: '^/$'},
         {to: '/about', label: 'About', position: 'left'},
-        // Dropdown on desktop opens on hover — the theme adds `dropdown--hoverable`
-        // to desktop dropdowns, so no custom CSS is needed. There's no /tools
-        // index page, so the parent is a plain label rather than a link, and
-        // `activeBasePath` keeps it highlighted across every page beneath it.
-        // On mobile it renders as a collapsible section instead.
         {
+          // Unlike Tools, Study has a real index page listing the programs, so
+          // the parent label links to it rather than being inert.
+          type: 'dropdown',
+          label: 'Study',
+          to: '/study',
+          activeBasePath: '/study',
+          position: 'left',
+          items: [{to: '/study/AZ-104', label: 'AZ-104: Azure Administrator'}],
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'tutorialSidebar',
+          position: 'left',
+          label: 'Docs',
+        },
+        {
+          // No /tools index page exists, so this parent is a plain label.
           type: 'dropdown',
           label: 'Tools',
           activeBasePath: '/tools',
@@ -142,12 +160,6 @@ const config: Config = {
             {to: '/tools/copilot', label: 'Copilot Estimator'},
             {to: '/tools/chrome-extension', label: 'Chrome Extension'},
           ],
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
-          position: 'left',
-          label: 'Docs',
         },
         // Right-hand group, rendered in declaration order, with the colour-mode
         // toggle appended after them by the theme:
@@ -181,6 +193,25 @@ const config: Config = {
           title: 'Site Map',
           items: [
             {
+              label: 'About',
+              to: '/about',
+            },
+            {
+              // The index listing the programs, not a single program — the
+              // navbar dropdown is where you pick one.
+              label: 'Study',
+              to: '/study',
+            },
+            {
+              label: 'Docs',
+              to: '/docs/intro',
+            },
+          ],
+        },
+        {
+          title: 'Tools',
+          items: [
+            {
               label: 'Microsoft Licensing',
               to: '/tools/licensing',
             },
@@ -191,14 +222,6 @@ const config: Config = {
             {
               label: 'Chrome Extension',
               to: '/tools/chrome-extension',
-            },
-            {
-              label: 'About',
-              to: '/about',
-            },
-            {
-              label: 'Docs',
-              to: '/docs/intro',
             },
           ],
         },
@@ -233,6 +256,21 @@ const config: Config = {
             {
               label: 'Contact',
               href: 'mailto:hello@shadowit.com.au',
+            },
+          ],
+        },
+        {
+          // The two access-controlled hosts, mirroring the navbar. Both ask
+          // for a sign-in; neither is reachable without one.
+          title: 'Shortcuts',
+          items: [
+            {
+              label: 'Remote',
+              href: 'https://remote.shadowit.com.au/',
+            },
+            {
+              label: 'Private Site',
+              href: 'https://vault.shadowit.com.au/',
             },
           ],
         },
