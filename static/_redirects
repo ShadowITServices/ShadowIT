@@ -17,3 +17,18 @@
 
 /study/az-104          /study/AZ-104/      301
 /study/az-104/         /study/AZ-104/      301
+
+# The three audience sections moved beneath a new Executing Strategy parent.
+# Splats keep the tier pages (/strategy, /tactical, /operational) working too.
+/docs/business-owners               /docs/executing-strategy/business-owners/                   301
+/docs/managed-service-providers     /docs/executing-strategy/managed-service-providers/         301
+/docs/internal-it-teams             /docs/executing-strategy/internal-it-teams/                 301
+/docs/business-owners/*             /docs/executing-strategy/business-owners/:splat             301
+/docs/managed-service-providers/*   /docs/executing-strategy/managed-service-providers/:splat   301
+/docs/internal-it-teams/*           /docs/executing-strategy/internal-it-teams/:splat           301
+
+# The Technical Library was removed. Its baselines were reference material
+# rather than anything unique, and its framing now lives in the Executing
+# Strategy overview; the scripts it pointed at live in the Script Repository.
+/docs/technical-library/mfa-entra-hardening*     /docs/script-repository/microsoft-365/entra/   301
+/docs/technical-library/*                        /docs/executing-strategy/                      301

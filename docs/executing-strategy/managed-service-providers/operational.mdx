@@ -17,19 +17,19 @@ quality doesn't depend on which engineer happened to pick up the ticket.
 
 > **Tip — One source of truth**
 >
-> The actual configs, scripts, and step-by-step runbooks referenced below live once in
-> the **[Technical Library](/docs/technical-library/)**. This page is the MSP lens —
-> *how you operate the library across many tenants.* The internal IT team's Operational
-> page references the very same canonical content; maintaining it in one place is what
-> stops two hundred tenants' baselines from quietly drifting apart.
+> The configs, scripts, and step-by-step runbooks referenced below should exist once,
+> not once per tenant — their automatable parts belong in the
+> **[Script Repository](/docs/script-repository)**. This page is the MSP lens:
+> *how you operate that material across many tenants.* Maintaining it in one place is
+> what stops two hundred tenants' baselines from quietly drifting apart.
 
 ## Standardised runbooks
 
 Every recurring task — onboarding a user, hardening a new tenant, responding to a
 phishing report — should have a runbook that any engineer can follow to the same
 result. Runbooks are how you turn individual expertise into a service. Author them
-once in the [Technical Library](/docs/technical-library) and treat improvements as
-changes to the canonical version, not local notes that never make it back.
+once, and treat improvements as changes to the canonical version rather than local
+notes that never make it back.
 
 ## Monitoring and alerting thresholds
 
@@ -43,27 +43,23 @@ incidents.
 
 Across a fleet, patching is a cadence, not a task: a defined schedule, testing rings
 so a bad patch doesn't hit every client at once, and evidence of compliance you can put
-in a client report. See the canonical
-[Patch Management runbook](/docs/technical-library/patch-management) for the procedure;
-the operational discipline is applying it on the same rhythm to every tenant.
+in a client report. The operational discipline is applying the same procedure on the
+same rhythm to every tenant.
 
 ## Backup verification routines
 
 Backups that aren't verified are a liability dressed as a safeguard. Operationally that
 means a routine of regular **test restores**, not just "backups completed" reports —
 and capturing the evidence so you can demonstrate a working RPO/RTO to the client (and
-their insurer). The procedure lives in
-[Backup & Disaster Recovery](/docs/technical-library/backup-and-dr).
+their insurer).
 
 ## Multi-tenant Microsoft 365 / Entra hardening
 
 Hardening identity is the highest-value security work you do, and across many tenants
-it has to be templated and consistent. The canonical baseline —  MFA, Conditional
-Access, privileged access, and the rest — lives in
-[MFA & Entra ID Hardening](/docs/technical-library/mfa-entra-hardening). The MSP-
-specific operational concern is deploying it uniformly and detecting when a tenant has
-drifted off baseline (often because someone made a "quick exception" that never got
-reverted).
+it has to be templated and consistent. Define the baseline once — MFA, Conditional
+Access, privileged access, and the rest — then treat the MSP-specific concern as
+deploying it uniformly and detecting when a tenant has drifted off it (often because
+someone made a "quick exception" that never got reverted).
 
 ## Ticket-handling SOPs and escalation paths
 

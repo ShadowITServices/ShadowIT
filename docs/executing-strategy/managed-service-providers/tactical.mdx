@@ -28,9 +28,9 @@ unpatched, un-MFA'd mess and the liability that comes with it.
 
 The heart of standardisation is a set of **baseline templates** — the standard way you
 configure Microsoft 365, Entra ID, endpoints, and security controls — that you apply
-consistently to every tenant. The canonical version of these baselines lives in the
-[Technical Library](/docs/technical-library); the tactical work is maintaining the
-*deployment* mechanism that pushes them per tenant and detects drift. Define the
+consistently to every tenant. Keep one canonical version of those baselines; the
+tactical work is maintaining the *deployment* mechanism that pushes them per tenant
+and detects drift. Define the
 baseline once, deploy it everywhere, and you've converted a recurring engineering
 problem into a one-time design decision.
 
@@ -38,7 +38,7 @@ problem into a one-time design decision.
 
 Your **RMM** (remote monitoring and management) and **PSA** (professional services
 automation) tools are the backbone of delivery — and, as noted in
-[Strategy](/docs/managed-service-providers/strategy), your single biggest security
+[Strategy](/docs/executing-strategy/managed-service-providers/strategy), your single biggest security
 exposure. Tactical decisions here include how you standardise monitoring across
 tenants, how you integrate RMM and PSA so tickets and assets stay in sync, and — non-
 negotiably — how you secure administrative access to these platforms (MFA, least

@@ -210,16 +210,18 @@ html {
  * rhythm so the footer is as short as it can be while staying readable.
  * ------------------------------------------------------------------------- */
 .footer {
-  --ifm-footer-padding-vertical: 1rem;
+  --ifm-footer-padding-vertical: 0.75rem;
+  --ifm-footer-padding-horizontal: 1rem;
+  font-size: 0.8125rem;
 }
 
 .footer__links {
   display: grid;
   grid-template-columns: repeat(3, auto);
   justify-content: center;
-  column-gap: clamp(2.5rem, 8vw, 6rem);
+  column-gap: clamp(2rem, 7vw, 5rem);
   row-gap: 0;
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.4rem;
 }
 
 .footer .col.footer__col {
@@ -233,28 +235,52 @@ html {
 }
 
 .footer__title {
-  margin-bottom: 0.35rem;
-  font-size: 0.95rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.65;
 }
 
 .footer__items {
   margin: 0;
 }
 
-.footer__item {
-  line-height: 1.7;
+/* The <li> and the <a> inside it both contribute to the line box, and Infima
+ * gives .footer__link-item its own line-height — set both or the taller one
+ * wins and each row keeps ~6px it doesn't need. */
+.footer__item,
+.footer__link-item {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* The external-link glyph after Website / LinkedIn / Contact adds height on its
+ * own line-box; shrink it in step with the smaller type. */
+.footer__item svg {
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 0.25em;
 }
 
 .footer__copyright {
-  font-size: 0.8rem;
-  opacity: 0.8;
+  font-size: 0.6875rem;
+  opacity: 0.6;
 }
 
-/* On narrow screens, stack the columns so links don't get cramped. */
+/* On narrow screens, stack the columns so links don't get cramped. Line-height
+ * goes back up here: stacked links become tap targets, and 0.8125rem text at
+ * 1.55 is below the comfortable 44px touch height. */
 @media screen and (max-width: 600px) {
   .footer__links {
     grid-template-columns: 1fr;
-    row-gap: 0.75rem;
+    row-gap: 0.6rem;
+  }
+
+  .footer__item,
+  .footer__link-item {
+    line-height: 2;
   }
 }
 

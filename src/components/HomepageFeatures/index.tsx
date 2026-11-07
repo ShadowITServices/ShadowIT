@@ -20,9 +20,9 @@ const FeatureList: FeatureItem[] = [
     cta: 'Browse the docs',
     description: (
       <>
-        Open-source, non-paywalled documentation — runbooks, guides, and
-        how-tos on Microsoft 365 and security. No sign-up, no paywall, just the
-        knowledge.
+        Open, non-paywalled documentation on Microsoft 365, security and
+        governance — strategy written for the seat you&apos;re actually in, plus a
+        script repository you can run. No sign-up, just the knowledge.
       </>
     ),
   },

@@ -1,7 +1,7 @@
 ---
 title: Introduction
 sidebar_label: Introduction
-description: How the Shadow IT documentation is organised — an IT best-practice repository structured by audience (who owns the decision and the risk) and by altitude (Strategy, Tactical, Operational).
+description: How the Shadow IT documentation is organised — an open IT best-practice repository covering strategy execution by audience and altitude, a canonical script repository, and an access-controlled internal vault.
 ---
 
 # Introduction
@@ -15,64 +15,41 @@ runbooks, baselines, and decision frameworks I'd want a client, a peer, or my
 future self to have. The hard part of a library this size isn't writing it — it's
 organising it so you can find the one page that's actually written for *you*.
 
-## How the sidebar is organised
+## What's in here
 
-The menu on the left is built on a single idea: **the core distinction isn't what
-the technology is — it's who owns the decision and who carries the risk.** The same
-control (say, multi-factor authentication) reads completely differently depending
-on whether you're signing the cheque, delivering it as a service, or configuring it
-at 2am during an incident.
+The menu on the left has three sections beneath this page.
 
-So the documentation is split first by **audience**, then by **altitude**.
+### [Executing Strategy](/docs/executing-strategy)
 
-### Pick your audience
+The gap between a decision and a Tuesday morning. It's organised on a single
+idea: **the core distinction isn't what the technology is — it's who owns the
+decision and who carries the risk.** So it splits first by **audience** —
+[Business Owners](/docs/executing-strategy/business-owners/strategy),
+[Managed Service Providers](/docs/executing-strategy/managed-service-providers/strategy),
+[Internal IT Teams](/docs/executing-strategy/internal-it-teams/strategy) — and then
+by **altitude**: Strategy (years), Tactical (quarters), Operational (days).
 
-There are three top-level sections, one for each kind of reader:
+Pick the seat you're sitting in, then the time-horizon you're working at.
 
-- **[Business Owners](/docs/business-owners/strategy)** — You're accountable to a
-  board or to yourself. You read in the language of risk, cost, and continuity, not
-  CVEs. These pages frame technology as a business decision: outcomes and dollars,
-  not configuration.
-- **[Managed Service Providers](/docs/managed-service-providers/strategy)** — You
-  deliver IT as a service to many clients. Everything here is framed through
-  multi-tenancy, repeatability, margin, and liability transfer.
-- **[Internal IT Teams](/docs/internal-it-teams/strategy)** — You execute and own
-  the outcome for a single organisation. The framing is accountability, depth, and
-  institutional knowledge — full ownership of the consequences.
+### [Script Repository](/docs/script-repository)
 
-### Then pick your altitude
+The canonical technical layer, and the one place code lives. Production-grade
+PowerShell for Windows and the Microsoft 365 workloads — Entra ID, Exchange
+Online, SharePoint, OneDrive, Teams, Intune, Purview, Defender — each with the
+permissions it needs, what it changes, and how to tell it worked.
 
-Inside each audience, the content is split into three tiers that map to
-**time-horizon and altitude**:
+Written once and referenced from everywhere else, because three copies of the
+same script are three scripts that will drift.
 
-- **Strategy** — *years.* Direction-setting. Where the money goes, what risk you're
-  willing to carry, and how technology serves the wider goal.
-- **Tactical** — *quarters.* Turning strategy into plans, projects, standards, and
-  procurement. The bridge between intent and execution.
-- **Operational** — *days.* The hands-on run-state: runbooks, configs, cadences,
-  and the work that keeps everything running and defensible.
+### [Vault](https://vault.shadowit.com.au/)
 
-Read top-to-bottom if you're new, or jump straight to your tier if you know what
-you're after.
+Internal documentation that isn't public: working notes, lab configuration, and
+material that hasn't earned a public page yet. It sits on its own hostname behind
+an access policy rather than as a locked folder here — a protected *path* on a
+static site still leaks its text through the JavaScript bundles and the search
+index, so the boundary has to be the whole site.
 
-## The Technical Library — one source of truth
-
-Three audiences times three tiers is nine sections, and the honest risk is
-duplication: an MSP's Operational runbook for hardening Microsoft 365 is nearly
-identical to an internal IT team's. Maintain that config in three places and the
-three copies *will* drift — different versions, different CVE responses, different
-"current" baselines.
-
-To avoid that, the actual technical content — the hardening baselines, runbooks,
-and scripts that change over time — lives once, in the
-**[Technical Library](/docs/technical-library/)**. It's audience-neutral and
-authoritative. The Operational pages (and, to a lesser extent, the Tactical pages)
-*reference* it rather than repeating it. Business Owner pages almost never touch it;
-they're context and interpretation.
-
-Think of the nine audience pages as **lenses** over a single canonical core. The
-lens gives you the framing appropriate to your seat; the library gives you the one
-true version of the thing that drifts.
+If you don't have access, the link will simply ask you to sign in and then stop.
 
 ## A note on currency
 

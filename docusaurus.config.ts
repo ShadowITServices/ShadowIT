@@ -149,6 +149,14 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
+        // Remote support session launcher — a separate host, not part of this
+        // site's build. Rendered as an external link (Docusaurus adds the
+        // external-link affordance automatically for `href` items).
+        {
+          href: 'https://remote.shadowit.com.au/',
+          label: 'Remote',
+          position: 'left',
+        },
         // Search sits in the right section, before the colour-mode toggle.
         {type: 'search', position: 'right'},
       ],
