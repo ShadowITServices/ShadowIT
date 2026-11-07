@@ -1,16 +1,272 @@
 ---
 title: Teams
 sidebar_label: Teams
-description: PowerShell scripts for Teams administration. Scripts following the repository conventions will be published here.
+description: PowerShell that audits Microsoft Teams governance — ownerless and single-owner teams, guest membership, public visibility, and archived state — in one call per team.
 ---
 
 # Teams
 
-PowerShell for administering Teams. Connect using the relevant module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
+PowerShell for administering Microsoft Teams, using the `MicrosoftTeams` module
+(see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
 
-> **Note — Scripts coming soon**
+## Ownership and guest governance report
+
+One row per team: how many owners it has, how many members and guests, whether
+it's public, and whether it's archived. Read-only.
+
+Teams sprawl is usually described as a storage problem. It isn't — it's an
+ownership problem. A team whose last owner has left cannot have its membership
+changed by anyone except an administrator, which means nobody removes the
+departed, nobody reviews the guests, and the team quietly becomes a share
+nobody is accountable for. A team with exactly one owner is the same problem
+waiting for a resignation.
+
+### Script
+
+```powershell
+#Requires -Modules MicrosoftTeams
+<#
+.SYNOPSIS
+    Audits Teams governance: owner counts, guest membership, visibility, and
+    archived state across every team in the tenant.
+.DESCRIPTION
+    Makes one Get-TeamUser call per team and classifies the membership locally,
+    rather than one call per role. Flags ownerless teams, single-owner teams,
+    public teams, and teams containing guests.
+.EXAMPLE
+    .\Get-TeamsGovernanceReport.ps1 -Verbose
+.NOTES
+    Required role: Teams Administrator (or Global Reader). Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    # Guest domains you consider expected. Guests outside these are listed.
+    [string[]]$ExpectedGuestDomain = @(),
+
+    # Also write one row per guest to a second CSV.
+    [switch]$ListGuests,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\TeamsGovernance.csv',
+    [string]$GuestCsv  = 'C:\Temp\TeamsGuests.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("TeamsGovernance_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-AddressDomain {
+    [CmdletBinding()]
+    param([AllowNull()][string]$Upn)
+    if ([string]::IsNullOrWhiteSpace($Upn)) { return '' }
+    # Guest UPNs are mangled: alice_contoso.com#EXT#@fabrikam.onmicrosoft.com.
+    # The real domain is in the prefix, not the tenant suffix.
+    if ($Upn -match '^(?<local>.+)#EXT#@') {
+        $decoded = $Matches['local'] -replace '_', '@'
+        return ($decoded -split '@')[-1]
+    }
+    return ($Upn -split '@')[-1]
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting Teams governance report.' 'INFO'
+
+    try { $null = Get-CsTenant -ErrorAction Stop }
+    catch {
+        Write-Log 'No Teams session; connecting.' 'INFO'
+        Connect-MicrosoftTeams | Out-Null
+    }
+
+    Write-Log 'Enumerating teams.' 'DEBUG'
+    $teams = @(Get-Team)
+    Write-Log ("Teams found: {0}" -f $teams.Count) 'INFO'
+
+    $guestRows = [System.Collections.Generic.List[object]]::new()
+    $i = 0
+
+    $results = foreach ($team in $teams) {
+        $i++
+        Write-Progress -Activity 'Reading team membership' -Status $team.DisplayName `
+                       -PercentComplete (($i / [math]::Max($teams.Count,1)) * 100)
+
+        try {
+            # One call, all roles. Get-TeamUser -Role filters server-side but
+            # would cost three round trips per team.
+            $users = @(Get-TeamUser -GroupId $team.GroupId -ErrorAction Stop)
+
+            $owners  = @($users | Where-Object { $_.Role -eq 'owner'  })
+            $members = @($users | Where-Object { $_.Role -eq 'member' })
+            $guests  = @($users | Where-Object { $_.Role -eq 'guest'  })
+
+            $unexpectedGuests = @(
+                foreach ($g in $guests) {
+                    $domain = Get-AddressDomain -Upn $g.User
+                    if ($ExpectedGuestDomain.Count -eq 0 -or $ExpectedGuestDomain -notcontains $domain) { $g }
+                }
+            )
+
+            if ($ListGuests) {
+                foreach ($g in $guests) {
+                    $guestRows.Add([pscustomobject]@{
+                        Team        = $team.DisplayName
+                        GroupId     = $team.GroupId
+                        GuestName   = $g.Name
+                        GuestUpn    = $g.User
+                        GuestDomain = Get-AddressDomain -Upn $g.User
+                        Expected    = ($ExpectedGuestDomain -contains (Get-AddressDomain -Upn $g.User))
+                    })
+                }
+            }
+
+            [pscustomobject]@{
+                Team             = $team.DisplayName
+                GroupId          = $team.GroupId
+                Status           = 'OK'
+                Visibility       = $team.Visibility
+                Archived         = $team.Archived
+                OwnerCount       = $owners.Count
+                MemberCount      = $members.Count
+                GuestCount       = $guests.Count
+                Owners           = ($owners.User -join '; ')
+                GuestDomains     = (($guests | ForEach-Object { Get-AddressDomain -Upn $_.User }) |
+                                     Sort-Object -Unique) -join '; '
+                IsOwnerless      = ($owners.Count -eq 0)
+                SingleOwner      = ($owners.Count -eq 1)
+                HasGuests        = ($guests.Count -gt 0)
+                UnexpectedGuests = $unexpectedGuests.Count
+                # An unowned team with outsiders in it is the one to deal with first.
+                NeedsAttention   = ($owners.Count -eq 0) -and ($guests.Count -gt 0)
+                Detail           = ''
+            }
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $team.DisplayName, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                Team = $team.DisplayName; GroupId = $team.GroupId; Status = 'Error'
+                Visibility = $team.Visibility; Archived = $team.Archived
+                OwnerCount = $null; MemberCount = $null; GuestCount = $null
+                Owners = ''; GuestDomains = ''
+                IsOwnerless = $null; SingleOwner = $null; HasGuests = $null
+                UnexpectedGuests = $null; NeedsAttention = $null
+                Detail = $_.Exception.Message
+            }
+        }
+    }
+    Write-Progress -Activity 'Reading team membership' -Completed
+
+    $ok        = @($results | Where-Object Status -eq 'OK')
+    $ownerless = @($ok | Where-Object IsOwnerless)
+    $single    = @($ok | Where-Object SingleOwner)
+    $public    = @($ok | Where-Object { $_.Visibility -eq 'Public' -and -not $_.Archived })
+    $urgent    = @($ok | Where-Object NeedsAttention)
+
+    Write-Log ("Teams: {0}. Ownerless: {1}. Single-owner: {2}. Public: {3}. Ownerless+guests: {4}." -f `
+        $ok.Count, $ownerless.Count, $single.Count, $public.Count, $urgent.Count) 'INFO'
+
+    $results | Sort-Object OwnerCount, GuestCount -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($ListGuests) {
+        $guestRows | Sort-Object GuestDomain, Team | Export-Csv -Path $GuestCsv -NoTypeInformation -Encoding UTF8
+        Write-Log ("Guest list written: {0} ({1} rows)" -f $GuestCsv, $guestRows.Count) 'INFO'
+    }
+
+    if ($urgent) {
+        Write-Host "`nOwnerless teams containing guests — deal with these first:" -ForegroundColor Red
+        $urgent | Format-Table Team, GuestCount, GuestDomains, Visibility, Archived -AutoSize
+    }
+    if ($ownerless) {
+        Write-Host "`nOwnerless teams (nobody can manage membership):" -ForegroundColor Yellow
+        $ownerless | Format-Table Team, MemberCount, GuestCount, Archived -AutoSize
+    }
+    if ($single) {
+        Write-Host ("`n{0} team(s) have exactly one owner." -f $single.Count) -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} team(s): {1} ownerless, {2} single-owner, {3} public, {4} with guests.`nReport: {5}`nLog: {6}" -f `
+        $ok.Count, $ownerless.Count, $single.Count, $public.Count,
+        @($ok | Where-Object HasGuests).Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** One row per team with owner, member, and guest counts, the
+owners named, the guest domains summarised, and flags for ownerless,
+single-owner, public, and guest-containing teams. Optionally a second CSV
+listing every guest individually.
+
+**How it works.**
+
+- **One call per team, not three.** `Get-TeamUser -Role owner` filters
+  server-side but would mean three round trips per team. The script fetches the
+  full membership once and classifies locally — on a tenant with 400 teams
+  that's 400 calls instead of 1,200.
+- **Guest domains are decoded, not read off the UPN.** A guest's UPN looks like
+  `alice_contoso.com#EXT#@fabrikam.onmicrosoft.com`. Splitting on `@` gives you
+  your own tenant domain for every guest, which is useless. The script parses
+  the `#EXT#` prefix and recovers `contoso.com`.
+- **`NeedsAttention` is the intersection, not the union.** Ownerless *and*
+  containing guests: nobody can remove the outsiders, and no review will happen
+  on its own. That's a shorter list than either flag alone and it's the one to
+  work first.
+- **Single-owner is reported separately from ownerless.** It isn't a problem
+  today. It's the same problem one resignation from now, and it's much cheaper
+  to fix before then.
+- **Per-team errors don't stop the run.** A team whose membership can't be read
+  is emitted with `Status = Error` and the reason.
+- **Output.** A CSV sorted fewest-owners-first, escalating console tables, and
+  a log.
+
+**Prerequisites & caveats.**
+
+- Module `MicrosoftTeams`; **Teams Administrator** or Global Reader.
+- `Get-Team` with no filter enumerates every team in the tenant and is slow to
+  return on large tenants — expect a wait before the progress bar moves.
+- **Archived teams are included** and flagged rather than filtered. An archived
+  team is read-only but its content and guest list are still there, so it
+  belongs in a governance review.
+- Private channels have their own membership, which this does not inspect.
+  Someone can be in a private channel through team membership without appearing
+  as an owner of anything.
+- Ownership here is the **Microsoft 365 group's** ownership. Fixing it via
+  Teams, the Microsoft 365 admin centre, or Graph are all the same change to
+  the same object.
+- `-ExpectedGuestDomain` with no value means every guest counts as unexpected,
+  which makes `UnexpectedGuests` equal to `GuestCount`. Supply your partner
+  domains to make the column meaningful.
+
+> **Tip — Ownerless teams need an owner, not deletion**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> The instinct on finding a team nobody owns is to archive it. Check first
+> whether it's actively used: an ownerless team with recent activity needs an
+> owner assigned, and only a genuinely dormant one is a candidate for
+> archiving. The [OneDrive report](/docs/script-repository/microsoft-365/onedrive) covers the equivalent question
+> for personal storage.

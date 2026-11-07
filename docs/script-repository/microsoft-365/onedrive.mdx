@@ -1,16 +1,289 @@
 ---
 title: OneDrive
 sidebar_label: OneDrive
-description: PowerShell scripts for OneDrive administration. Scripts following the repository conventions will be published here.
+description: PowerShell that pulls the Graph OneDrive usage report, flags accounts near quota and dormant for months, and cross-checks owners against Entra ID to surface data belonging to disabled or deleted users.
 ---
 
 # OneDrive
 
-PowerShell for administering OneDrive. Connect using the relevant module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
+PowerShell for administering OneDrive for Business via Microsoft Graph reports
+(see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
 
-> **Note — Scripts coming soon**
+## Storage, dormancy, and orphaned data report
+
+Pulls the tenant OneDrive usage report, works out which accounts are near quota
+and which have had no activity for months, then cross-checks each owner against
+Entra ID so OneDrives belonging to **disabled or deleted users** surface
+explicitly. Read-only.
+
+Orphaned OneDrive is the quiet one. When someone leaves, the mailbox gets
+converted or removed as part of a documented process; their OneDrive sits there
+holding whatever they put in it, retained by default for a period most people
+can't recall, costing storage and carrying exactly the same data as the day they
+left.
+
+### Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports OneDrive storage, dormancy, and ownership status across the tenant,
+    flagging drives owned by disabled or deleted accounts.
+.DESCRIPTION
+    Downloads the Graph OneDrive usage report (CSV), enriches each row with
+    quota percentage and days since last activity, then resolves each owner in
+    Entra ID to identify orphaned drives.
+.EXAMPLE
+    .\Get-OneDriveReport.ps1 -Period D90 -DormantDays 120 -Verbose
+.NOTES
+    Required Graph perms: Reports.Read.All, ReportSettings.Read.All, User.Read.All
+    Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [ValidateSet('D7','D30','D90','D180')]
+    [string]$Period = 'D90',
+
+    # Drives with no activity for longer than this are flagged dormant.
+    [int]$DormantDays = 120,
+
+    # Drives above this percentage of quota are flagged.
+    [int]$QuotaWarnPercent = 90,
+
+    # Skip the per-owner Entra lookup (faster, but no orphan detection).
+    [switch]$SkipOwnerLookup,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\OneDriveReport.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("OneDriveReport_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+$RawCsv  = Join-Path $LogDir ("OneDriveUsageRaw_{0:yyyyMMdd_HHmmss}.csv" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function ConvertTo-Gb {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Bytes)
+    if (-not $Bytes) { return 0 }
+    [math]::Round(([double]$Bytes / 1GB), 2)
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting OneDrive report. Period={0}, DormantDays={1}, QuotaWarn={2}%." -f `
+        $Period, $DormantDays, $QuotaWarnPercent) 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -Scopes 'Reports.Read.All','ReportSettings.Read.All','User.Read.All' -NoWelcome
+    }
+    $ctx = Get-MgContext
+    Write-Log ("Connected as {0} (tenant {1})." -f $ctx.Account, $ctx.TenantId) 'INFO'
+
+    # --- Concealment check ----------------------------------------------------
+    # If the tenant anonymises usage reports, every owner name comes back as an
+    # opaque hash and this report is worthless. Detect it up front rather than
+    # letting someone puzzle over the output.
+    try {
+        $settings = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/admin/reportSettings'
+        if ($settings.displayConcealedNames) {
+            Write-Log 'Usage reports are set to conceal user information.' 'WARN'
+            Write-Host @'
+
+Usage report anonymisation is ON for this tenant, so owner names and URLs will
+come back as opaque identifiers. To turn it off:
+  Microsoft 365 admin center > Settings > Org settings > Reports >
+  untick "Display concealed user, group, and site names in all reports".
+That is a tenant-wide privacy setting — change it deliberately, and consider
+turning it back on afterwards.
+
+'@ -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Log ("Could not read report settings (needs ReportSettings.Read.All): {0}" -f $_.Exception.Message) 'WARN'
+    }
+
+    # --- Usage report ---------------------------------------------------------
+    Write-Log ("Downloading OneDrive usage report ({0})." -f $Period) 'DEBUG'
+    $uri = "https://graph.microsoft.com/v1.0/reports/getOneDriveUsageAccountDetail(period='$Period')"
+    Invoke-MgGraphRequest -Method GET -Uri $uri -OutputFilePath $RawCsv
+    Write-Log ("Raw report saved: {0}" -f $RawCsv) 'INFO'
+
+    $rows = @(Import-Csv -Path $RawCsv)
+    Write-Log ("Usage rows: {0}" -f $rows.Count) 'INFO'
+    if (-not $rows) { throw 'Usage report returned no rows. Reports can lag up to 48 hours on a new tenant.' }
+
+    # --- Owner lookup ---------------------------------------------------------
+    # One Graph call for all users beats one per drive.
+    $userIndex = @{}
+    if (-not $SkipOwnerLookup) {
+        Write-Log 'Building Entra user index.' 'DEBUG'
+        $next = 'https://graph.microsoft.com/v1.0/users?$select=userPrincipalName,accountEnabled,displayName&$top=999'
+        do {
+            $page = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($u in $page.value) {
+                if ($u.userPrincipalName) { $userIndex[$u.userPrincipalName.ToLowerInvariant()] = $u }
+            }
+            $next = $page.'@odata.nextLink'
+        } while ($next)
+        Write-Log ("Users indexed: {0}" -f $userIndex.Count) 'INFO'
+    }
+
+    $today = Get-Date
+
+    $results = foreach ($r in $rows) {
+        $upn    = [string]$r.'Owner Principal Name'
+        $usedB  = $r.'Storage Used (Byte)'
+        $allocB = $r.'Storage Allocated (Byte)'
+
+        $pct = if ($allocB -and [double]$allocB -gt 0) {
+            [math]::Round((([double]$usedB / [double]$allocB) * 100), 1)
+        } else { $null }
+
+        $lastActivity = $null
+        if ($r.'Last Activity Date') {
+            [datetime]$parsed = [datetime]::MinValue
+            if ([datetime]::TryParse($r.'Last Activity Date', [ref]$parsed)) { $lastActivity = $parsed }
+        }
+        $idleDays = if ($lastActivity) { [int]($today - $lastActivity).TotalDays } else { $null }
+
+        # Owner state. Absent from the directory = deleted (or never existed).
+        $owner = if ($upn -and -not $SkipOwnerLookup) { $userIndex[$upn.ToLowerInvariant()] } else { $null }
+        $ownerState =
+            if     ($SkipOwnerLookup)        { 'NotChecked' }
+            elseif (-not $upn)               { 'NoOwnerRecorded' }
+            elseif ($null -eq $owner)        { 'NotInDirectory' }
+            elseif (-not $owner.accountEnabled) { 'Disabled' }
+            else                             { 'Active' }
+
+        [pscustomobject]@{
+            Owner            = $r.'Owner Display Name'
+            OwnerUpn         = $upn
+            OwnerState       = $ownerState
+            SiteUrl          = $r.'Site URL'
+            IsDeleted        = $r.'Is Deleted'
+            LastActivityDate = if ($lastActivity) { '{0:yyyy-MM-dd}' -f $lastActivity } else { 'NEVER' }
+            IdleDays         = $idleDays
+            IsDormant        = ($null -eq $idleDays) -or ($idleDays -gt $DormantDays)
+            FileCount        = [int]$r.'File Count'
+            ActiveFileCount  = [int]$r.'Active File Count'
+            StorageUsedGb    = ConvertTo-Gb $usedB
+            StorageQuotaGb   = ConvertTo-Gb $allocB
+            QuotaUsedPercent = $pct
+            NearQuota        = ($null -ne $pct -and $pct -ge $QuotaWarnPercent)
+            # The combination worth acting on: real data, nobody to own it.
+            IsOrphaned       = ($ownerState -in @('Disabled','NotInDirectory')) -and ([double]$usedB -gt 0)
+            ReportRefreshed  = $r.'Report Refresh Date'
+        }
+    }
+
+    $orphaned = @($results | Where-Object IsOrphaned)
+    $dormant  = @($results | Where-Object IsDormant)
+    $nearFull = @($results | Where-Object NearQuota)
+
+    Write-Log ("Drives: {0}. Orphaned: {1}. Dormant: {2}. Near quota: {3}." -f `
+        $results.Count, $orphaned.Count, $dormant.Count, $nearFull.Count) 'INFO'
+
+    $results | Sort-Object StorageUsedGb -Descending |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($orphaned) {
+        Write-Host "`nOneDrives holding data for disabled or deleted accounts:" -ForegroundColor Yellow
+        $orphaned | Sort-Object StorageUsedGb -Descending |
+            Format-Table OwnerUpn, OwnerState, StorageUsedGb, FileCount, LastActivityDate -AutoSize
+        Write-Host ("Total storage held by orphaned drives: {0} GB" -f `
+            [math]::Round((($orphaned | Measure-Object StorageUsedGb -Sum).Sum), 2)) -ForegroundColor Yellow
+    }
+
+    if ($nearFull) {
+        Write-Host "`nDrives at or above $QuotaWarnPercent% of quota:" -ForegroundColor Yellow
+        $nearFull | Format-Table OwnerUpn, StorageUsedGb, StorageQuotaGb, QuotaUsedPercent -AutoSize
+    }
+
+    Write-Host ("`n{0} drive(s); {1} orphaned, {2} dormant (>{3}d), {4} near quota.`nReport: {5}`nLog: {6}" -f `
+        $results.Count, $orphaned.Count, $dormant.Count, $DormantDays, $nearFull.Count,
+        $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** One row per OneDrive: owner and their directory state, storage
+used against quota, file counts, last activity, and three derived flags —
+`IsDormant`, `NearQuota`, and `IsOrphaned`.
+
+**How it works.**
+
+- **The usage report, not a site crawl.** `getOneDriveUsageAccountDetail`
+  returns the whole tenant in a single CSV download. Enumerating OneDrive sites
+  individually would take hours and tell you less.
+- **Anonymisation is detected before anything else.** If the tenant has
+  *"Display concealed user, group, and site names in all reports"* enabled,
+  every owner comes back as an opaque hash. The script reads
+  `/admin/reportSettings`, says so plainly, and tells you where the toggle is —
+  rather than producing a report full of meaningless identifiers.
+- **Owners are resolved in bulk.** One paged `/users` call builds a hashtable
+  keyed on lower-cased UPN; each drive is then a dictionary lookup instead of a
+  Graph call.
+- **`IsOrphaned` requires both conditions.** The owner must be disabled or
+  absent from the directory **and** the drive must actually hold data. A
+  disabled account with an empty OneDrive is not a finding.
+- **`NotInDirectory` is distinguished from `Disabled`.** They mean different
+  things — one account is suspended and recoverable, the other is gone and the
+  drive is on a retention clock.
+- **Output.** A CSV sorted largest-first, console tables for orphaned and
+  near-quota drives with a total of the storage the orphans hold, the raw report
+  kept alongside the log, and a timestamped log.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; Graph scopes `Reports.Read.All`,
+  `ReportSettings.Read.All`, `User.Read.All`.
+- **Usage data lags.** Reports are typically 24–48 hours behind, and on a new
+  tenant they may be empty entirely. `ReportRefreshed` carries the actual date
+  the data represents — quote that, not today's date.
+- `Last Activity Date` means file activity, not sign-in. A user who reads but
+  never edits can look dormant.
+- **A deleted user's OneDrive is on a retention timer** (driven by the OneDrive
+  retention setting, default 30 days, and any Purview retention policy that
+  applies). `NotInDirectory` with a recent refresh date may mean "about to be
+  deleted automatically" rather than "nobody is managing this".
+- `-SkipOwnerLookup` makes the run much faster but sets every `OwnerState` to
+  `NotChecked` and disables orphan detection entirely, which is most of the
+  value.
+
+> **Note — Don't delete on this report alone**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> An orphaned drive may be the subject of a legal hold, a retention policy, or
+> an offboarding process that deliberately keeps it. Check Purview holds before
+> reclaiming anything, and move data to a manager's OneDrive or a SharePoint
+> site rather than deleting it.

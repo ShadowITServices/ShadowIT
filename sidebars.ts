@@ -91,7 +91,17 @@ const sidebars: SidebarsConfig = {
       collapsed: true,
       link: {type: 'doc', id: 'script-repository/index'},
       items: [
-        'script-repository/windows',
+        {
+          type: 'category',
+          label: 'Windows',
+          collapsed: true,
+          link: {type: 'doc', id: 'script-repository/windows/index'},
+          items: [
+            'script-repository/windows/local-administrator-inventory',
+            'script-repository/windows/patch-and-reboot-state',
+            'script-repository/windows/stale-profile-cleanup',
+          ],
+        },
         {
           type: 'category',
           label: 'Microsoft 365',
@@ -116,6 +126,7 @@ const sidebars: SidebarsConfig = {
                     'script-repository/microsoft-365/entra/enterprise-applications/auditing-stale-enterprise-applications',
                   ],
                 },
+                'script-repository/microsoft-365/entra/privileged-role-assignments',
               ],
             },
             'script-repository/microsoft-365/exchange-online',

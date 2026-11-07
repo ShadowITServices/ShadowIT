@@ -50,7 +50,26 @@ risk — and exactly the kind of thing an identity-hardening baseline exists to 
 
 ## Workloads
 
-- **[Entra ID](/docs/script-repository/microsoft-365/entra/)** — identity,
-  applications, and access.
-- Exchange Online, SharePoint Online, OneDrive, Teams, Intune, Purview, and
-  Defender — see the sidebar.
+| Workload | Script | What it answers |
+| --- | --- | --- |
+| **[Entra ID](/docs/script-repository/microsoft-365/entra/)** | Stale enterprise apps; privileged role assignments | Which apps are unused, and who holds admin |
+| **[Exchange Online](./exchange-online)** | Mailbox delegation and forwarding audit | Who can read mail that isn't theirs, and where mail leaves |
+| **[SharePoint Online](./sharepoint-online)** | External sharing posture | Which sites can share outside, and which are capped by the tenant |
+| **[OneDrive](./onedrive)** | Storage, dormancy and orphaned data | Whose data is left behind, and what it costs |
+| **[Teams](./teams)** | Ownership and guest governance | Which teams nobody owns, and who the outsiders are |
+| **[Intune](./intune)** | Device compliance and sync | Which devices are non-compliant, and which simply stopped reporting |
+| **[Purview](./purview)** | Unified audit log export | What actually happened, without silent truncation |
+| **[Defender](./defender)** | Protection policy coverage | Which email policies are scoped to nobody |
+
+Every script is read-only unless its page says otherwise, writes a CSV to
+`C:\Temp`, and leaves a timestamped run log beside it.
+
+## A note on what these report
+
+Each of these answers a question an admin centre answers badly or not at all —
+usually because the answer requires joining two things the portal shows on
+separate screens. The recurring theme is the difference between **configured**
+and **effective**: a policy that exists but applies to nobody, a device
+reporting compliant that hasn't checked in since winter, a sharing setting
+capped by a tenant ceiling. Those gaps are where the portal's green ticks stop
+meaning anything, and they're the reason these exist.

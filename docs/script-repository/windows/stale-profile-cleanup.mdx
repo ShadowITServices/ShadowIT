@@ -1,0 +1,271 @@
+---
+title: Stale Profile Cleanup
+sidebar_label: Stale Profile Cleanup
+sidebar_position: 4
+description: PowerShell that removes Windows user profiles nobody has signed into for N days, using Win32_UserProfile so the registry and ProfileList are cleaned up properly. Supports -WhatIf.
+---
+
+# Stale Profile Cleanup
+
+Removes local user profiles nobody has signed into for a set number of days.
+**This deletes data.** It supports `-WhatIf`, defaults to a conservative 180-day
+threshold, and will not touch a profile that is currently loaded, special, or on
+the exclusion list.
+
+The usual symptom is a terminal server or shared workstation at 95% disk with
+sixty profiles on it, most belonging to people who left. Deleting the folders by
+hand leaves the registry `ProfileList` entries behind, which is how you end up
+with "You have been signed in with a temporary profile" a month later.
+
+## Script
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Removes Windows user profiles that have not been used for a given number of
+    days, including their registry ProfileList entries.
+.DESCRIPTION
+    Uses Win32_UserProfile so removal cleans up the profile directory AND the
+    registry entry. Skips special, loaded, and excluded profiles, and skips any
+    profile whose LastUseTime is missing rather than guessing.
+.EXAMPLE
+    .\Remove-StaleUserProfile.ps1 -StaleDays 180 -WhatIf
+    Lists what would be removed without removing anything. Always run this first.
+.NOTES
+    Requires local administrator rights. DESTRUCTIVE — profile data is not sent
+    to the Recycle Bin.
+#>
+
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+param(
+    [string[]]$ComputerName = $env:COMPUTERNAME,
+
+    [ValidateRange(30, 3650)]
+    [int]$StaleDays = 180,
+
+    # Matched against the resolved account name, with wildcards. Service and
+    # break-glass accounts belong here.
+    [string[]]$ExcludeAccount = @('Administrator', 'svc_*', 'admin_*'),
+
+    # Safety rail: refuse to run if more than this many profiles match.
+    [int]$MaxRemovals = 25,
+
+    [pscredential]$Credential,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\StaleProfileCleanup.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("StaleProfileCleanup_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Resolve-ProfileAccount {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Sid)
+    try {
+        (New-Object System.Security.Principal.SecurityIdentifier($Sid)).
+            Translate([System.Security.Principal.NTAccount]).Value
+    } catch {
+        # Deleted domain accounts no longer translate. That is a strong signal
+        # the profile is genuinely abandoned, so surface it rather than failing.
+        'UNRESOLVED'
+    }
+}
+
+function Get-StaleProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Computer,
+        [Parameter(Mandatory)][datetime]$Cutoff,
+        [pscredential]$Cred
+    )
+
+    $cimArgs = @{ ClassName = 'Win32_UserProfile'; ErrorAction = 'Stop' }
+    $session = $null
+    if ($Computer -ne $env:COMPUTERNAME -and $Computer -ne 'localhost') {
+        $sessionArgs = @{ ComputerName = $Computer; ErrorAction = 'Stop' }
+        if ($Cred) { $sessionArgs['Credential'] = $Cred }
+        $session = New-CimSession @sessionArgs
+        $cimArgs['CimSession'] = $session
+    }
+
+    try {
+        foreach ($p in (Get-CimInstance @cimArgs)) {
+            $account = Resolve-ProfileAccount -Sid $p.SID
+
+            $skip =
+                if     ($p.Special)  { 'Special (system profile)' }
+                elseif ($p.Loaded)   { 'Loaded (user signed in)' }
+                elseif (-not $p.LocalPath) { 'No local path' }
+                elseif ($ExcludeAccount | Where-Object { $account -like $_ }) { 'Excluded by -ExcludeAccount' }
+                elseif (-not $p.LastUseTime) { 'LastUseTime not populated' }
+                elseif ($p.LastUseTime -ge $Cutoff) { 'Recently used' }
+                else { $null }
+
+            [pscustomobject]@{
+                ComputerName = $Computer
+                Account      = $account
+                Sid          = $p.SID
+                LocalPath    = $p.LocalPath
+                LastUseTime  = $p.LastUseTime
+                AgeDays      = if ($p.LastUseTime) { [int]((Get-Date) - $p.LastUseTime).TotalDays } else { $null }
+                Special      = $p.Special
+                Loaded       = $p.Loaded
+                SkipReason   = $skip
+                IsCandidate  = (-not $skip)
+                CimInstance  = $p
+                CimSession   = $session
+            }
+        }
+    }
+    catch {
+        if ($session) { Remove-CimSession $session -ErrorAction SilentlyContinue }
+        throw
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+$sessions = @()
+try {
+    $cutoff = (Get-Date).AddDays(-$StaleDays)
+    Write-Log ("Starting stale profile cleanup. StaleDays={0} (cutoff {1:yyyy-MM-dd}), MaxRemovals={2}." -f `
+        $StaleDays, $cutoff, $MaxRemovals) 'INFO'
+    Write-Log ("Exclusions: {0}" -f ($ExcludeAccount -join ', ')) 'INFO'
+
+    $all = foreach ($computer in $ComputerName) {
+        Write-Log ("Enumerating profiles on {0}." -f $computer) 'DEBUG'
+        try {
+            Get-StaleProfile -Computer $computer -Cutoff $cutoff -Cred $Credential
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $computer, $_.Exception.Message) 'WARN'
+        }
+    }
+
+    $sessions    = @($all.CimSession | Where-Object { $_ } | Select-Object -Unique)
+    $candidates  = @($all | Where-Object IsCandidate)
+
+    Write-Log ("Profiles examined: {0}; candidates: {1}." -f $all.Count, $candidates.Count) 'INFO'
+
+    $all | Select-Object ComputerName, Account, Sid, LocalPath, LastUseTime, AgeDays,
+                         Special, Loaded, IsCandidate, SkipReason |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if (-not $candidates) {
+        Write-Host "`nNo stale profiles matched. Nothing to do." -ForegroundColor Green
+        return
+    }
+
+    $candidates | Sort-Object AgeDays -Descending |
+        Format-Table ComputerName, Account, LocalPath, LastUseTime, AgeDays -AutoSize
+
+    # Safety rail. A threshold typo should not clear a terminal server.
+    if ($candidates.Count -gt $MaxRemovals) {
+        throw ("{0} profiles matched, which exceeds -MaxRemovals ({1}). " -f $candidates.Count, $MaxRemovals) +
+              'Review the CSV and re-run with a higher limit if this is expected.'
+    }
+
+    $removed = 0; $failed = 0
+    foreach ($c in $candidates) {
+        $target = "{0} on {1} ({2}, last used {3:yyyy-MM-dd})" -f `
+                  $c.Account, $c.ComputerName, $c.LocalPath, $c.LastUseTime
+
+        if ($PSCmdlet.ShouldProcess($target, 'Remove user profile')) {
+            try {
+                Remove-CimInstance -InputObject $c.CimInstance -ErrorAction Stop
+                Write-Log ("REMOVED: {0}" -f $target) 'INFO'
+                $removed++
+            }
+            catch {
+                Write-Log ("FAILED to remove {0}: {1}" -f $target, $_.Exception.Message) 'WARN'
+                $failed++
+            }
+        }
+        else {
+            Write-Log ("WHATIF: would remove {0}" -f $target) 'INFO'
+        }
+    }
+
+    Write-Host ("`n{0} profile(s) removed, {1} failed, {2} candidate(s) total. Report: {3}`nLog: {4}" -f `
+        $removed, $failed, $candidates.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    foreach ($s in $sessions) { Remove-CimSession $s -ErrorAction SilentlyContinue }
+    Write-Log "Run complete." 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Enumerates every user profile on the target machines, decides
+which are stale, writes the full picture to CSV — including why each profile was
+*skipped* — and removes the candidates, subject to `-WhatIf` and a maximum-count
+safety rail.
+
+**How it works.**
+
+- **`Win32_UserProfile`, not `Remove-Item`.** Deleting `C:\Users\name` by hand
+  leaves the profile's entry under
+  `HKLM\...\CurrentVersion\ProfileList`, and the next sign-in gets a temporary
+  profile. `Remove-CimInstance` on the WMI object removes the directory, the
+  registry entry, and the profile's NTUSER.DAT registration together.
+- **Skips are recorded, not silent.** Every profile appears in the CSV with a
+  `SkipReason` — special, loaded, excluded, no `LastUseTime`, or recently used.
+  A cleanup script that quietly does nothing is impossible to debug.
+- **Missing `LastUseTime` means skip, not delete.** The property is not
+  populated reliably on every build, and an unknown date is not evidence of
+  staleness. The script refuses to guess.
+- **Unresolvable SIDs are kept visible.** A profile whose SID no longer
+  translates usually belongs to a deleted domain account — a strong staleness
+  signal — so it's reported as `UNRESOLVED` rather than dropped.
+- **Two independent brakes.** `SupportsShouldProcess` with
+  `ConfirmImpact = 'High'` means it prompts unless you pass `-Confirm:$false`,
+  and `-MaxRemovals` aborts the whole run if more profiles match than you
+  expected. A mistyped `-StaleDays 18` instead of `180` hits the rail rather
+  than the disk.
+- **CIM sessions are reused and disposed.** One session per remote machine,
+  closed in `finally` whether the run succeeds or throws.
+
+**Prerequisites & caveats.**
+
+- PowerShell 5.1+, local administrator rights, WinRM for remote hosts.
+- **Deleted profiles do not go to the Recycle Bin.** Anything in the profile
+  that isn't redirected, synced to OneDrive, or backed up is gone.
+- `LastUseTime` reflects profile *load*, not user activity. A profile loaded by
+  a scheduled task or a service logon looks recent while the human hasn't
+  signed in for a year.
+- On machines with **FSLogix** or roaming/UPD profiles, the local profile is a
+  cache and this is the wrong tool — manage those containers through their own
+  mechanism.
+- Run it with `-WhatIf` first. Every time, not just the first time.
+
+> **Warning — This one deletes data**
+>
+> The default 180-day threshold is deliberately conservative. Before the first
+> real run, check the CSV against your leavers list and confirm that redirected
+> folders and OneDrive Known Folder Move are actually in place — those are what
+> make a profile safe to delete.

@@ -1,0 +1,279 @@
+---
+title: Patch and Reboot State
+sidebar_label: Patch and Reboot State
+sidebar_position: 3
+description: PowerShell that reports last successful update install, uptime, and every pending-reboot source on one or more Windows hosts — naming which signal fired rather than returning a bare true or false.
+---
+
+# Patch and Reboot State
+
+One row per machine: when updates last installed successfully, how long the host
+has been up, and whether a reboot is pending — **naming which signal fired**
+rather than returning a bare `True`. Read-only.
+
+"Pending reboot" is not one flag. It's at least four independent signals written
+by different components, and a machine can sit in that state for months while
+patch reports show green. A machine that installed updates three weeks ago and
+has been up for ninety days has not applied them.
+
+## Script
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Reports patch recency, uptime, and pending-reboot state for one or more
+    Windows hosts, identifying which reboot signal is set.
+.DESCRIPTION
+    Checks the four standard pending-reboot sources (CBS, Windows Update,
+    PendingFileRenameOperations, pending computer rename) plus the ConfigMgr
+    client if present, and correlates uptime against last update install so
+    "patched but never rebooted" is visible.
+.NOTES
+    Requires local administrator rights on each target, and WinRM for remote
+    hosts. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string[]]$ComputerName = $env:COMPUTERNAME,
+
+    # Machines patched longer ago than this are flagged.
+    [int]$PatchWarnDays = 35,
+
+    [pscredential]$Credential,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\PatchAndRebootState.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("PatchAndRebootState_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- Remote payload -----------------------------------------------------------
+$StateProbe = {
+    $reasons = [System.Collections.Generic.List[string]]::new()
+
+    # 1. Component Based Servicing — set by servicing stack operations.
+    if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') {
+        $reasons.Add('CBS')
+    }
+
+    # 2. Windows Update agent.
+    if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') {
+        $reasons.Add('WindowsUpdate')
+    }
+
+    # 3. Files queued for rename/delete on next boot (common after in-use binaries).
+    $sm = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' `
+                           -Name 'PendingFileRenameOperations' -ErrorAction SilentlyContinue
+    if ($sm -and $sm.PendingFileRenameOperations) { $reasons.Add('PendingFileRename') }
+
+    # 4. Computer rename awaiting a reboot to take effect.
+    $active = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName' `
+                                -Name ComputerName -ErrorAction SilentlyContinue).ComputerName
+    $next   = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName' `
+                                -Name ComputerName -ErrorAction SilentlyContinue).ComputerName
+    if ($active -and $next -and ($active -ne $next)) { $reasons.Add('PendingRename') }
+
+    # 5. ConfigMgr client, where present — it tracks its own reboot state.
+    try {
+        $ccm = Invoke-CimMethod -Namespace 'root\ccm\ClientSDK' -ClassName 'CCM_ClientUtilities' `
+                                -MethodName 'DetermineIfRebootPending' -ErrorAction Stop
+        if ($ccm -and ($ccm.RebootPending -or $ccm.IsHardRebootPending)) { $reasons.Add('ConfigMgr') }
+    } catch { }   # Namespace absent on non-ConfigMgr machines; not an error.
+
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    # Last successful install, as reported by the Windows Update agent itself.
+    # More reliable than Win32_QuickFixEngineering, which omits driver and
+    # feature updates entirely.
+    $lastInstall = try {
+        $au = New-Object -ComObject Microsoft.Update.AutoUpdate
+        $d  = $au.Results.LastInstallationSuccessDate
+        if ($d -and $d -gt [datetime]'1980-01-01') { [datetime]$d } else { $null }
+    } catch { $null }
+
+    $lastHotfix = try {
+        (Get-CimInstance Win32_QuickFixEngineering -ErrorAction Stop |
+            Where-Object InstalledOn |
+            Sort-Object InstalledOn -Descending |
+            Select-Object -First 1).InstalledOn
+    } catch { $null }
+
+    [pscustomobject]@{
+        OsCaption      = $os.Caption
+        OsVersion      = $os.Version
+        LastBootUpTime = $os.LastBootUpTime
+        LastInstallUtc = if ($lastInstall) { $lastInstall.ToUniversalTime() } else { $null }
+        LastHotfixDate = $lastHotfix
+        RebootReasons  = $reasons -join '; '
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting patch/reboot survey across {0} host(s). PatchWarnDays={1}." -f `
+        $ComputerName.Count, $PatchWarnDays) 'INFO'
+
+    $now = Get-Date
+
+    $results = foreach ($computer in $ComputerName) {
+        Write-Log ("Querying {0}." -f $computer) 'DEBUG'
+        try {
+            $invoke = @{ ScriptBlock = $StateProbe; ErrorAction = 'Stop' }
+            if ($computer -ne $env:COMPUTERNAME -and $computer -ne 'localhost') {
+                $invoke['ComputerName'] = $computer
+                if ($Credential) { $invoke['Credential'] = $Credential }
+            }
+
+            $s = Invoke-Command @invoke
+
+            $uptimeDays = if ($s.LastBootUpTime) {
+                [math]::Round(($now - $s.LastBootUpTime).TotalDays, 1)
+            } else { $null }
+
+            $patchAgeDays = if ($s.LastInstallUtc) {
+                [int]($now.ToUniversalTime() - $s.LastInstallUtc).TotalDays
+            } elseif ($s.LastHotfixDate) {
+                [int]($now - $s.LastHotfixDate).TotalDays
+            } else { $null }
+
+            [pscustomobject]@{
+                ComputerName   = $computer
+                Status         = 'OK'
+                OsCaption      = $s.OsCaption
+                OsVersion      = $s.OsVersion
+                LastBootUp     = if ($s.LastBootUpTime) { '{0:yyyy-MM-dd HH:mm}' -f $s.LastBootUpTime } else { '' }
+                UptimeDays     = $uptimeDays
+                LastPatched    = if ($s.LastInstallUtc)  { '{0:yyyy-MM-dd}' -f $s.LastInstallUtc.ToLocalTime() }
+                                 elseif ($s.LastHotfixDate) { '{0:yyyy-MM-dd}' -f $s.LastHotfixDate }
+                                 else { 'UNKNOWN' }
+                PatchAgeDays   = $patchAgeDays
+                PatchOverdue   = ($null -eq $patchAgeDays) -or ($patchAgeDays -gt $PatchWarnDays)
+                RebootPending  = [bool]$s.RebootReasons
+                RebootReasons  = $s.RebootReasons
+                # The combination that quietly defeats a patching programme:
+                # updates installed, machine never restarted since.
+                PatchedNotRebooted = [bool]$s.RebootReasons -and
+                                     ($null -ne $uptimeDays) -and
+                                     ($null -ne $patchAgeDays) -and
+                                     ($uptimeDays -gt $patchAgeDays)
+                Detail         = ''
+            }
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $computer, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                ComputerName   = $computer
+                Status         = 'Error'
+                OsCaption      = ''; OsVersion = ''; LastBootUp = ''
+                UptimeDays     = $null; LastPatched = ''; PatchAgeDays = $null
+                PatchOverdue   = $null; RebootPending = $null; RebootReasons = ''
+                PatchedNotRebooted = $null
+                Detail         = $_.Exception.Message
+            }
+        }
+    }
+
+    $ok       = @($results | Where-Object Status -eq 'OK')
+    $overdue  = @($ok | Where-Object PatchOverdue)
+    $pending  = @($ok | Where-Object RebootPending)
+    $stranded = @($ok | Where-Object PatchedNotRebooted)
+    $failed   = @($results | Where-Object Status -eq 'Error')
+
+    Write-Log ("Reached {0}; overdue {1}; reboot pending {2}; patched-not-rebooted {3}; errors {4}." -f `
+        $ok.Count, $overdue.Count, $pending.Count, $stranded.Count, $failed.Count) 'INFO'
+
+    $results | Sort-Object @{Expression = { $_.PatchAgeDays }; Descending = $true} |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    $ok | Sort-Object PatchAgeDays -Descending |
+        Format-Table ComputerName, OsCaption, LastPatched, PatchAgeDays, UptimeDays, RebootReasons -AutoSize
+
+    if ($stranded) {
+        Write-Host "`nPatched but not rebooted — updates are installed and not in effect:" -ForegroundColor Yellow
+        $stranded | Format-Table ComputerName, LastPatched, UptimeDays, RebootReasons -AutoSize
+    }
+    if ($failed) {
+        Write-Host ("Unreachable: {0}" -f (($failed.ComputerName) -join ', ')) -ForegroundColor Red
+    }
+
+    Write-Host ("`n{0} host(s) reported; {1} overdue, {2} awaiting reboot. Report: {3}`nLog: {4}" -f `
+        $ok.Count, $overdue.Count, $pending.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log "Run complete." 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per machine covering OS build, last boot, uptime, the
+date updates last installed successfully, how overdue that is, and a
+semicolon-separated list of **which** pending-reboot signals are set.
+
+**How it works.**
+
+- **Five reboot sources, named individually.** Component Based Servicing,
+  the Windows Update agent, `PendingFileRenameOperations`, a pending computer
+  rename, and the ConfigMgr client where it exists. The report tells you *which*
+  fired, because "CBS" and "PendingFileRename" mean very different things when
+  you're deciding whether a restart can wait.
+- **Windows Update agent for patch recency, not just hotfixes.**
+  `Win32_QuickFixEngineering` omits driver updates, feature updates, and
+  anything delivered outside the classic hotfix mechanism, so a well-patched
+  machine can look untouched. The COM `Microsoft.Update.AutoUpdate` agent's
+  `LastInstallationSuccessDate` is the primary source; QFE is the fallback.
+- **`PatchedNotRebooted`.** Set when a reboot is pending *and* uptime exceeds
+  patch age — meaning updates installed during the current boot session and have
+  not taken effect. This is the row that explains a patch dashboard showing green
+  while the vulnerability is still exploitable.
+- **ConfigMgr probe fails quietly.** The `root\ccm\ClientSDK` namespace doesn't
+  exist on machines without the client; that's an expected absence, not an error.
+- **Output.** A CSV sorted oldest-patch-first, a console table, a separate
+  highlight of patched-not-rebooted machines, and a timestamped log.
+
+**Prerequisites & caveats.**
+
+- PowerShell 5.1+, local administrator rights on each target, WinRM for remote
+  hosts. The registry reads and the Windows Update COM object both require
+  elevation.
+- `LastInstallationSuccessDate` reflects what the **local** agent did. A machine
+  patched by a third-party tool that bypasses the Windows Update agent may report
+  `UNKNOWN` while being fully current — verify against your patching tool before
+  treating it as a finding.
+- `PendingFileRenameOperations` is noisy. Plenty of ordinary software
+  installations set it, so on its own it does not mean a security update is
+  waiting.
+- Uptime on machines using **Fast Startup** can overstate how long it has
+  genuinely been since a full restart; a shutdown is not a reboot.
+
+> **Note — Read-only, but act on it carefully**
+>
+> Nothing here restarts anything. Acting on the output means scheduling
+> restarts, which belongs in a maintenance window with the usual notice — not in
+> an ad-hoc loop over the CSV.

@@ -1,0 +1,53 @@
+---
+title: Windows
+sidebar_label: Overview
+sidebar_position: 1
+slug: /script-repository/windows
+description: PowerShell for Windows endpoint and server administration — local administrator inventory, patch and reboot state, and stale profile cleanup.
+---
+
+# Windows
+
+PowerShell for administering Windows endpoints and servers, following the
+repository [conventions](/docs/script-repository/) — functional structure,
+`try/catch` error handling, and timestamped logging to `C:\Temp`.
+
+Everything here runs against the built-in Windows stack: CIM/WMI, ADSI, the
+registry, and the Windows Update agent. No agent, no module to install, nothing
+to license.
+
+## Scripts in this section
+
+- **[Local Administrator Inventory](./local-administrator-inventory)** — who holds
+  local admin on every machine, with unexpected members flagged. Read-only.
+- **[Patch and Reboot State](./patch-and-reboot-state)** — last successful update,
+  pending-reboot sources, and uptime, in one row per machine. Read-only.
+- **[Stale Profile Cleanup](./stale-profile-cleanup)** — reclaims disk from user
+  profiles nobody has signed into. **Changes state**; supports `-WhatIf`.
+
+## Running these against many machines
+
+The read-only scripts accept `-ComputerName` and fan out over WinRM:
+
+```powershell
+.\Get-LocalAdminInventory.ps1 -ComputerName (Get-Content .\servers.txt) -Verbose
+```
+
+Three things decide whether that works:
+
+- **WinRM is listening and reachable.** `Test-WSMan -ComputerName HOST` tells you
+  in one line. In a domain this is usually a GPO; on standalone machines it is
+  `Enable-PSRemoting -Force` plus a TrustedHosts entry.
+- **You are an administrator on the target.** Local group membership, the Windows
+  Update agent, and `Win32_UserProfile` all require it. Nothing here will tell you
+  anything useful running as a standard user.
+- **Errors are per-machine, not fatal.** Each script catches failures against one
+  host, writes them to the log, records the machine with an `Error` status, and
+  continues. A report that silently omits six unreachable machines is worse than
+  one that names them.
+
+> **Tip — Run the read-only two first**
+>
+> Local Administrator Inventory and Patch and Reboot State change nothing, so
+> they are safe to run broadly on day one. Stale Profile Cleanup deletes data;
+> run it with `-WhatIf` and read the output before you ever run it for real.

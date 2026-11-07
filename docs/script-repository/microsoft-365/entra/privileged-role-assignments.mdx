@@ -1,0 +1,316 @@
+---
+title: Privileged Role Assignments
+sidebar_label: Privileged Role Assignments
+description: PowerShell that reports every Entra ID directory role assignment — permanent and PIM-eligible — and flags synced on-premises accounts, disabled accounts, and service principals holding privileged roles.
+---
+
+# Privileged Role Assignments
+
+Reports **every** directory role assignment in Entra ID — permanent ones and
+PIM-eligible ones — resolves each principal to a user, group, or service
+principal, and flags the combinations that shouldn't exist. Read-only.
+
+The Global Administrator count is the number everyone quotes. It's rarely the
+interesting one. What matters more is *how* those roles are held: an account
+synced from on-premises Active Directory holding Global Administrator means a
+domain compromise is a tenant compromise, and that fact doesn't appear anywhere
+in the role list.
+
+## Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports all Entra ID directory role assignments (permanent and PIM-eligible)
+    with principal type, account state, and on-premises sync status.
+.DESCRIPTION
+    Joins roleDefinitions, roleAssignments, and roleEligibilityScheduleInstances,
+    then enriches each principal from a bulk-loaded directory index. Flags
+    synced, disabled, and non-human holders of privileged roles.
+.EXAMPLE
+    .\Get-PrivilegedRoleReport.ps1 -Verbose
+.NOTES
+    Required Graph perms: RoleManagement.Read.Directory, Directory.Read.All
+    Read-only. PIM eligibility requires Entra ID P2.
+#>
+
+[CmdletBinding()]
+param(
+    # Roles treated as privileged for the summary. Everything is still reported.
+    [string[]]$PrivilegedRole = @(
+        'Global Administrator',
+        'Privileged Role Administrator',
+        'Privileged Authentication Administrator',
+        'Security Administrator',
+        'Exchange Administrator',
+        'SharePoint Administrator',
+        'Intune Administrator',
+        'User Administrator',
+        'Application Administrator',
+        'Cloud Application Administrator',
+        'Conditional Access Administrator',
+        'Hybrid Identity Administrator',
+        'Helpdesk Administrator'
+    ),
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\PrivilegedRoleAssignments.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("PrivilegedRoleAssignments_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [switch]$Tolerate   # Return nothing instead of throwing (for P2-only endpoints).
+    )
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    try {
+        do {
+            $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+            foreach ($v in $resp.value) { $items.Add($v) }
+            $next = $resp.'@odata.nextLink'
+        } while ($next)
+    }
+    catch {
+        if ($Tolerate) {
+            Write-Log ("Endpoint unavailable ({0}): {1}" -f $Uri, $_.Exception.Message) 'WARN'
+            return @()
+        }
+        throw
+    }
+    return $items
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting privileged role assignment report.' 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        Connect-MgGraph -Scopes 'RoleManagement.Read.Directory','Directory.Read.All' -NoWelcome
+    }
+    $ctx = Get-MgContext
+    Write-Log ("Connected as {0} (tenant {1})." -f $ctx.Account, $ctx.TenantId) 'INFO'
+
+    # --- Role definitions -----------------------------------------------------
+    $roleIndex = @{}
+    foreach ($r in (Get-GraphCollection -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions')) {
+        $roleIndex[$r.id] = $r
+    }
+    Write-Log ("Role definitions: {0}" -f $roleIndex.Count) 'INFO'
+
+    # --- Directory index ------------------------------------------------------
+    # Bulk-load users, groups and service principals once rather than resolving
+    # each assignment individually. onPremisesSyncEnabled is the property the
+    # whole report hinges on and is not reliably returned by $expand=principal.
+    $principalIndex = @{}
+
+    Write-Log 'Indexing users.' 'DEBUG'
+    foreach ($u in (Get-GraphCollection -Uri ('https://graph.microsoft.com/v1.0/users' +
+        '?$select=id,userPrincipalName,displayName,accountEnabled,onPremisesSyncEnabled,userType&$top=999'))) {
+        $principalIndex[$u.id] = [pscustomobject]@{
+            Type = 'User'; Name = $u.displayName; Upn = $u.userPrincipalName
+            Enabled = $u.accountEnabled; Synced = [bool]$u.onPremisesSyncEnabled; UserType = $u.userType
+        }
+    }
+
+    Write-Log 'Indexing groups.' 'DEBUG'
+    foreach ($g in (Get-GraphCollection -Uri ('https://graph.microsoft.com/v1.0/groups' +
+        '?$select=id,displayName,onPremisesSyncEnabled,isAssignableToRole&$top=999'))) {
+        $principalIndex[$g.id] = [pscustomobject]@{
+            Type = 'Group'; Name = $g.displayName; Upn = ''
+            Enabled = $null; Synced = [bool]$g.onPremisesSyncEnabled; UserType = if ($g.isAssignableToRole) { 'RoleAssignable' } else { '' }
+        }
+    }
+
+    Write-Log 'Indexing service principals.' 'DEBUG'
+    foreach ($s in (Get-GraphCollection -Uri ('https://graph.microsoft.com/v1.0/servicePrincipals' +
+        '?$select=id,displayName,appId,accountEnabled,servicePrincipalType&$top=999'))) {
+        $principalIndex[$s.id] = [pscustomobject]@{
+            Type = 'ServicePrincipal'; Name = $s.displayName; Upn = $s.appId
+            Enabled = $s.accountEnabled; Synced = $false; UserType = $s.servicePrincipalType
+        }
+    }
+    Write-Log ("Principals indexed: {0}" -f $principalIndex.Count) 'INFO'
+
+    # --- Assignments ----------------------------------------------------------
+    $assignments = Get-GraphCollection -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments'
+    Write-Log ("Active role assignments: {0}" -f $assignments.Count) 'INFO'
+
+    # PIM eligibility is an Entra ID P2 feature; tolerate its absence.
+    $eligible = Get-GraphCollection -Tolerate `
+        -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances'
+    Write-Log ("PIM-eligible assignments: {0}" -f $eligible.Count) 'INFO'
+
+    function New-Row {
+        param($Assignment, [string]$Kind)
+
+        $role      = $roleIndex[$Assignment.roleDefinitionId]
+        $roleName  = if ($role) { $role.displayName } else { $Assignment.roleDefinitionId }
+        $principal = $principalIndex[$Assignment.principalId]
+
+        [pscustomobject]@{
+            Role            = $roleName
+            IsPrivileged    = ($PrivilegedRole -contains $roleName)
+            Assignment      = $Kind                 # Permanent | Eligible (PIM)
+            PrincipalType   = if ($principal) { $principal.Type } else { 'Unresolved' }
+            PrincipalName   = if ($principal) { $principal.Name } else { $Assignment.principalId }
+            PrincipalUpn    = if ($principal) { $principal.Upn }  else { '' }
+            AccountEnabled  = if ($principal) { $principal.Enabled } else { $null }
+            SyncedFromOnPrem= if ($principal) { $principal.Synced } else { $null }
+            UserType        = if ($principal) { $principal.UserType } else { '' }
+            PrincipalId     = $Assignment.principalId
+            DirectoryScope  = $Assignment.directoryScopeId
+            RoleDefinitionId= $Assignment.roleDefinitionId
+        }
+    }
+
+    $rows = @()
+    foreach ($a in $assignments) { $rows += New-Row -Assignment $a -Kind 'Permanent' }
+    foreach ($e in $eligible)    { $rows += New-Row -Assignment $e -Kind 'Eligible (PIM)' }
+
+    # --- Findings -------------------------------------------------------------
+    $priv       = @($rows | Where-Object IsPrivileged)
+    $syncedPriv = @($priv | Where-Object { $_.SyncedFromOnPrem -eq $true })
+    $disabled   = @($rows | Where-Object { $_.AccountEnabled -eq $false })
+    $spPriv     = @($priv | Where-Object { $_.PrincipalType -eq 'ServicePrincipal' })
+    $guestPriv  = @($priv | Where-Object { $_.UserType -eq 'Guest' })
+    $globalPerm = @($rows | Where-Object { $_.Role -eq 'Global Administrator' -and $_.Assignment -eq 'Permanent' })
+    $unresolved = @($rows | Where-Object { $_.PrincipalType -eq 'Unresolved' })
+
+    Write-Log ("Rows {0}; privileged {1}; synced-privileged {2}; disabled {3}; SP-privileged {4}; guest-privileged {5}; permanent GA {6}." -f `
+        $rows.Count, $priv.Count, $syncedPriv.Count, $disabled.Count, $spPriv.Count, $guestPriv.Count, $globalPerm.Count) 'INFO'
+
+    $rows | Sort-Object @{Expression='IsPrivileged';Descending=$true}, Role, PrincipalName |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nAssignments per role:" -ForegroundColor Cyan
+    $rows | Group-Object Role | Sort-Object Count -Descending | Select-Object -First 20 `
+        @{N='Role';E={$_.Name}}, Count | Format-Table -AutoSize
+
+    Write-Host "`nGlobal Administrator — permanent assignments:" -ForegroundColor Cyan
+    if ($globalPerm) {
+        $globalPerm | Format-Table PrincipalName, PrincipalUpn, PrincipalType, AccountEnabled, SyncedFromOnPrem -AutoSize
+    } else {
+        Write-Host '  none (all Global Administrator access is PIM-eligible)' -ForegroundColor Green
+    }
+
+    if ($syncedPriv) {
+        Write-Host "`nPrivileged roles held by accounts synced from on-premises AD:" -ForegroundColor Red
+        $syncedPriv | Format-Table Role, PrincipalUpn, Assignment, AccountEnabled -AutoSize
+        Write-Host 'A compromise of on-premises AD becomes a compromise of the tenant.' -ForegroundColor Red
+    }
+    if ($disabled) {
+        Write-Host "`nRole assignments held by disabled accounts:" -ForegroundColor Yellow
+        $disabled | Format-Table Role, PrincipalName, PrincipalUpn, Assignment -AutoSize
+    }
+    if ($guestPriv) {
+        Write-Host "`nPrivileged roles held by guest accounts:" -ForegroundColor Yellow
+        $guestPriv | Format-Table Role, PrincipalUpn, Assignment -AutoSize
+    }
+    if ($spPriv) {
+        Write-Host "`nPrivileged roles held by service principals:" -ForegroundColor Yellow
+        $spPriv | Format-Table Role, PrincipalName, PrincipalUpn, Assignment -AutoSize
+    }
+    if ($unresolved) {
+        Write-Host ("`n{0} assignment(s) reference a principal that could not be resolved." -f $unresolved.Count) -ForegroundColor Yellow
+    }
+    if (-not $eligible.Count) {
+        Write-Host "`nNo PIM-eligible assignments found — either PIM is unused or the tenant lacks Entra ID P2." -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} assignment(s): {1} privileged, {2} permanent GA.`nReport: {3}`nLog: {4}" -f `
+        $rows.Count, $priv.Count, $globalPerm.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** One row per directory role assignment — permanent and
+PIM-eligible — naming the role, who holds it, what kind of principal they are,
+whether the account is enabled, and crucially whether it is **synced from
+on-premises Active Directory**. Then it surfaces five specific findings.
+
+**How it works.**
+
+- **Principals are indexed in bulk, not expanded per assignment.**
+  `$expand=principal` on `roleAssignments` does not reliably return
+  `onPremisesSyncEnabled`, and that single property is the point of the report.
+  Three paged calls build a hashtable of users, groups and service principals;
+  every assignment is then a dictionary lookup.
+- **Eligible and permanent in one table.** `roleAssignments` gives you active
+  assignments; `roleEligibilityScheduleInstances` gives you PIM eligibility.
+  Reading only the first makes a well-run PIM tenant look like it has no
+  administrators at all.
+- **PIM's absence is tolerated, not fatal.** The eligibility endpoint requires
+  Entra ID P2. On a tenant without it, `-Tolerate` logs the gap and the report
+  continues with permanent assignments only — and says so at the end.
+- **Five findings, each a different failure.** Privileged roles on synced
+  accounts (the tier-0 boundary collapse); assignments held by disabled
+  accounts (reactivation is instant re-privilege); guests with admin roles;
+  service principals with admin roles (no MFA, no Conditional Access by
+  default); and permanent Global Administrator where PIM eligibility would do.
+- **Unresolved principals are reported rather than dropped.** An assignment to
+  an object that no longer resolves is itself worth investigating.
+- **Output.** A CSV sorted privileged-first, per-role counts, and a separate
+  console table for each finding.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scopes
+  `RoleManagement.Read.Directory` and `Directory.Read.All`.
+- **Group assignments are not expanded.** A role assigned to a role-assignable
+  group is one row; who is in that group is a separate question. The
+  `UserType` column shows `RoleAssignable` for those groups so you know to go
+  looking.
+- **Scope is reported, not interpreted.** `DirectoryScope` of `/` is
+  tenant-wide; an administrative-unit scope is much narrower. Two rows with the
+  same role are not necessarily equivalent.
+- **MFA state is not shown.** It is not available from the role-management
+  endpoints and needs the authentication-methods API with
+  `UserAuthenticationMethod.Read.All`. An administrator without strong
+  authentication is a real finding; this report won't catch it.
+- Activated PIM assignments appear as permanent in `roleAssignments` for the
+  duration of the activation, so a run during someone's active window will
+  show them under `Permanent`.
+- The `-PrivilegedRole` list is a starting point reflecting common practice,
+  not Microsoft's own classification. Adjust it to your tenant.
+
+> **Note — The synced-account finding is the one to act on**
+>
+> Everything else here is tidy-up. A privileged role on an account that syncs
+> from on-premises AD removes the boundary between your domain and your tenant:
+> whoever owns the domain controller owns Microsoft 365. The fix is cloud-only,
+> separately credentialed administrative accounts — which is a project, not a
+> checkbox, and worth starting before it is needed.

@@ -1,0 +1,238 @@
+---
+title: Local Administrator Inventory
+sidebar_label: Local Administrator Inventory
+sidebar_position: 2
+description: PowerShell that enumerates the local Administrators group across one or more Windows hosts via ADSI, resolves each member's SID and type, and flags anything not on the approved list.
+---
+
+# Local Administrator Inventory
+
+Reports every member of the **local Administrators group** on one or more
+Windows hosts, resolves each member to a SID and an object type, and flags
+anything that isn't on your approved list. Read-only.
+
+Local admin rights are the quietest form of privilege sprawl there is. A
+contractor added in 2023, a service account someone granted "temporarily", a
+nested domain group whose membership has since doubled — none of it shows up
+anywhere until it's used. This produces the list.
+
+## Script
+
+```powershell
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Enumerates the local Administrators group on one or more Windows hosts and
+    flags members that are not on the approved list.
+.DESCRIPTION
+    Uses ADSI (WinNT provider) rather than Get-LocalGroupMember, which throws
+    on members whose SID no longer resolves — exactly the orphaned accounts an
+    audit most wants to see. Unreachable hosts are recorded, not skipped.
+.NOTES
+    Requires local administrator rights on each target, and WinRM for remote
+    hosts. Read-only: enumerates, never modifies group membership.
+#>
+
+[CmdletBinding()]
+param(
+    [string[]]$ComputerName = $env:COMPUTERNAME,
+
+    # Members you expect everywhere. Compared on the resolved NAME, case-insensitively.
+    [string[]]$ApprovedMember = @('Administrator', 'Domain Admins'),
+
+    [pscredential]$Credential,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\LocalAdminInventory.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("LocalAdminInventory_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# --- Remote payload -----------------------------------------------------------
+# Runs on each target. Deliberately dependency-free: ADSI and .NET only, so it
+# works on Server 2012 R2 and Windows 10 alike without the LocalAccounts module.
+$AdminEnumerator = {
+    # The Administrators group is resolved by its well-known SID (S-1-5-32-544)
+    # so this works on non-English installs, where the group is not called
+    # "Administrators".
+    $sid  = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+    $name = $sid.Translate([System.Security.Principal.NTAccount]).Value -replace '^.*\\', ''
+    $group = [ADSI]("WinNT://./{0},group" -f $name)
+
+    foreach ($raw in @($group.Invoke('Members'))) {
+        $member = [ADSI]$raw
+
+        # WinNT://WORKGROUP/HOST/Name, WinNT://DOMAIN/Name, or WinNT://HOST/Name
+        $path  = $member.Path -replace '^WinNT://', ''
+        $parts = $path -split '/'
+        $leaf  = $parts[-1]
+        $scope = if ($parts.Count -gt 1) { $parts[-2] } else { $env:COMPUTERNAME }
+
+        # An unresolvable SID throws here; report it rather than losing the row.
+        $sidValue = try {
+            (New-Object System.Security.Principal.SecurityIdentifier(
+                $member.InvokeGet('objectSID'), 0)).Value
+        } catch { 'UNRESOLVED' }
+
+        $class = try { $member.SchemaClassName } catch { 'Unknown' }
+
+        [pscustomobject]@{
+            MemberName = $leaf
+            MemberHost = $scope
+            ObjectType = $class          # User | Group
+            Sid        = $sidValue
+            IsLocal    = ($scope -eq $env:COMPUTERNAME)
+            IsDisabled = if ($class -eq 'User' -and $scope -eq $env:COMPUTERNAME) {
+                             # UserFlags bit 0x0002 = ACCOUNTDISABLE
+                             [bool]((($member.UserFlags.Value) -band 2))
+                         } else { $null }
+        }
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting local administrator inventory across {0} host(s)." -f $ComputerName.Count) 'INFO'
+    Write-Log ("Approved members: {0}" -f ($ApprovedMember -join ', ')) 'INFO'
+
+    $results = foreach ($computer in $ComputerName) {
+        Write-Log ("Querying {0}." -f $computer) 'DEBUG'
+        try {
+            $invoke = @{ ScriptBlock = $AdminEnumerator; ErrorAction = 'Stop' }
+            # Run in-process for the local machine; WinRM is only for remote hosts.
+            if ($computer -ne $env:COMPUTERNAME -and $computer -ne 'localhost') {
+                $invoke['ComputerName'] = $computer
+                if ($Credential) { $invoke['Credential'] = $Credential }
+            }
+
+            $members = Invoke-Command @invoke
+
+            foreach ($m in $members) {
+                [pscustomobject]@{
+                    ComputerName = $computer
+                    Status       = 'OK'
+                    MemberName   = $m.MemberName
+                    MemberScope  = $m.MemberHost
+                    ObjectType   = $m.ObjectType
+                    Sid          = $m.Sid
+                    IsLocal      = $m.IsLocal
+                    IsDisabled   = $m.IsDisabled
+                    IsApproved   = ($ApprovedMember -contains $m.MemberName)
+                    Detail       = ''
+                }
+            }
+        }
+        catch {
+            Write-Log ("{0}: {1}" -f $computer, $_.Exception.Message) 'WARN'
+            [pscustomobject]@{
+                ComputerName = $computer
+                Status       = 'Error'
+                MemberName   = ''
+                MemberScope  = ''
+                ObjectType   = ''
+                Sid          = ''
+                IsLocal      = $null
+                IsDisabled   = $null
+                IsApproved   = $null
+                Detail       = $_.Exception.Message
+            }
+        }
+    }
+
+    $reached     = @($results | Where-Object Status -eq 'OK'    | Select-Object -ExpandProperty ComputerName -Unique)
+    $unreachable = @($results | Where-Object Status -eq 'Error' | Select-Object -ExpandProperty ComputerName -Unique)
+    $unexpected  = @($results | Where-Object { $_.Status -eq 'OK' -and -not $_.IsApproved })
+
+    Write-Log ("Reached {0} host(s); {1} unreachable; {2} unexpected member(s)." -f `
+        $reached.Count, $unreachable.Count, $unexpected.Count) 'INFO'
+
+    $results | Sort-Object ComputerName, MemberName |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($unexpected) {
+        Write-Host "`nUnexpected local administrators:" -ForegroundColor Yellow
+        $unexpected | Format-Table ComputerName, MemberName, ObjectType, IsLocal, IsDisabled, Sid -AutoSize
+    } else {
+        Write-Host "`nNo unexpected local administrators found." -ForegroundColor Green
+    }
+
+    if ($unreachable) {
+        Write-Host ("Unreachable: {0}" -f ($unreachable -join ', ')) -ForegroundColor Red
+    }
+
+    Write-Host ("`n{0} membership row(s) across {1} host(s). Report: {2}`nLog: {3}" -f `
+        $results.Count, $reached.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log "Run complete." 'INFO'
+}
+```
+
+## Summary
+
+**What it does.** Produces one row per local-Administrators member per machine,
+with the member's SID, whether it's a user or a group, whether it's local or
+from the domain, and whether it matches your approved list. Unreachable machines
+get a row too, with the reason.
+
+**How it works.**
+
+- **Well-known SID, not the group name.** The group is resolved from
+  `S-1-5-32-544` and translated to its local name, so the script works on
+  non-English Windows where the group isn't called "Administrators".
+- **ADSI rather than `Get-LocalGroupMember`.** That cmdlet throws
+  `Principal … was not found` when a member's SID no longer resolves — a deleted
+  domain account, or a member added from a domain that's since gone. Those are
+  precisely the rows an audit wants. ADSI returns them and the script records
+  the SID as `UNRESOLVED`.
+- **Local runs stay local.** `Invoke-Command` only gets a `-ComputerName` when
+  the target isn't this machine, so you don't need WinRM configured to audit the
+  host you're sitting on.
+- **Per-host error isolation.** A failure against one machine is caught, logged,
+  and emitted as a row with `Status = Error`. The run continues and the report
+  names what it couldn't reach.
+- **Output.** A CSV at `C:\Temp\LocalAdminInventory.csv`, a console table of
+  unexpected members only, and a timestamped log.
+
+**Prerequisites & caveats.**
+
+- PowerShell 5.1+, local administrator rights on each target, and WinRM for
+  remote hosts (`Test-WSMan -ComputerName HOST` to check).
+- `-ApprovedMember` matches on the **resolved name**, not the SID. Two different
+  domains with a `Domain Admins` group will both pass. If that matters in your
+  environment, compare on `Sid` instead.
+- **Nested groups are not expanded.** A row saying `Domain Admins` is one row,
+  whatever its membership. That's deliberate — expanding it is a different
+  question, asked of Active Directory rather than of the endpoint.
+- `IsDisabled` is only populated for **local** user accounts. Domain members
+  return `null`; their state lives in AD.
+
+> **Note — This is the inventory, not the fix**
+>
+> The output tells you who has local admin. Deciding what should be there, and
+> removing what shouldn't, is a change with a blast radius — do it through Group
+> Policy, Intune, or LAPS rather than by editing groups machine by machine.

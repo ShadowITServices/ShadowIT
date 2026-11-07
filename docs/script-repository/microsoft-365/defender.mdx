@@ -1,16 +1,308 @@
 ---
 title: Defender
 sidebar_label: Defender
-description: PowerShell scripts for Defender administration. Scripts following the repository conventions will be published here.
+description: PowerShell that maps Defender for Office 365 and EOP policy coverage — which policies exist, which are actually scoped to recipients, and which protect nobody because they were never given a rule.
 ---
 
 # Defender
 
-PowerShell for administering Defender. Connect using the relevant module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
+PowerShell for Microsoft Defender for Office 365 and Exchange Online Protection,
+using the `ExchangeOnlineManagement` module (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
 
-> **Note — Scripts coming soon**
+## Protection policy coverage report
+
+Enumerates every anti-phishing, anti-spam, anti-malware, Safe Links and Safe
+Attachments policy in the tenant, pairs each with the rule that scopes it, and
+flags the ones that **protect nobody**. Read-only.
+
+Email protection in Microsoft 365 is split in two: a *policy* holds the
+settings, and a separate *rule* decides who it applies to. Create a policy in
+PowerShell or copy one between tenants and you can easily end up with a
+perfectly configured Safe Attachments policy attached to no recipients at all.
+It looks right in every list, and it is doing nothing.
+
+### Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Reports Defender for Office 365 and EOP protection policies alongside the
+    rules that scope them, flagging policies with no active rule.
+.DESCRIPTION
+    Walks each policy family (anti-phish, anti-spam in and out, anti-malware,
+    Safe Links, Safe Attachments), joins each policy to its rule, and reports
+    scope, priority, and enabled state. Reports preset security policy status
+    separately, since presets outrank custom policies.
+.EXAMPLE
+    .\Get-DefenderPolicyCoverage.ps1 -Verbose
+.NOTES
+    Required role: View-Only Organization Management (or Security Reader).
+    Read-only. Safe Links / Safe Attachments require Defender for Office 365.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\DefenderPolicyCoverage.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("DefenderPolicyCoverage_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Format-Scope {
+    <#
+        Renders a rule's recipient conditions as one readable string. An empty
+        result means the rule exists but targets nothing.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()]$Rule)
+    if (-not $Rule) { return '' }
+    $parts = @()
+    if ($Rule.SentTo)            { $parts += "users: $(@($Rule.SentTo) -join ',')" }
+    if ($Rule.SentToMemberOf)    { $parts += "groups: $(@($Rule.SentToMemberOf) -join ',')" }
+    if ($Rule.RecipientDomainIs) { $parts += "domains: $(@($Rule.RecipientDomainIs) -join ',')" }
+    if ($Rule.ExceptIfSentTo)         { $parts += "except users: $(@($Rule.ExceptIfSentTo) -join ',')" }
+    if ($Rule.ExceptIfSentToMemberOf) { $parts += "except groups: $(@($Rule.ExceptIfSentToMemberOf) -join ',')" }
+    if ($Rule.ExceptIfRecipientDomainIs) { $parts += "except domains: $(@($Rule.ExceptIfRecipientDomainIs) -join ',')" }
+    return ($parts -join ' | ')
+}
+
+function Get-PolicyFamily {
+    <#
+        Joins one policy family to its rule family and emits uniform rows.
+        Families that need a licence the tenant lacks fail here; that is
+        reported as an absence, not an error.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Family,
+        [Parameter(Mandatory)][scriptblock]$PolicyGetter,
+        [scriptblock]$RuleGetter,
+        # Policies that apply with no rule (the tenant-wide defaults).
+        [string[]]$ImplicitDefaultName = @('Default', 'Office365 AntiPhish Default')
+    )
+
+    try {
+        $policies = @(& $PolicyGetter)
+    }
+    catch {
+        Write-Log ("{0}: not available ({1})" -f $Family, $_.Exception.Message) 'WARN'
+        return
+    }
+
+    $rules = @()
+    if ($RuleGetter) {
+        try { $rules = @(& $RuleGetter) }
+        catch { Write-Log ("{0}: rules unreadable ({1})" -f $Family, $_.Exception.Message) 'WARN' }
+    }
+
+    foreach ($p in $policies) {
+        $name = [string]$p.Name
+        $rule = $rules | Where-Object { [string]$_.($Family + 'Policy') -eq $name -or
+                                        [string]$_.Name -eq $name } | Select-Object -First 1
+
+        # Fall back to the generic association property name used by most families.
+        if (-not $rule) {
+            $rule = $rules | Where-Object {
+                ($_.PSObject.Properties.Name -contains 'Policy' -and [string]$_.Policy -eq $name)
+            } | Select-Object -First 1
+        }
+
+        $isDefault = ($ImplicitDefaultName -contains $name) -or ($p.IsDefault -eq $true)
+        $scope     = Format-Scope -Rule $rule
+
+        [pscustomobject]@{
+            Family        = $Family
+            PolicyName    = $name
+            IsDefault     = $isDefault
+            PolicyEnabled = if ($null -ne $p.Enabled) { [bool]$p.Enabled } else { $true }
+            RuleName      = if ($rule) { $rule.Name } else { '' }
+            RuleState     = if ($rule) { [string]$rule.State } else { '' }
+            Priority      = if ($rule) { $rule.Priority } else { $null }
+            Scope         = $scope
+            # The finding: a non-default policy with no rule, a disabled rule,
+            # or a rule that targets nothing, applies to no mailbox at all.
+            AppliesToNobody = (-not $isDefault) -and
+                              ((-not $rule) -or ($rule.State -ne 'Enabled') -or [string]::IsNullOrWhiteSpace($scope))
+        }
+    }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting Defender/EOP policy coverage report.' 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) {
+            Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false
+        } else {
+            Connect-ExchangeOnline -ShowBanner:$false
+        }
+    }
+
+    # --- Preset security policies --------------------------------------------
+    # Presets outrank every custom policy. If Standard or Strict is enabled and
+    # scoped broadly, custom policies below may never apply to anyone.
+    Write-Host "`nPreset security policies" -ForegroundColor Cyan
+    $presets = @()
+    foreach ($getter in @(
+        @{ Label = 'EOP (spam/malware/phish)'; Script = { Get-EOPProtectionPolicyRule -ErrorAction Stop } },
+        @{ Label = 'Defender (SafeLinks/SafeAttachments)'; Script = { Get-ATPProtectionPolicyRule -ErrorAction Stop } }
+    )) {
+        try {
+            foreach ($r in @(& $getter.Script)) {
+                $presets += [pscustomobject]@{
+                    Layer    = $getter.Label
+                    Preset   = $r.Name
+                    State    = $r.State
+                    Priority = $r.Priority
+                    Scope    = Format-Scope -Rule $r
+                }
+            }
+        }
+        catch { Write-Log ("{0}: not available ({1})" -f $getter.Label, $_.Exception.Message) 'WARN' }
+    }
+
+    if ($presets) {
+        $presets | Format-Table Layer, Preset, State, Priority, Scope -AutoSize -Wrap
+    } else {
+        Write-Host 'No preset security policies configured — protection relies on Built-in protection plus any custom policies below.' -ForegroundColor Yellow
+    }
+
+    # --- Custom and default policies -----------------------------------------
+    Write-Log 'Enumerating policy families.' 'DEBUG'
+
+    $rows = @()
+    $rows += Get-PolicyFamily -Family 'AntiPhish' `
+                -PolicyGetter { Get-AntiPhishPolicy -ErrorAction Stop } `
+                -RuleGetter   { Get-AntiPhishRule   -ErrorAction Stop }
+
+    $rows += Get-PolicyFamily -Family 'HostedContentFilter' `
+                -PolicyGetter { Get-HostedContentFilterPolicy -ErrorAction Stop } `
+                -RuleGetter   { Get-HostedContentFilterRule   -ErrorAction Stop }
+
+    $rows += Get-PolicyFamily -Family 'MalwareFilter' `
+                -PolicyGetter { Get-MalwareFilterPolicy -ErrorAction Stop } `
+                -RuleGetter   { Get-MalwareFilterRule   -ErrorAction Stop }
+
+    $rows += Get-PolicyFamily -Family 'SafeLinks' `
+                -PolicyGetter { Get-SafeLinksPolicy -ErrorAction Stop } `
+                -RuleGetter   { Get-SafeLinksRule   -ErrorAction Stop }
+
+    $rows += Get-PolicyFamily -Family 'SafeAttachment' `
+                -PolicyGetter { Get-SafeAttachmentPolicy -ErrorAction Stop } `
+                -RuleGetter   { Get-SafeAttachmentRule   -ErrorAction Stop }
+
+    # Outbound spam has no recipient scoping in the same sense; report as-is.
+    $rows += Get-PolicyFamily -Family 'HostedOutboundSpamFilter' `
+                -PolicyGetter { Get-HostedOutboundSpamFilterPolicy -ErrorAction Stop } `
+                -RuleGetter   { Get-HostedOutboundSpamFilterRule   -ErrorAction Stop }
+
+    Write-Log ("Policy rows: {0}" -f $rows.Count) 'INFO'
+
+    $orphans  = @($rows | Where-Object AppliesToNobody)
+    $families = @($rows | Select-Object -ExpandProperty Family -Unique)
+
+    $rows | Sort-Object Family, @{Expression = { if ($null -eq $_.Priority) { 999 } else { $_.Priority } }} |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nPolicies by family" -ForegroundColor Cyan
+    $rows | Sort-Object Family, Priority |
+        Format-Table Family, PolicyName, IsDefault, RuleState, Priority, Scope -AutoSize -Wrap
+
+    if ($orphans) {
+        Write-Host "`nPolicies that currently protect nobody:" -ForegroundColor Yellow
+        $orphans | Format-Table Family, PolicyName, RuleName, RuleState, Scope -AutoSize -Wrap
+        Write-Host 'A policy with no enabled rule, or a rule with no recipients, applies to no mailbox.' -ForegroundColor Yellow
+    } else {
+        Write-Host "`nEvery non-default policy is scoped to recipients." -ForegroundColor Green
+    }
+
+    Write-Host ("`n{0} polic(y/ies) across {1} famil(y/ies); {2} apply to nobody.`nReport: {3}`nLog: {4}" -f `
+        $rows.Count, $families.Count, $orphans.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** Prints the state of the preset security policies, then one
+row per protection policy across six families — anti-phishing, anti-spam
+(inbound and outbound), anti-malware, Safe Links, Safe Attachments — showing
+the rule that scopes it, that rule's state and priority, the recipients it
+targets, and whether the policy applies to anybody at all.
+
+**How it works.**
+
+- **Policies and rules are joined, because neither means anything alone.** The
+  policy holds the settings; the rule decides who gets them. The script matches
+  each policy to its rule and renders the recipient conditions — including
+  exceptions — as one readable `Scope` string.
+- **`AppliesToNobody` catches three distinct failures.** No rule at all, a rule
+  in a disabled state, or a rule whose conditions are empty. All three produce
+  a policy that looks configured in every admin view and protects no mailbox.
+  Default policies are excluded from the flag, because they apply without a
+  rule by design.
+- **Presets are reported first and separately.** Standard and Strict preset
+  policies take priority over every custom policy. A tenant with Standard
+  enabled for all recipients may have custom policies that never evaluate — so
+  the preset state is the context you need before reading anything below it.
+- **Missing licences are absences, not errors.** On a tenant without Defender
+  for Office 365, `Get-SafeLinksPolicy` fails. The script logs it as "not
+  available" and carries on rather than aborting the whole report.
+- **Output.** A CSV sorted by family and priority, console tables for presets
+  and for policies, a highlighted list of the orphans, and a log.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`; **View-Only Organization Management** or
+  Security Reader is enough.
+- **Safe Links and Safe Attachments need Defender for Office 365 (P1 or P2).**
+  Without it those families are simply absent from the report, which is correct
+  but worth knowing before you read their absence as a misconfiguration.
+- **Built-in protection is not listed.** It is the always-on floor beneath
+  everything here, has no policy object of the kind this enumerates, and cannot
+  be disabled. An empty report does not mean no protection.
+- The scope string shows *conditions*, not a resolved list of mailboxes. A rule
+  targeting a group tells you the group name; who is in it is a separate
+  question.
+- Priority matters and only the **first matching policy per family** applies to
+  a given recipient. Two policies that both match a user are not additive — the
+  lower priority number wins and the other never runs.
+- Outbound spam policies are scoped by sender rather than recipient, so
+  `Scope` is less meaningful for that family.
+
+> **Tip — Read it with the preset state in hand**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> The most common surprise this report produces is a carefully tuned custom
+> policy that never applies because a preset above it already matched. Check
+> the preset table at the top before concluding a custom policy is broken.

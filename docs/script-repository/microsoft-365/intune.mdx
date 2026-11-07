@@ -1,16 +1,289 @@
 ---
 title: Intune
 sidebar_label: Intune
-description: PowerShell scripts for Intune administration. Scripts following the repository conventions will be published here.
+description: PowerShell that reports every Intune-managed device with compliance state, encryption, OS version, and sync recency — separating genuinely non-compliant devices from ones that simply stopped reporting.
 ---
 
 # Intune
 
-PowerShell for administering Intune. Connect using the relevant module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
+PowerShell for administering Microsoft Intune via Microsoft Graph (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
 
-> **Note — Scripts coming soon**
+## Device compliance and sync report
+
+One row per managed device: compliance state, encryption, OS and version,
+ownership, and how long since it last checked in — with devices that have
+simply **stopped reporting** separated from devices that are genuinely
+non-compliant. Read-only.
+
+A compliance dashboard showing 96% is reassuring until you notice that a device
+which hasn't synced since March is still counted as compliant. Intune reports
+the last state it was told about; a stolen laptop that never checks in again
+keeps that state indefinitely. Sync recency is the column that makes compliance
+mean anything.
+
+### Script
+
+```powershell
+#Requires -Modules Microsoft.Graph.Authentication
+<#
+.SYNOPSIS
+    Reports Intune-managed devices with compliance, encryption, OS version, and
+    sync recency, flagging devices that have stopped checking in.
+.DESCRIPTION
+    Pages /deviceManagement/managedDevices, derives a staleness flag from
+    lastSyncDateTime, and optionally retrieves per-device compliance policy
+    states to explain WHY a device is non-compliant.
+.EXAMPLE
+    .\Get-IntuneComplianceReport.ps1 -StaleSyncDays 14 -IncludeReasons -Verbose
+.NOTES
+    Required Graph perms: DeviceManagementManagedDevices.Read.All
+    (plus DeviceManagementConfiguration.Read.All for -IncludeReasons).
+    Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    # Devices that have not checked in within this many days are flagged.
+    [int]$StaleSyncDays = 14,
+
+    # One extra Graph call per non-compliant device to fetch failing policies.
+    [switch]$IncludeReasons,
+
+    [ValidateSet('All','Windows','iOS','Android','macOS')]
+    [string]$Platform = 'All',
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\IntuneCompliance.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("IntuneCompliance_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Get-GraphCollection {
+    <#
+        Pages a Graph collection endpoint and returns every item. Graph decides
+        its own page size for this endpoint regardless of $top, so following
+        nextLink is not optional.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri)
+
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    $page  = 0
+    do {
+        $page++
+        $resp = Invoke-MgGraphRequest -Method GET -Uri $next
+        foreach ($v in $resp.value) { $items.Add($v) }
+        $next = $resp.'@odata.nextLink'
+        Write-Verbose ("Page {0}: {1} item(s), running total {2}." -f $page, @($resp.value).Count, $items.Count)
+    } while ($next)
+
+    return $items
+}
+
+function ConvertTo-LocalDate {
+    [CmdletBinding()]
+    param([AllowNull()][object]$Value)
+    if (-not $Value) { return $null }
+    if ($Value -is [datetime]) { return $Value.ToLocalTime() }
+    $parsed = [datetime]::MinValue
+    $styles = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor `
+              [System.Globalization.DateTimeStyles]::AdjustToUniversal
+    if ([datetime]::TryParse([string]$Value, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) {
+        return $parsed.ToLocalTime()
+    }
+    return $null
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log ("Starting Intune compliance report. StaleSyncDays={0}, Platform={1}." -f `
+        $StaleSyncDays, $Platform) 'INFO'
+
+    if (-not (Get-MgContext)) {
+        Write-Log 'No Graph session; connecting.' 'INFO'
+        $scopes = @('DeviceManagementManagedDevices.Read.All')
+        if ($IncludeReasons) { $scopes += 'DeviceManagementConfiguration.Read.All' }
+        Connect-MgGraph -Scopes $scopes -NoWelcome
+    }
+    $ctx = Get-MgContext
+    Write-Log ("Connected as {0} (tenant {1})." -f $ctx.Account, $ctx.TenantId) 'INFO'
+
+    $select = @(
+        'id','deviceName','userPrincipalName','operatingSystem','osVersion',
+        'complianceState','lastSyncDateTime','enrolledDateTime','isEncrypted',
+        'managedDeviceOwnerType','manufacturer','model','serialNumber',
+        'jailBroken','managementAgent','complianceGracePeriodExpirationDateTime'
+    ) -join ','
+
+    $uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?`$select=$select"
+    if ($Platform -ne 'All') {
+        # operatingSystem is a free-text field; eq is exact and case-sensitive.
+        $uri += "&`$filter=operatingSystem eq '$Platform'"
+    }
+
+    Write-Log 'Fetching managed devices.' 'DEBUG'
+    $devices = Get-GraphCollection -Uri $uri
+    Write-Log ("Devices retrieved: {0}" -f $devices.Count) 'INFO'
+    if (-not $devices) { throw 'No managed devices returned. Check the Platform filter and your permissions.' }
+
+    $now = Get-Date
+
+    $results = foreach ($d in $devices) {
+        $lastSync = ConvertTo-LocalDate $d.lastSyncDateTime
+        $syncAge  = if ($lastSync) { [int]($now - $lastSync).TotalDays } else { $null }
+        $isStale  = ($null -eq $syncAge) -or ($syncAge -gt $StaleSyncDays)
+
+        $reasons = ''
+        if ($IncludeReasons -and $d.complianceState -ne 'compliant') {
+            try {
+                $states = Get-GraphCollection -Uri (
+                    "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/{0}/deviceCompliancePolicyStates" -f $d.id)
+                $reasons = (@($states |
+                    Where-Object { $_.state -notin @('compliant','notApplicable','unknown') } |
+                    ForEach-Object { '{0} ({1})' -f $_.displayName, $_.state }) -join '; ')
+            }
+            catch {
+                Write-Log ("Policy states unreadable for {0}: {1}" -f $d.deviceName, $_.Exception.Message) 'WARN'
+                $reasons = 'UNREADABLE'
+            }
+        }
+
+        [pscustomobject]@{
+            DeviceName       = $d.deviceName
+            User             = $d.userPrincipalName
+            Os               = $d.operatingSystem
+            OsVersion        = $d.osVersion
+            ComplianceState  = $d.complianceState
+            Encrypted        = $d.isEncrypted
+            Ownership        = $d.managedDeviceOwnerType
+            ManagementAgent  = $d.managementAgent
+            LastSync         = if ($lastSync) { '{0:yyyy-MM-dd HH:mm}' -f $lastSync } else { 'NEVER' }
+            SyncAgeDays      = $syncAge
+            IsStale          = $isStale
+            Enrolled         = if ($e = ConvertTo-LocalDate $d.enrolledDateTime) { '{0:yyyy-MM-dd}' -f $e } else { '' }
+            GraceExpires     = if ($g = ConvertTo-LocalDate $d.complianceGracePeriodExpirationDateTime) { '{0:yyyy-MM-dd}' -f $g } else { '' }
+            JailBroken       = $d.jailBroken
+            Manufacturer     = $d.manufacturer
+            Model            = $d.model
+            SerialNumber     = $d.serialNumber
+            # A device reporting "compliant" that stopped checking in weeks ago
+            # is not compliant; it is unverified.
+            StaleButCompliant = ($d.complianceState -eq 'compliant') -and $isStale
+            NonComplianceReasons = $reasons
+        }
+    }
+
+    $nonCompliant = @($results | Where-Object { $_.ComplianceState -notin @('compliant','notApplicable') })
+    $stale        = @($results | Where-Object IsStale)
+    $unverified   = @($results | Where-Object StaleButCompliant)
+    $unencrypted  = @($results | Where-Object { $_.Encrypted -eq $false })
+
+    Write-Log ("Devices: {0}. Non-compliant: {1}. Stale: {2}. Stale-but-compliant: {3}. Unencrypted: {4}." -f `
+        $results.Count, $nonCompliant.Count, $stale.Count, $unverified.Count, $unencrypted.Count) 'INFO'
+
+    $results | Sort-Object @{Expression = { if ($null -eq $_.SyncAgeDays) { [int]::MaxValue } else { $_.SyncAgeDays } }; Descending = $true} |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nCompliance state breakdown:" -ForegroundColor Cyan
+    $results | Group-Object ComplianceState | Sort-Object Count -Descending |
+        Format-Table @{N='State';E={$_.Name}}, Count -AutoSize
+
+    if ($unverified) {
+        Write-Host "`nReporting 'compliant' but not seen in $StaleSyncDays+ days — unverified, not compliant:" -ForegroundColor Yellow
+        $unverified | Sort-Object SyncAgeDays -Descending |
+            Format-Table DeviceName, User, Os, LastSync, SyncAgeDays -AutoSize
+    }
+    if ($unencrypted) {
+        Write-Host "`nUnencrypted devices:" -ForegroundColor Yellow
+        $unencrypted | Format-Table DeviceName, User, Os, OsVersion, Ownership -AutoSize
+    }
+
+    Write-Host ("`n{0} device(s): {1} non-compliant, {2} stale, {3} unencrypted.`nReport: {4}`nLog: {5}" -f `
+        $results.Count, $nonCompliant.Count, $stale.Count, $unencrypted.Count,
+        $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** One row per Intune-managed device covering compliance state,
+encryption, OS and build, ownership, enrolment and last sync, with derived
+staleness. Optionally fetches the specific policies a non-compliant device is
+failing.
+
+**How it works.**
+
+- **`StaleButCompliant` is the point of the report.** A device whose last
+  reported state was "compliant" and which hasn't checked in for weeks is
+  **unverified**, not compliant. Intune counts it in the green number on the
+  dashboard. This column pulls it back out.
+- **Paging is explicit.** `Get-GraphCollection` follows `@odata.nextLink`
+  regardless of `$top`, because Graph chooses its own page size for this
+  endpoint and a single-page read silently truncates a large estate.
+- **Reasons are opt-in and only fetched where relevant.**
+  `deviceCompliancePolicyStates` costs a call per device, so the script only
+  asks for devices that aren't already compliant, and only with
+  `-IncludeReasons`.
+- **`notApplicable` is not counted as non-compliant.** It usually means no
+  policy targets the device — which is its own problem, but a different one
+  from failing a policy, and conflating them inflates the number.
+- **Timestamps are parsed defensively** with assume-UTC semantics and converted
+  to local time, so a device that has genuinely never synced reads `NEVER`
+  rather than becoming an epoch date.
+- **Output.** A CSV sorted longest-since-sync first, a compliance-state
+  breakdown, highlighted tables for unverified and unencrypted devices, and a
+  log.
+
+**Prerequisites & caveats.**
+
+- Module `Microsoft.Graph.Authentication`; scope
+  `DeviceManagementManagedDevices.Read.All`, plus
+  `DeviceManagementConfiguration.Read.All` for `-IncludeReasons`.
+- `-Platform` filters on `operatingSystem`, which is **free text and
+  case-sensitive** in Graph. `Windows` matches; `windows` returns nothing. If a
+  filter returns zero devices, check the casing before concluding there are
+  none.
+- `isEncrypted` is not reported consistently across every platform and
+  enrolment type. A `false` on a personally-owned iOS device may mean "not
+  reported" rather than "not encrypted" — verify before raising it.
+- A device in its **compliance grace period** reports as compliant until
+  `GraceExpires` passes. The column is in the CSV; it's worth sorting on when a
+  compliance number improves suspiciously fast.
+- Co-managed devices report through whichever authority owns the compliance
+  workload. `ManagementAgent` tells you which, and is worth checking before
+  concluding Intune is wrong.
+
+> **Note — Stale is an action, not a statistic**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> Every stale device is one of three things: decommissioned and never retired
+> in Intune, broken and needing attention, or missing. All three need a
+> response, and none of them is "leave it in the report next month too".

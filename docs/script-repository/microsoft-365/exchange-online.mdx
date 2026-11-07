@@ -1,16 +1,310 @@
 ---
 title: Exchange Online
 sidebar_label: Exchange Online
-description: PowerShell scripts for Exchange Online administration. Scripts following the repository conventions will be published here.
+description: PowerShell for Exchange Online administration — a mailbox delegation and forwarding audit that surfaces Full Access, Send As, Send on Behalf, and every route mail can leave the tenant by.
 ---
 
 # Exchange Online
 
-PowerShell for administering Exchange Online. Connect using the relevant module (see
+PowerShell for administering Exchange Online. Connect using the
+`ExchangeOnlineManagement` module (see
 [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
 then run.
 
-> **Note — Scripts coming soon**
+## Mailbox delegation and forwarding audit
+
+Reports, for every mailbox in the tenant, who can open it, who can send as it,
+and every configured route by which its mail can leave — mailbox forwarding,
+SMTP forwarding, and forwarding inbox rules.
+
+This is the first thing to run when business email compromise is suspected, and
+a good thing to run quarterly when it isn't. The classic attacker move is not a
+dramatic one: it's a single inbox rule forwarding anything containing "invoice"
+to an external address, which survives a password reset and is invisible from
+the Exchange admin centre's default views.
+
+### Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Audits mailbox delegation (Full Access, Send As, Send on Behalf) and every
+    configured mail-forwarding route across all Exchange Online mailboxes.
+.DESCRIPTION
+    Produces two CSVs: one row per delegation, and one row per forwarding route,
+    with external destinations flagged. Inbox-rule inspection is opt-in because
+    it costs one round trip per mailbox.
+.EXAMPLE
+    .\Get-MailboxDelegationReport.ps1 -IncludeInboxRules -Verbose
+.NOTES
+    Required role: View-Only Recipients (or Exchange Administrator). Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$UserPrincipalName,
+
+    # Inbox rules need a call per mailbox — slow on large tenants, and the
+    # single most useful part of this report during an incident.
+    [switch]$IncludeInboxRules,
+
+    # Domains considered internal. Defaults to the tenant's accepted domains.
+    [string[]]$InternalDomain,
+
+    [string]$LogDir          = 'C:\Temp',
+    [string]$DelegationCsv   = 'C:\Temp\MailboxDelegation.csv',
+    [string]$ForwardingCsv   = 'C:\Temp\MailboxForwarding.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("MailboxDelegation_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+function Test-ExternalAddress {
+    [CmdletBinding()]
+    param(
+        [AllowNull()][string]$Address,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Internal
+    )
+    if ([string]::IsNullOrWhiteSpace($Address)) { return $false }
+    # Values arrive as smtp:user@domain, user@domain, or a legacy DN.
+    $clean = ($Address -replace '^smtp:', '').Trim()
+    if ($clean -notmatch '@') { return $false }
+    $domain = ($clean -split '@')[-1]
+    return ($Internal -notcontains $domain)
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    Write-Log 'Starting mailbox delegation and forwarding audit.' 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) {
+            Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false
+        } else {
+            Connect-ExchangeOnline -ShowBanner:$false
+        }
+    }
+
+    if (-not $InternalDomain) {
+        $InternalDomain = @(Get-AcceptedDomain | Select-Object -ExpandProperty DomainName)
+        Write-Log ("Accepted domains treated as internal: {0}" -f ($InternalDomain -join ', ')) 'INFO'
+    }
+
+    Write-Log 'Enumerating mailboxes.' 'DEBUG'
+    $mailboxes = @(Get-EXOMailbox -ResultSize Unlimited -Properties `
+        ForwardingAddress, ForwardingSmtpAddress, DeliverToMailboxAndForward, GrantSendOnBehalfTo)
+    Write-Log ("Mailboxes found: {0}" -f $mailboxes.Count) 'INFO'
+
+    $delegations = [System.Collections.Generic.List[object]]::new()
+    $forwards    = [System.Collections.Generic.List[object]]::new()
+    $i = 0
+
+    foreach ($mbx in $mailboxes) {
+        $i++
+        if ($i % 50 -eq 0) { Write-Log ("Processed {0}/{1} mailboxes." -f $i, $mailboxes.Count) 'DEBUG' }
+        Write-Progress -Activity 'Auditing mailboxes' -Status $mbx.UserPrincipalName `
+                       -PercentComplete (($i / [math]::Max($mailboxes.Count,1)) * 100)
+
+        # --- Full Access ------------------------------------------------------
+        # NT AUTHORITY\SELF is the mailbox's own rights; inherited entries are
+        # the admin role groups. Neither is a delegation anyone granted.
+        try {
+            Get-EXOMailboxPermission -Identity $mbx.Identity |
+                Where-Object {
+                    $_.User -notlike 'NT AUTHORITY\*' -and
+                    -not $_.IsInherited -and
+                    $_.AccessRights -contains 'FullAccess'
+                } |
+                ForEach-Object {
+                    $delegations.Add([pscustomobject]@{
+                        Mailbox       = $mbx.UserPrincipalName
+                        MailboxType   = $mbx.RecipientTypeDetails
+                        Permission    = 'FullAccess'
+                        Delegate      = $_.User
+                        AutoMapping   = $null   # Not exposed here; see caveats.
+                        IsExternal    = Test-ExternalAddress -Address $_.User -Internal $InternalDomain
+                    })
+                }
+        } catch { Write-Log ("FullAccess read failed for {0}: {1}" -f $mbx.UserPrincipalName, $_.Exception.Message) 'WARN' }
+
+        # --- Send As ----------------------------------------------------------
+        try {
+            Get-EXORecipientPermission -Identity $mbx.Identity |
+                Where-Object { $_.Trustee -notlike 'NT AUTHORITY\*' -and $_.AccessRights -contains 'SendAs' } |
+                ForEach-Object {
+                    $delegations.Add([pscustomobject]@{
+                        Mailbox     = $mbx.UserPrincipalName
+                        MailboxType = $mbx.RecipientTypeDetails
+                        Permission  = 'SendAs'
+                        Delegate    = $_.Trustee
+                        AutoMapping = $null
+                        IsExternal  = Test-ExternalAddress -Address $_.Trustee -Internal $InternalDomain
+                    })
+                }
+        } catch { Write-Log ("SendAs read failed for {0}: {1}" -f $mbx.UserPrincipalName, $_.Exception.Message) 'WARN' }
+
+        # --- Send on Behalf ---------------------------------------------------
+        foreach ($sob in @($mbx.GrantSendOnBehalfTo)) {
+            if (-not $sob) { continue }
+            $delegations.Add([pscustomobject]@{
+                Mailbox     = $mbx.UserPrincipalName
+                MailboxType = $mbx.RecipientTypeDetails
+                Permission  = 'SendOnBehalf'
+                Delegate    = $sob
+                AutoMapping = $null
+                IsExternal  = $false   # Must be a tenant recipient by definition.
+            })
+        }
+
+        # --- Mailbox-level forwarding ----------------------------------------
+        if ($mbx.ForwardingAddress) {
+            $forwards.Add([pscustomobject]@{
+                Mailbox      = $mbx.UserPrincipalName
+                Route        = 'ForwardingAddress'
+                Destination  = [string]$mbx.ForwardingAddress
+                KeepsCopy    = [bool]$mbx.DeliverToMailboxAndForward
+                RuleName     = ''
+                RuleEnabled  = $null
+                IsExternal   = Test-ExternalAddress -Address ([string]$mbx.ForwardingAddress) -Internal $InternalDomain
+            })
+        }
+        if ($mbx.ForwardingSmtpAddress) {
+            $forwards.Add([pscustomobject]@{
+                Mailbox      = $mbx.UserPrincipalName
+                Route        = 'ForwardingSmtpAddress'
+                Destination  = [string]$mbx.ForwardingSmtpAddress
+                KeepsCopy    = [bool]$mbx.DeliverToMailboxAndForward
+                RuleName     = ''
+                RuleEnabled  = $null
+                IsExternal   = Test-ExternalAddress -Address ([string]$mbx.ForwardingSmtpAddress) -Internal $InternalDomain
+            })
+        }
+
+        # --- Forwarding inbox rules ------------------------------------------
+        if ($IncludeInboxRules) {
+            try {
+                foreach ($rule in (Get-InboxRule -Mailbox $mbx.UserPrincipalName -ErrorAction Stop)) {
+                    $targets = @($rule.ForwardTo) + @($rule.ForwardAsAttachmentTo) + @($rule.RedirectTo) |
+                               Where-Object { $_ }
+                    foreach ($t in $targets) {
+                        # Rule targets render as "Display Name [SMTP:user@domain]".
+                        $addr = if ($t -match '\[?SMTP:([^\]]+)\]?') { $Matches[1] } else { [string]$t }
+                        $forwards.Add([pscustomobject]@{
+                            Mailbox      = $mbx.UserPrincipalName
+                            Route        = 'InboxRule'
+                            Destination  = $addr
+                            KeepsCopy    = $null
+                            RuleName     = $rule.Name
+                            RuleEnabled  = $rule.Enabled
+                            IsExternal   = Test-ExternalAddress -Address $addr -Internal $InternalDomain
+                        })
+                    }
+                }
+            } catch { Write-Log ("Inbox rules unreadable for {0}: {1}" -f $mbx.UserPrincipalName, $_.Exception.Message) 'WARN' }
+        }
+    }
+    Write-Progress -Activity 'Auditing mailboxes' -Completed
+
+    $externalFwd = @($forwards | Where-Object IsExternal)
+    Write-Log ("Delegations: {0}. Forwarding routes: {1} ({2} external)." -f `
+        $delegations.Count, $forwards.Count, $externalFwd.Count) 'INFO'
+
+    $delegations | Sort-Object Mailbox, Permission | Export-Csv -Path $DelegationCsv -NoTypeInformation -Encoding UTF8
+    $forwards    | Sort-Object IsExternal -Descending | Export-Csv -Path $ForwardingCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Reports written: {0}; {1}" -f $DelegationCsv, $ForwardingCsv) 'INFO'
+
+    if ($externalFwd) {
+        Write-Host "`nMail leaving the tenant:" -ForegroundColor Yellow
+        $externalFwd | Format-Table Mailbox, Route, Destination, RuleName, RuleEnabled, KeepsCopy -AutoSize
+    } else {
+        Write-Host "`nNo external forwarding found." -ForegroundColor Green
+    }
+
+    if (-not $IncludeInboxRules) {
+        Write-Host 'Inbox rules were NOT inspected. Re-run with -IncludeInboxRules for a complete picture.' -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} mailbox(es); {1} delegation(s); {2} forwarding route(s), {3} external.`nReports: {4}; {5}`nLog: {6}" -f `
+        $mailboxes.Count, $delegations.Count, $forwards.Count, $externalFwd.Count,
+        $DelegationCsv, $ForwardingCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** Two CSVs. The first lists every explicitly granted Full
+Access, Send As, and Send on Behalf permission across every mailbox. The second
+lists every way mail can be forwarded out of each mailbox, with destinations
+outside your accepted domains flagged.
+
+**How it works.**
+
+- **Three delegation types, because they're three different grants.** Full
+  Access lets someone read the mailbox; Send As lets them be indistinguishable
+  from the owner; Send on Behalf is attributed. They're stored in three
+  different places and the admin centre shows them on three different screens.
+- **Inherited and `NT AUTHORITY\SELF` entries are excluded.** Those are the
+  mailbox's own rights and the admin role groups — present on every mailbox,
+  granted by nobody, and pure noise in an audit.
+- **External is computed, not guessed.** `Get-AcceptedDomain` supplies the
+  tenant's own domains, and anything resolving outside them is flagged. Override
+  with `-InternalDomain` if you have partner domains that shouldn't count.
+- **Inbox rules are opt-in.** `Get-InboxRule` costs one round trip per mailbox
+  and dominates runtime on a large tenant. It's also where compromise usually
+  hides, so the script prints a reminder when you skip it.
+- **Rule targets are parsed.** They come back as `Display Name [SMTP:address]`;
+  the regex extracts the address so the external check works on the address
+  rather than the display name.
+- **Per-mailbox errors don't stop the run.** A mailbox that can't be read is
+  logged and skipped.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement` v3+; the **View-Only Recipients** role is
+  enough. `Get-ConnectionInformation` is used to detect an existing session
+  rather than reconnecting blindly.
+- **`AutoMapping` is not reported.** It isn't exposed by
+  `Get-EXOMailboxPermission`; it's an attribute of the original
+  `Add-MailboxPermission` call. If you need it, read `msExchDelegateListLink`.
+- **Transport rules are out of scope.** A mail-flow rule can redirect mail
+  tenant-wide without touching any mailbox. Check `Get-TransportRule`
+  separately — a clean report here does not mean nothing is being redirected.
+- Outbound spam policy may already block automatic external forwarding
+  (`Get-HostedOutboundSpamFilterPolicy`). A forward configured here might be
+  recorded but not actually delivering — worth checking before you treat a
+  finding as an active leak.
+- Large tenants: expect roughly two Graph-free EXO calls per mailbox without
+  `-IncludeInboxRules`, and three with it.
+
+> **Warning — Findings here are often incidents**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> An unexpected external forward or a rule nobody recognises is a compromise
+> indicator, not a configuration tidy-up. Preserve the evidence, check the
+> sign-in logs for that mailbox, and work the incident before deleting the rule.

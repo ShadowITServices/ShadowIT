@@ -1,16 +1,258 @@
 ---
 title: SharePoint Online
 sidebar_label: SharePoint Online
-description: PowerShell scripts for SharePoint Online administration. Scripts following the repository conventions will be published here.
+description: PowerShell for SharePoint Online administration — an external sharing posture report that reads the tenant ceiling, every site's effective sharing capability, and the guests who actually hold access.
 ---
 
 # SharePoint Online
 
-PowerShell for administering SharePoint Online. Connect using the relevant module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
+PowerShell for administering SharePoint Online, using `PnP.PowerShell` (see
+[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
 
-> **Note — Scripts coming soon**
+## External sharing posture report
+
+Reports the tenant's sharing ceiling, every site collection's effective sharing
+capability, and — optionally — the external users who actually hold access.
+Read-only.
+
+The question "can people share outside the business?" has no single answer in
+SharePoint. There is a tenant-level setting that acts as a ceiling, a per-site
+setting that can only be the same or more restrictive, and separate controls for
+anonymous link expiry and default link type. A site can look permissive in its
+own settings while the tenant quietly caps it, and a tenant can look locked down
+while one site has anonymous links turned on. This resolves all of it into one
+table.
+
+### Script
+
+```powershell
+#Requires -Modules PnP.PowerShell
+<#
+.SYNOPSIS
+    Reports external sharing configuration across every SharePoint Online site
+    collection, resolved against the tenant-level ceiling.
+.DESCRIPTION
+    Reads tenant sharing settings, enumerates site collections with their own
+    SharingCapability, computes the EFFECTIVE capability (the more restrictive
+    of the two), and optionally counts external users per site.
+.EXAMPLE
+    .\Get-ExternalSharingReport.ps1 -TenantName contoso -IncludeExternalUsers -Verbose
+.NOTES
+    Required role: SharePoint Administrator. Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    # The "contoso" in contoso-admin.sharepoint.com.
+    [Parameter(Mandatory)]
+    [string]$TenantName,
+
+    # PnP.PowerShell 2.x requires your own Entra app registration. See caveats.
+    [string]$ClientId,
+
+    # One extra call per site; slow on large tenants.
+    [switch]$IncludeExternalUsers,
+
+    [switch]$IncludeOneDriveSites,
+
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\SpoExternalSharing.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("SpoExternalSharing_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# Sharing capability ordered least to most permissive. Used to compute the
+# effective setting, because a site can never exceed the tenant ceiling.
+$SharingRank = @{
+    'Disabled'                        = 0   # No external sharing
+    'ExistingExternalUserSharingOnly' = 1   # Only guests already in the directory
+    'ExternalUserSharingOnly'         = 2   # New guests, but they must sign in
+    'ExternalUserAndGuestSharing'     = 3   # Anonymous "Anyone" links
+}
+
+function Get-EffectiveSharing {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TenantSetting,
+        [Parameter(Mandatory)][string]$SiteSetting
+    )
+    $t = $SharingRank[$TenantSetting]
+    $s = $SharingRank[$SiteSetting]
+    if ($null -eq $t -or $null -eq $s) { return $SiteSetting }  # Unknown value; report as-is.
+    if ($s -le $t) { $SiteSetting } else { $TenantSetting }
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    $adminUrl = "https://$TenantName-admin.sharepoint.com"
+    Write-Log ("Starting external sharing report against {0}." -f $adminUrl) 'INFO'
+
+    $connectArgs = @{ Url = $adminUrl; Interactive = $true }
+    if ($ClientId) { $connectArgs['ClientId'] = $ClientId }
+    Connect-PnPOnline @connectArgs
+    Write-Log 'Connected to SharePoint admin.' 'INFO'
+
+    # --- Tenant ceiling -------------------------------------------------------
+    $tenant = Get-PnPTenant
+    $tenantSharing = [string]$tenant.SharingCapability
+    Write-Log ("Tenant SharingCapability: {0}" -f $tenantSharing) 'INFO'
+
+    Write-Host "`nTenant-level sharing settings" -ForegroundColor Cyan
+    [pscustomobject]@{
+        SharingCapability           = $tenantSharing
+        DefaultSharingLinkType      = $tenant.DefaultSharingLinkType
+        DefaultLinkPermission       = $tenant.DefaultLinkPermission
+        AnonymousLinkExpiryDays     = $tenant.RequireAnonymousLinksExpireInDays
+        ExternalUserExpiryEnabled   = $tenant.ExternalUserExpirationRequired
+        ExternalUserExpiryDays      = $tenant.ExternalUserExpireInDays
+        SharingDomainRestrictionMode= $tenant.SharingDomainRestrictionMode
+        AllowedDomainList           = $tenant.SharingAllowedDomainList
+        BlockedDomainList           = $tenant.SharingBlockedDomainList
+    } | Format-List
+
+    # --- Sites ----------------------------------------------------------------
+    Write-Log 'Enumerating site collections.' 'DEBUG'
+    $sites = @(Get-PnPTenantSite -IncludeOneDriveSites:$IncludeOneDriveSites)
+    Write-Log ("Sites found: {0}" -f $sites.Count) 'INFO'
+
+    $i = 0
+    $results = foreach ($site in $sites) {
+        $i++
+        Write-Progress -Activity 'Reading site sharing settings' -Status $site.Url `
+                       -PercentComplete (($i / [math]::Max($sites.Count,1)) * 100)
+
+        $siteSharing = [string]$site.SharingCapability
+        $effective   = Get-EffectiveSharing -TenantSetting $tenantSharing -SiteSetting $siteSharing
+
+        $externalCount = $null
+        if ($IncludeExternalUsers) {
+            try {
+                $externalCount = @(Get-PnPExternalUser -SiteUrl $site.Url -PageSize 50 -ErrorAction Stop).Count
+            }
+            catch {
+                Write-Log ("External users unreadable for {0}: {1}" -f $site.Url, $_.Exception.Message) 'WARN'
+                $externalCount = -1   # Distinguish "failed to read" from "zero".
+            }
+        }
+
+        [pscustomobject]@{
+            Url                 = $site.Url
+            Title               = $site.Title
+            Template            = $site.Template
+            SiteSharing         = $siteSharing
+            TenantSharing       = $tenantSharing
+            EffectiveSharing    = $effective
+            AllowsAnonymous     = ($effective -eq 'ExternalUserAndGuestSharing')
+            CappedByTenant      = ($siteSharing -ne $effective)
+            ExternalUsers       = $externalCount
+            LastContentModified = if ($site.LastContentModifiedDate) { '{0:yyyy-MM-dd}' -f $site.LastContentModifiedDate } else { '' }
+            StorageUsedMb       = $site.StorageUsageCurrent
+            LockState           = $site.LockState
+        }
+    }
+    Write-Progress -Activity 'Reading site sharing settings' -Completed
+
+    $anonymous = @($results | Where-Object AllowsAnonymous)
+    $capped    = @($results | Where-Object CappedByTenant)
+
+    Write-Log ("Sites reported: {0}; anonymous-capable: {1}; capped by tenant: {2}." -f `
+        $results.Count, $anonymous.Count, $capped.Count) 'INFO'
+
+    $results |
+        Sort-Object @{Expression = { $SharingRank[$_.EffectiveSharing] }; Descending = $true}, Url |
+        Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    if ($anonymous) {
+        Write-Host "`nSites where 'Anyone' (anonymous) links are possible:" -ForegroundColor Yellow
+        $anonymous | Format-Table Url, Title, ExternalUsers, LastContentModified -AutoSize
+    } else {
+        Write-Host "`nNo site permits anonymous links." -ForegroundColor Green
+    }
+
+    if ($capped) {
+        Write-Host ("`n{0} site(s) request looser sharing than the tenant allows and are capped. " -f $capped.Count) -ForegroundColor Yellow
+        Write-Host 'Raising the tenant setting would silently loosen all of them.' -ForegroundColor Yellow
+    }
+
+    Write-Host ("`n{0} site(s) reported. Report: {1}`nLog: {2}" -f `
+        $results.Count, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Disconnect-PnPOnline -ErrorAction SilentlyContinue
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** Prints the tenant's sharing settings, then one row per site
+collection giving its own setting, the tenant ceiling, the **effective**
+capability, whether anonymous links are possible, whether the site is being
+capped, and optionally how many external users hold access.
+
+**How it works.**
+
+- **Effective capability is computed, not read.** SharePoint stores a tenant
+  setting and a site setting independently, and the real behaviour is the more
+  restrictive of the two. The script ranks the four values
+  (`Disabled` → `ExistingExternalUserSharingOnly` → `ExternalUserSharingOnly` →
+  `ExternalUserAndGuestSharing`) and takes the minimum.
+- **`CappedByTenant` is the column that matters for change control.** A site
+  configured for anonymous sharing while the tenant forbids it is safe *today*.
+  It becomes live the moment someone raises the tenant setting — a one-click
+  change that silently loosens every capped site at once. That's worth knowing
+  before you make it, not after.
+- **Failed external-user reads return `-1`, not `0`.** A site that couldn't be
+  read is not a site with no guests, and collapsing the two would be the kind of
+  quiet false negative this whole report exists to avoid.
+- **OneDrive sites are excluded by default.** They are site collections and
+  would swamp the output; `-IncludeOneDriveSites` brings them in, though
+  [OneDrive](/docs/script-repository/microsoft-365/onedrive) has its own report built for the purpose.
+- **Output.** A CSV sorted most-permissive first, the tenant settings as a
+  console list, a highlighted table of anonymous-capable sites, and a log.
+
+**Prerequisites & caveats.**
+
+- Module `PnP.PowerShell`, and the **SharePoint Administrator** role.
+- **PnP.PowerShell 2.x removed the built-in multi-tenant app.** Interactive
+  logins now need your own Entra app registration — run
+  `Register-PnPEntraIDAppForInteractiveLogin` once, then pass the resulting
+  client ID as `-ClientId`. If you get a consent or `AADSTS700016` error on
+  connect, this is why.
+- `SharingCapability` describes what is *permitted*, not what has *happened*. A
+  site allowing anonymous links may have none. For actual shared links you need
+  the sharing reports in the SharePoint admin centre or a per-item crawl, which
+  is a far heavier job than this.
+- `StorageUsageCurrent` is reported in MB and can lag the admin centre by a day.
+- `-IncludeExternalUsers` adds one call per site and is paged at 50; on a tenant
+  with thousands of sites, run it out of hours.
+
+> **Tip — Pair this with the OneDrive report**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> Between them, these two cover every SharePoint-family site collection. Running
+> only this one leaves every user's OneDrive unexamined, and OneDrive is where
+> casual external sharing usually happens.

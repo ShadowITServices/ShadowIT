@@ -1,16 +1,308 @@
 ---
 title: Purview
 sidebar_label: Purview
-description: PowerShell scripts for Purview administration. Scripts following the repository conventions will be published here.
+description: PowerShell that exports the Microsoft 365 unified audit log correctly — time-sliced, session-paged, and deduplicated — so a search returns everything rather than the first 5,000 unsorted records.
 ---
 
 # Purview
 
-PowerShell for administering Purview. Connect using the relevant module (see
-[Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)),
-then run.
+PowerShell for Microsoft Purview, using the `ExchangeOnlineManagement` module
+(see [Microsoft 365 — Overview & Connection](/docs/script-repository/microsoft-365/)).
 
-> **Note — Scripts coming soon**
+## Unified audit log export
+
+Exports the unified audit log for a date range, handling the three things that
+quietly make naive searches wrong: the per-call result cap, the unsorted
+duplicate-bearing paging model, and the hard ceiling on a single search session.
+Read-only.
+
+`Search-UnifiedAuditLog` is the most useful cmdlet in Microsoft 365 and the
+easiest one to use incorrectly. Run it plainly and you get up to 5,000 records,
+unsorted, with no indication that there were forty thousand more. During an
+incident that is not a limitation — it's a wrong answer that looks like a right
+one.
+
+### Script
+
+```powershell
+#Requires -Modules ExchangeOnlineManagement
+<#
+.SYNOPSIS
+    Exports unified audit log records for a date range, with correct session
+    paging, time slicing, and deduplication.
+.DESCRIPTION
+    Splits the range into slices, pages each slice with ReturnLargeSet until
+    exhausted, deduplicates on record Identity, and warns when a slice
+    approaches the 50,000-record ceiling where results would be truncated.
+.EXAMPLE
+    .\Export-UnifiedAuditLog.ps1 -StartDate (Get-Date).AddDays(-7) -Operations UserLoggedIn,Add-MailboxPermission
+.EXAMPLE
+    .\Export-UnifiedAuditLog.ps1 -StartDate '2026-10-01' -EndDate '2026-10-31' -SliceHours 6 -ExpandAuditData
+.NOTES
+    Required role: Audit Logs (View-Only Audit Logs). Read-only.
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)]
+    [datetime]$StartDate,
+
+    [datetime]$EndDate = (Get-Date),
+
+    # Empty = all operations.
+    [string[]]$Operations,
+
+    # Empty = all users.
+    [string[]]$UserIds,
+
+    [string[]]$RecordType,
+
+    # Smaller slices = more calls, but far less chance of hitting the ceiling.
+    [ValidateRange(1, 24)]
+    [int]$SliceHours = 12,
+
+    # Flatten the AuditData JSON blob into extra columns.
+    [switch]$ExpandAuditData,
+
+    [string]$UserPrincipalName,
+    [string]$LogDir    = 'C:\Temp',
+    [string]$ReportCsv = 'C:\Temp\UnifiedAuditLog.csv'
+)
+
+# --- Logging scaffold ---------------------------------------------------------
+$ErrorActionPreference = 'Stop'
+$null = New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir ("UnifiedAuditLog_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
+    Add-Content -Path $LogFile -Value ("[{0}] [{1}] {2}" -f $ts, $Level, $Message)
+    switch ($Level) {
+        'ERROR' { Write-Error $Message }
+        'WARN'  { Write-Warning $Message }
+        'DEBUG' { Write-Verbose $Message }
+        default { Write-Verbose $Message }
+    }
+}
+
+# A single search session is capped at 50,000 records. Past that, results are
+# silently incomplete — so treat approaching it as a condition to report.
+$SessionCeiling = 50000
+
+function Invoke-AuditSlice {
+    <#
+        Pages ONE time slice to exhaustion using a single SessionId, which is
+        what makes ReturnLargeSet continue rather than restart. Returns every
+        record the slice yields; deduplication happens in the caller.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][datetime]$From,
+        [Parameter(Mandatory)][datetime]$To,
+        [hashtable]$Filter = @{}
+    )
+
+    $sessionId = [guid]::NewGuid().ToString()
+    $collected = [System.Collections.Generic.List[object]]::new()
+    $iteration = 0
+
+    do {
+        $iteration++
+        $page = Search-UnifiedAuditLog -StartDate $From -EndDate $To `
+                    -SessionId $sessionId -SessionCommand ReturnLargeSet `
+                    -ResultSize 5000 @Filter
+
+        $count = @($page).Count
+        if ($count -gt 0) { $collected.AddRange(@($page)) }
+
+        Write-Log ("  slice page {0}: {1} record(s), running {2}." -f $iteration, $count, $collected.Count) 'DEBUG'
+
+        # An empty page is the documented end-of-session signal. There is no
+        # nextLink and no total to compare against until the first page lands.
+    } while ($count -gt 0 -and $collected.Count -lt $SessionCeiling)
+
+    if ($collected.Count -ge $SessionCeiling) {
+        Write-Log ("Slice {0:yyyy-MM-dd HH:mm} to {1:yyyy-MM-dd HH:mm} hit the {2} ceiling — results are TRUNCATED. Re-run with a smaller -SliceHours." -f `
+            $From, $To, $SessionCeiling) 'WARN'
+    }
+
+    return $collected
+}
+
+# --- Main ---------------------------------------------------------------------
+try {
+    if ($EndDate -le $StartDate) { throw 'EndDate must be later than StartDate.' }
+
+    Write-Log ("Starting audit export {0:yyyy-MM-dd HH:mm} to {1:yyyy-MM-dd HH:mm}, slice {2}h." -f `
+        $StartDate, $EndDate, $SliceHours) 'INFO'
+
+    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+        Write-Log 'No Exchange Online session; connecting.' 'INFO'
+        if ($UserPrincipalName) {
+            Connect-ExchangeOnline -UserPrincipalName $UserPrincipalName -ShowBanner:$false
+        } else {
+            Connect-ExchangeOnline -ShowBanner:$false
+        }
+    }
+
+    $filter = @{}
+    if ($Operations) { $filter['Operations'] = $Operations; Write-Log ("Operations: {0}" -f ($Operations -join ', ')) 'INFO' }
+    if ($UserIds)    { $filter['UserIds']    = $UserIds;    Write-Log ("UserIds: {0}"    -f ($UserIds -join ', '))    'INFO' }
+    if ($RecordType) { $filter['RecordType'] = $RecordType; Write-Log ("RecordType: {0}" -f ($RecordType -join ', ')) 'INFO' }
+
+    # --- Slice the range ------------------------------------------------------
+    $slices = [System.Collections.Generic.List[object]]::new()
+    $cursor = $StartDate
+    while ($cursor -lt $EndDate) {
+        $sliceEnd = $cursor.AddHours($SliceHours)
+        if ($sliceEnd -gt $EndDate) { $sliceEnd = $EndDate }
+        $slices.Add([pscustomobject]@{ From = $cursor; To = $sliceEnd })
+        $cursor = $sliceEnd
+    }
+    Write-Log ("Range split into {0} slice(s)." -f $slices.Count) 'INFO'
+
+    # --- Collect, deduplicating across the whole run --------------------------
+    # ReturnLargeSet is explicitly unsorted and may repeat records between
+    # pages. Identity is the stable per-record key.
+    $seen    = [System.Collections.Generic.HashSet[string]]::new()
+    $records = [System.Collections.Generic.List[object]]::new()
+    $dupes   = 0
+    $n       = 0
+
+    foreach ($slice in $slices) {
+        $n++
+        Write-Progress -Activity 'Searching unified audit log' `
+                       -Status ("{0:yyyy-MM-dd HH:mm} to {1:HH:mm}" -f $slice.From, $slice.To) `
+                       -PercentComplete (($n / $slices.Count) * 100)
+        Write-Log ("Slice {0}/{1}: {2:yyyy-MM-dd HH:mm} to {3:yyyy-MM-dd HH:mm}" -f `
+            $n, $slices.Count, $slice.From, $slice.To) 'INFO'
+
+        foreach ($rec in (Invoke-AuditSlice -From $slice.From -To $slice.To -Filter $filter)) {
+            $key = [string]$rec.Identity
+            if ([string]::IsNullOrWhiteSpace($key)) { $key = '{0}|{1}|{2}' -f $rec.CreationDate, $rec.UserIds, $rec.Operations }
+            if ($seen.Add($key)) { $records.Add($rec) } else { $dupes++ }
+        }
+    }
+    Write-Progress -Activity 'Searching unified audit log' -Completed
+
+    Write-Log ("Unique records: {0} ({1} duplicate(s) discarded)." -f $records.Count, $dupes) 'INFO'
+
+    if (-not $records.Count) {
+        Write-Host "`nNo audit records matched. Confirm auditing is enabled and the range is within retention." -ForegroundColor Yellow
+        return
+    }
+
+    # --- Shape the output -----------------------------------------------------
+    $output = foreach ($r in $records) {
+        $row = [ordered]@{
+            CreationDate = $r.CreationDate
+            UserIds      = $r.UserIds
+            Operations   = $r.Operations
+            RecordType   = $r.RecordType
+            ResultStatus = $r.ResultStatus
+            Identity     = $r.Identity
+        }
+
+        if ($ExpandAuditData -and $r.AuditData) {
+            try {
+                $d = $r.AuditData | ConvertFrom-Json
+                $row['ClientIP']       = $d.ClientIP
+                $row['UserAgent']      = $d.UserAgent
+                $row['Workload']       = $d.Workload
+                $row['ObjectId']       = $d.ObjectId
+                $row['ResultStatusRaw']= $d.ResultStatus
+            }
+            catch { Write-Log ("AuditData unparseable for {0}" -f $r.Identity) 'WARN' }
+        }
+        else {
+            $row['AuditData'] = $r.AuditData
+        }
+
+        [pscustomobject]$row
+    }
+
+    $output | Sort-Object CreationDate | Export-Csv -Path $ReportCsv -NoTypeInformation -Encoding UTF8
+    Write-Log ("Report written: {0}" -f $ReportCsv) 'INFO'
+
+    Write-Host "`nTop operations:" -ForegroundColor Cyan
+    $output | Group-Object Operations | Sort-Object Count -Descending |
+        Select-Object -First 15 @{N='Operation';E={$_.Name}}, Count | Format-Table -AutoSize
+
+    Write-Host "`nMost active identities:" -ForegroundColor Cyan
+    $output | Group-Object UserIds | Sort-Object Count -Descending |
+        Select-Object -First 10 @{N='User';E={$_.Name}}, Count | Format-Table -AutoSize
+
+    Write-Host ("`n{0} unique record(s) across {1} slice(s), {2} duplicate(s) discarded.`nReport: {3}`nLog: {4}" -f `
+        $records.Count, $slices.Count, $dupes, $ReportCsv, $LogFile) -ForegroundColor Cyan
+}
+catch {
+    Write-Log ("FATAL: {0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace) 'ERROR'
+    throw
+}
+finally {
+    Write-Log 'Run complete.' 'INFO'
+}
+```
+
+### Summary
+
+**What it does.** Exports unified audit log records for a date range to CSV,
+optionally filtered by operation, user, or record type, with the paging done
+correctly and duplicates removed. Prints the top operations and most active
+identities as a starting point for analysis.
+
+**How it works.** Three defects in the naive approach, each handled explicitly:
+
+- **The 5,000-record page.** A plain `Search-UnifiedAuditLog` returns at most
+  5,000 records and says nothing about the rest. The script uses
+  `-SessionCommand ReturnLargeSet` with a **single `SessionId` per slice**,
+  calling repeatedly until a call comes back empty — which is the documented
+  end-of-session signal. A new `SessionId` per call would restart the search
+  and loop forever on the same first page.
+- **Unsorted results with duplicates.** `ReturnLargeSet` explicitly does not
+  guarantee ordering and can repeat records across pages. Every record is keyed
+  on `Identity` in a `HashSet`; repeats are counted and dropped, and the final
+  export is sorted by `CreationDate` because the source order means nothing.
+- **The 50,000-record session ceiling.** Beyond it, results are silently
+  incomplete. The script splits the range into `-SliceHours` windows so each
+  session stays well under, and if one still hits the ceiling it **says so in
+  the log and tells you to reduce the slice size** rather than returning a
+  confidently truncated file.
+
+Plus: `-ExpandAuditData` flattens the JSON blob into `ClientIP`, `UserAgent`,
+`Workload`, and `ObjectId` columns, which is what makes the CSV usable in a
+spreadsheet during an incident.
+
+**Prerequisites & caveats.**
+
+- Module `ExchangeOnlineManagement`; the **View-Only Audit Logs** or **Audit
+  Logs** role.
+- **Auditing must have been on when the events happened.** Enabling it today
+  does not create history. Check with `Get-AdminAuditLogConfig | Select
+  UnifiedAuditLogIngestionEnabled`.
+- **Retention is a licensing question.** Broadly 180 days for Audit (Standard)
+  and up to a year or more for Audit (Premium), and it has changed more than
+  once. Verify your tenant's current retention before promising anyone a date
+  range — a search that returns nothing may mean the records have aged out, not
+  that nothing happened.
+- **Ingestion lag is real.** Records can take anywhere from minutes to hours to
+  become searchable. A search over the last hour is not a reliable read of the
+  last hour.
+- `CreationDate` is **UTC**. Convert before correlating with anything local, or
+  you will be an hour or eleven out depending on the season.
+- Microsoft has been moving long-running audit searches towards the Graph
+  `security/auditLog/queries` API. For very large exports that is worth
+  investigating; this script targets the cmdlet because it works today and
+  needs no app registration.
+
+> **Warning — This is evidence**
 >
-> This section is being populated. Production-grade scripts following the repository
-> [conventions](/docs/script-repository/) will be published here.
+> If you are running this during an incident, treat the CSV as evidence: keep
+> the log file beside it, note the exact parameters used, and don't overwrite
+> an earlier export with a re-run. The run log records the slice boundaries and
+> duplicate counts precisely so the export can be explained later.

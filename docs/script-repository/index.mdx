@@ -42,6 +42,12 @@ All scripts in this repository are written to a common standard:
 ## Sections
 
 - **[Windows](/docs/script-repository/windows)** — endpoint and server
-  administration.
+  administration: local administrator inventory, patch and reboot state, and
+  stale profile cleanup.
 - **[Microsoft 365](/docs/script-repository/microsoft-365/)** — Entra ID,
   Exchange Online, SharePoint, OneDrive, Teams, Intune, Purview, and Defender.
+
+Everything is read-only unless its page says otherwise. The one script here
+that deletes data — [Stale Profile Cleanup](/docs/script-repository/windows/stale-profile-cleanup) —
+says so in its title block, supports `-WhatIf`, and refuses to run past a
+maximum-removal count.
