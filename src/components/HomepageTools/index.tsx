@@ -53,10 +53,18 @@ const ToolList: Tool[] = [
   },
 ];
 
-function ToolCard({name, tag, Svg, to, description}: Tool) {
+function ToolCard({name, tag, Svg, to, description, anchor}: Tool & {anchor?: boolean}) {
   return (
     <div className={clsx('col col--4', styles.toolCol)}>
-      <Link to={to} className={styles.toolCard}>
+      <Link
+        to={to}
+        className={styles.toolCard}
+        // Shade may lift its head over this card's top edge. The card is
+        // opaque and gets its own stacking context from the [data-shade] rule
+        // in custom.css, so it hides two thirds of the character, and the
+        // section's flat background sits behind both.
+        data-shade={anchor ? 'peek-edge' : undefined}
+        data-shade-id={anchor ? 'tools' : undefined}>
         <span className={styles.toolTop} aria-hidden="true" />
         <div className={styles.toolHead}>
           <span className={styles.toolIcon}>
@@ -81,6 +89,9 @@ function ToolCard({name, tag, Svg, to, description}: Tool) {
 
 export default function HomepageTools(): ReactNode {
   return (
+    // The anchor is the first tool card, not this section: the homepage snaps
+    // in full-viewport panels, so the section's own top edge always comes to
+    // rest under the sticky navbar, where a peek would never be seen.
     <section className={styles.tools} id="tools">
       <div className={clsx('container', styles.panel, 'panelIn')}>
         <div className={styles.header}>
@@ -94,8 +105,8 @@ export default function HomepageTools(): ReactNode {
           </p>
         </div>
         <div className={clsx('row', styles.cardRow)}>
-          {ToolList.map((tool) => (
-            <ToolCard key={tool.name} {...tool} />
+          {ToolList.map((tool, i) => (
+            <ToolCard key={tool.name} {...tool} anchor={i === 0} />
           ))}
         </div>
       </div>

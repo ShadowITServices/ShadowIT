@@ -38,7 +38,10 @@ export default function LicensingAdvisor(): ReactNode {
   };
 
   return (
-    <div className={styles.advisor}>
+    // data-shade: hesitating over the picker may bring Shade out. The advisor
+    // has no opaque edge to hide behind, so the message places it in the page
+    // gutter instead — desktop only, suppressed under 1200px.
+    <div className={styles.advisor} data-shade="hesitation" data-shade-id="licensing">
       <div className={styles.tabs} role="tablist" aria-label="Licensing advisor sections">
         {TABS.map((t) => (
           <button

@@ -54,7 +54,16 @@ const config: Config = {
   headTags: [
     {tagName: 'link', attributes: {rel: 'preconnect', href: 'https://fonts.googleapis.com'}},
     {tagName: 'link', attributes: {rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous'}},
+    // Shade — the AI avatar runtime. A same-origin classic script served from
+    // /static, deferred so it never blocks render and cached separately from
+    // the app bundle. It defines window.ShadowITShade and does nothing until
+    // src/clientModules/shade.ts starts the scheduler. No network calls, no
+    // cookies: state is sessionStorage plus one localStorage key.
+    {tagName: 'script', attributes: {src: '/shade/shade.js', defer: 'true'}},
   ],
+
+  // Shade's message list and its start/stop on route changes.
+  clientModules: ['./src/clientModules/shade.ts'],
 
   presets: [
     [

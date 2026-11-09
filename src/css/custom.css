@@ -536,3 +536,80 @@ html {
     widows: 3;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Shade — the AI avatar. Tokens only; the component styles live in
+ * src/css/shade.css, imported by src/clientModules/shade.ts.
+ *
+ * Surfaces, ink and type alias the Infima variables already defined above, so
+ * the avatar follows the site's light/dark switch with no extra work. Only the
+ * character's own inks need a dark value of their own.
+ * ------------------------------------------------------------------------- */
+:root {
+  /* Aliases onto what the site already defines */
+  --surface-page: var(--ifm-background-color);
+  --surface-raised: var(--ifm-background-surface-color);
+  --hairline: var(--ifm-color-emphasis-200);
+  --ink: var(--ifm-font-color-base);
+  --ink-muted: #5b4a74;
+  --font-heading: var(--brand-font-heading);
+  --font-body: var(--brand-font-body);
+
+  /* The character */
+  --shade-line: #7a00ea;
+  --shade-line-soft: #b06ad8;
+  --shade-ink: #281549;
+  --shade-glow: rgba(190, 0, 255, 0.15);
+  --shade-stroke: 2.5;
+
+  /* The message card */
+  --nudge-surface: #ffffff;
+  --nudge-border: #ded2bd;
+  --nudge-width: 264px;
+  --focus-ring: var(--brand-tufts-blue);
+
+  /* Placement */
+  --peek-rise: 22px;
+  --gutter-offset: 56px;
+
+  /* Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --shadow-nudge: 0 6px 20px rgba(40, 21, 73, 0.25);
+  --shadow-peek: 0 10px 24px rgba(40, 21, 73, 0.18);
+
+  /* Shade never sits above content. The nudge stays below the navbar (200). */
+  --z-peek: 0;
+  --z-gutter: 1;
+  --z-nudge: 40;
+  --z-menu-hint: 250;
+}
+
+[data-theme='dark'] {
+  --ink-muted: #cbbce2;
+  --shade-line: #cf74e0;
+  --shade-line-soft: #9a63c4;
+  --shade-ink: #f4f0e6;
+  --shade-glow: rgba(190, 0, 255, 0.25);
+  --nudge-surface: #321c58;
+  --nudge-border: #4a2f74;
+  --shadow-nudge: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-peek: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* An anchored block hides the character: it needs its own stacking context
+   above --z-peek, and an opaque background to hide anything with. */
+[data-shade] {
+  position: relative;
+  z-index: 1;
+}
