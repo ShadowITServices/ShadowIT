@@ -307,13 +307,48 @@ html {
  * glyph inherits `currentColor` — it then tracks the link's hover and active
  * colours and works in both themes without a second asset.
  * ------------------------------------------------------------------------- */
-/* Five left-hand items plus Remote, search and Private Site makes the bar tight
+/* Six left-hand items plus Remote, search and Private Site makes the bar tight
  * in the ~1000–1100px band before the theme collapses to the hamburger. Without
  * this the dropdown caret wraps below its label and the navbar grows a second
  * line. Let items sit tight rather than break. */
 .navbar__link,
 .navbar__item {
   white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+ * The rule after Home.
+ *
+ * Home is the only left-hand item that isn't a content section, so it is set
+ * apart with a divider rather than relying on spacing alone. Applied in
+ * docusaurus.config.ts as `className: 'navbar-divider-after'`.
+ *
+ * `right: 0` is the right edge of the link's padding box. Every navbar item
+ * carries the same horizontal padding, so that edge is exactly halfway between
+ * the "Home" and "About" glyphs — the rule centres itself in the gap without a
+ * magic number, and stays centred if the padding variable ever changes.
+ *
+ * Both selectors are qualified with `.navbar__item`, which only the desktop bar
+ * applies. In the mobile hamburger menu the same item renders as `.menu__link`,
+ * so it picks up no rule there — a divider in a vertical list would be wrong.
+ * ------------------------------------------------------------------------- */
+.navbar__item.navbar-divider-after {
+  position: relative;
+}
+
+.navbar__item.navbar-divider-after::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 1px;
+  height: 1.15em;
+  transform: translateY(-50%);
+  background-color: var(--brand-purpureus);
+}
+
+[data-theme='dark'] .navbar__item.navbar-divider-after::after {
+  background-color: var(--brand-white);
 }
 
 .navbar-icon-link svg {

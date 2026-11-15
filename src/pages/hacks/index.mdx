@@ -1,0 +1,70 @@
+---
+title: Hacks
+description: Breakdowns of real attack techniques, written for the people who have to defend against them — what the technique actually does, why the controls you already pay for miss it, and what to do on Monday.
+keywords: [attack techniques, detection engineering, security research, blue team, Australian SMB cybersecurity]
+---
+
+import Admonition from '@theme/Admonition';
+
+# Hacks
+
+Most security writing about a new technique is either a vendor blog with a product
+at the end of it, or a conference talk aimed at the person doing the attacking.
+Neither is much use at nine on a Monday morning when you're the one who has to
+decide whether it matters to your environment.
+
+This section is the other thing: a plain-language breakdown of a technique, written
+for the person holding the pager. Each page answers the same four questions.
+
+- **What it actually does** — the mechanism, in concepts rather than commands.
+- **Why it matters here** — the business consequence, not the CVSS score.
+- **Why your existing controls miss it** — and where that claim comes from.
+- **What to do about it** — detection you can build, and a containment step that
+  works.
+
+## The editorial line
+
+<Admonition type="warning" title="No operational detail">
+
+These pages describe mechanisms, not procedures. There are no commands, no code,
+no parameters, and no step-by-step instructions for reproducing anything. Where a
+technique has a public proof-of-concept, the original research is credited and
+linked so you can read it in its own context — but this site isn't going to
+assemble a working attack for you.
+
+Anything you do test, you test on systems you own or have explicit written
+authorisation to assess. In Australia that's not a disclaimer, it's Part 10.7 of
+the *Criminal Code Act 1995*.
+
+</Admonition>
+
+A second rule: **claims get attributed.** A lot of technique write-ups quietly
+launder a researcher's own lab numbers into established fact. Where a figure comes
+from the original research rather than from independent verification, these pages
+say so, every time. You can then decide how much weight it carries in your
+environment, which is the decision you were trying to make anyway.
+
+## Breakdowns
+
+- [GhostLock — denial of availability without encryption](/hacks/ghost-lock) —
+  a standard domain user with read access to a file share can make files
+  unavailable to everyone else without writing a single byte. No malware, no
+  encryption, no CVE, and almost nothing in your SIEM. The interesting part isn't
+  the technique; it's how completely the ransomware-shaped assumptions baked into
+  modern tooling miss it.
+
+More will land here as they're worth writing up. The bar is that a technique has
+to change what a defender should actually do — a clever trick that every control
+already catches isn't worth your reading time.
+
+## Related
+
+If you're looking for the practical layer rather than the analysis, it's elsewhere
+on the site:
+
+- The [Script Repository](/docs/script-repository) — read-only PowerShell for
+  auditing Microsoft 365 and Windows, including the identity and sharing posture
+  that most of these techniques depend on.
+- [Executing Strategy](/docs/executing-strategy) — how to turn findings like these into
+  something a business owner, an MSP, or an internal team can actually fund and
+  run.

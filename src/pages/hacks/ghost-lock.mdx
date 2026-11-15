@@ -1,0 +1,207 @@
+---
+title: 'GhostLock: Lockout Without Encryption'
+description: A standard domain user with read access to a file share can make files unavailable to everyone else without writing a byte. No encryption, no CVE, almost nothing in your SIEM — and what defenders should actually do about it.
+keywords: [GhostLock, SMB, denial of availability, ransomware, file share, detection engineering, Azure Files, file server]
+---
+
+import Admonition from '@theme/Admonition';
+
+# GhostLock: Lockout Without Encryption
+
+Every ransomware control you own is built on one assumption: to take data away from
+a business, an attacker has to *change* it. Encrypt it, delete it, exfiltrate it —
+but touch it. Backups, write-rate analytics, canary files, behavioural detection,
+immutable snapshots: all of them watch for modification, because modification is
+what the threat has always looked like.
+
+**GhostLock** is published security research showing that the assumption doesn't
+hold on an SMB file share. A standard domain user with nothing more than read
+access can make files unavailable to every other client on the network without
+writing a single byte.
+
+| At a glance | |
+|---|---|
+| **What it is** | Published research: a whitepaper and an open-source Windows proof-of-concept |
+| **Effect** | Denial of availability on SMB file shares — other clients get sharing-violation errors |
+| **Privilege needed** | A standard domain user with read access to the share |
+| **Data written** | None. No encryption, no modification, no deletion |
+| **CVE** | None. The researcher's position is that this is documented, by-design behaviour |
+| **In scope** | Windows File Server, on-premises NAS, Azure Files — anything speaking SMB2 |
+| **Researcher** | Kim Dvash, offensive security team leader |
+| **Source** | [ghostlock.io](https://ghostlock.io/) · [research paper on Zenodo](https://zenodo.org/records/20070064) |
+
+## The mechanism, in concepts
+
+When a Windows application opens a file it declares two separate things: what it
+wants to do with the file, and what it will tolerate *other* people doing with the
+file at the same time. That second declaration is the share mode. Set it
+permissively and Word, Excel and everything else can work alongside you. Set it to
+permit nothing, and for as long as your handle stays open, every other client that
+tries to open that file is refused.
+
+That is not a bug. It is the file-locking contract that made shared drives usable
+in the first place, and it has been in the Windows API for roughly three decades.
+It works across SMB2 exactly as it works locally, because the protocol was designed
+to carry the request faithfully to the server.
+
+GhostLock's observation is that **nothing requires the handle to belong to an
+application doing useful work.** A client can open a large number of files this way
+and simply hold them. The server behaves correctly throughout. No data changes. The
+files are all still there, intact, byte-for-byte identical. They are just not
+openable by anyone else, which from the business's point of view is the same thing
+as being gone.
+
+The research also describes a variant that holds a folder namespace rather than
+individual files, and a published tool that automates discovery of reachable shares
+and locking across many files in parallel.
+
+<Admonition type="info" title="Why this page stops here">
+
+That is as far into the mechanism as this page goes. No API parameters, no code, no
+command-line flags, no step-by-step method. The [original research](https://ghostlock.io/)
+contains the operational detail and carries its own authorisation warnings; read it
+there if you have a legitimate reason to. The researcher gates the tool behind a
+manually placed authorisation file and explicit confirmation flags, and asks that it
+only be run against systems you own or have written permission to test.
+
+</Admonition>
+
+## Why it matters to an Australian business
+
+Strip away the protocol detail and the business consequence is ordinary and
+familiar: **the shared drive stops working.**
+
+Not corrupted. Not encrypted. Not ransomed. Just unavailable, mid-morning, with no
+alert and no obvious cause. In a typical SMB or mid-market environment, that
+cascades in a specific order.
+
+1. **The line-of-business application stalls first.** ERP, practice management, job
+   management, CAD, accounting — anything holding its working data on a file share
+   blocks the moment it cannot open a file it expects to open. Users don't see a
+   security incident; they see the application hang.
+2. **The service desk gets "the server's down" tickets.** Which it isn't. It is
+   responding normally, the share is mounted, you can browse the folder, and the
+   files are visibly present at the right size.
+3. **Your restore plan doesn't apply.** This is the part that matters. Backup and
+   recovery exist to replace data that has been changed or destroyed. Nothing here
+   has been changed or destroyed, so there is nothing to restore *to*. Copying a
+   pristine version over the top of an intact-but-locked file solves nothing, and
+   immutable snapshots — the control most organisations bought specifically to beat
+   ransomware — are irrelevant to this failure mode.
+4. **Attribution is hard under pressure.** The behaviour looks far more like an
+   application fault or a storage problem than an attack, which is exactly where
+   the troubleshooting time goes while the business is stopped.
+
+The upside, and it is a real one: **recovery is quick once you know what you are
+looking at.** Nothing has to be rebuilt. Drop the session holding the handles and
+the files are available again. The cost of this technique is almost entirely the
+time spent not realising what it is.
+
+## Why the controls you already pay for miss it
+
+The research includes a comparison of common defences against this technique. These
+are **the researcher's own findings from their own testing**, not independently
+verified by Shadow IT or anyone else — but the reasoning behind each one is sound
+enough to check against your own stack.
+
+| Control | Why it reportedly doesn't fire |
+|---|---|
+| **Canary / honeypot files** | They trigger on modification. A file that is opened and held is never modified. |
+| **Write-rate analytics** | There is no write activity to rate. Disk I/O from the technique is effectively nil. |
+| **Behavioural AI / anti-ransomware** | The behaviour being modelled is mass encryption. Opening files is what every legitimate client on the network does all day. |
+| **EDR** | Opening a file over SMB with a restrictive share mode is normal API use by a legitimate, signed process. No injection, no persistence, no suspicious binary. |
+| **Network monitoring / DPI** | The traffic is well-formed SMB2 to a file server the client is entitled to reach. Blocking it means blocking file sharing. |
+| **DLP** | Nothing leaves. No data is read out, copied, or exfiltrated. |
+| **Signature / IOC matching** | There is no malware sample and no CVE to match against. |
+
+There is also a credential-revocation wrinkle worth planning for. The research
+reports that disabling the user account does not immediately release handles an
+established session is already holding, because that session authenticated when it
+was set up. Your standard first move in an incident — disable the account — may not
+restore service on its own.
+
+## Detection you can actually build
+
+The signal the research points to is a count, not an event: **how many files a
+single SMB session is holding open with a restrictive share mode.**
+
+That number is boring and stable in normal operation. A legitimate client holds a
+handful of files open exclusively — the document someone is editing, a database
+file, a lock file. One session holding thousands is not something a business
+application does.
+
+Practical notes on where to look:
+
+- **It lives on the storage platform, not the endpoint.** This is a server-side
+  property of the open handles. Your Windows event logs and your EDR console are
+  the wrong places to look. The file server or NAS management layer, where open
+  sessions and open files are enumerable, is the right one — the open-files view on
+  a Windows file server, the array's equivalent on a NAS, the SMB session and
+  handle listing on Azure Files.
+- **Alert on the count per session.** The research suggests a threshold in the
+  order of several hundred exclusive opens held by one session. Pick your own
+  number: measure what normal looks like on your busiest share for a week, then set
+  the alarm meaningfully above it.
+- **Alert on the shape too, where you can.** One session opening files across many
+  directories in rapid succession and then going quiet is a distinctive pattern,
+  and easier to tune than a raw count on a share with an unusual application
+  workload.
+- **Write the runbook before you need it.** The containment action is to close the
+  session holding the handles, then deal with the account and the originating
+  device. That is a two-minute job for someone who knows the technique exists, and
+  a half-day outage for someone who doesn't. The gap between those two outcomes is
+  documentation, which is the cheapest control on this page.
+
+<Admonition type="tip" title="The five-minute version">
+
+If you do nothing else with this page: find out today, before you need to know,
+**where in your environment you can list open SMB sessions and the files each one
+is holding.** On a Windows file server, a NAS, and Azure Files it is a different
+place each time, and nobody ever looks it up calmly.
+
+</Admonition>
+
+## Reducing the exposure
+
+None of this is new hardening advice, which is rather the point. The technique is
+most effective in environments where file-share access was never scoped properly in
+the first place.
+
+- **Scope share access to the people who need it.** This technique needs read
+  access to the files it locks. Every share that "everyone" can reach is in scope
+  for every user and every compromised account. The sharing and permission audits
+  in the [Script Repository](/docs/script-repository) are a reasonable place to
+  start measuring that.
+- **Treat a stalled line-of-business application as a possible security event.**
+  Not usually, but sometimes — and the triage step that distinguishes the two is
+  cheap once the runbook exists.
+- **Reduce what sits on open SMB shares at all.** Data that has moved into
+  SharePoint, a database with proper access control, or an application-managed
+  store is not reachable by this technique in the same way. That migration is
+  usually justified for other reasons anyway.
+- **Keep the ransomware controls.** Nothing here argues against immutable backups
+  or write-rate detection. It argues that availability has more than one failure
+  mode, and your detection coverage should reflect that.
+
+## Where this came from
+
+GhostLock was published in 2026 by **Kim Dvash**, an offensive security team leader,
+following discovery of the technique during an authorised red-team engagement in
+2025. The researcher's account is that findings were disclosed privately to the
+assessed organisation first, and that no CVE was filed because the behaviour is
+documented and by design rather than a defect.
+
+- [ghostlock.io](https://ghostlock.io/) — the research site, with the full
+  mechanism, the detection comparison, and the disclosure timeline
+- [Research paper on Zenodo](https://zenodo.org/records/20070064) — the whitepaper
+
+<Admonition type="caution" title="Attribution and verification">
+
+Every performance, detection and recovery claim on this page originates with the
+researcher's own published testing. Shadow IT has not independently reproduced any
+of it, and this page is analysis of public research rather than a vulnerability
+advisory. Validate against your own environment before changing anything on the
+strength of it — and only ever on systems you own or have explicit written
+authorisation to test.
+
+</Admonition>

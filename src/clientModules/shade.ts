@@ -65,6 +65,10 @@ const BLOCKED_ROUTES = [
   '/privacy-policy',
   '/ai-policy',
   '/extension-privacy-policy',
+  // Attack-technique breakdowns. A character popping out mid incident-advice
+  // undercuts the page. The runtime matches by prefix, so this covers every
+  // breakdown beneath /hacks as well as the index.
+  '/hacks',
 ];
 
 /**
@@ -73,6 +77,7 @@ const BLOCKED_ROUTES = [
  */
 const MENU_HINTS: Record<string, string> = {
   Docs: 'Everything here is free to read.',
+  Hacks: 'Analysis of public research, written for defenders.',
   Tools: 'All three run in your browser.',
 };
 

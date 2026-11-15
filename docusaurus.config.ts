@@ -134,14 +134,55 @@ const config: Config = {
         src: 'img/logo.png',
       },
       items: [
-        // Left group, in reading order: Home | About | Study | Docs | Tools.
+        // Left group: Home, then the four content sections in alphabetical
+        // order —
+        //
+        //   Home | About · Docs · Hacks · Study · Tools
+        //
+        // Home is separated from the rest by a rule rather than whitespace,
+        // because it is the only item that isn't a section: the
+        // `navbar-divider-after` class draws it in src/css/custom.css (brand
+        // purple in light mode, white in dark). The class is scoped to the
+        // desktop bar there, so the mobile hamburger menu gets no stray rule.
         //
         // Dropdowns open on hover on desktop — the theme adds
         // `dropdown--hoverable`, so no custom CSS is needed — and render as
         // collapsible sections on mobile. `activeBasePath` keeps the parent
         // highlighted across every page beneath it.
-        {to: '/', label: 'Home', position: 'left', activeBaseRegex: '^/$'},
+        {
+          to: '/',
+          label: 'Home',
+          position: 'left',
+          activeBaseRegex: '^/$',
+          className: 'navbar-divider-after',
+        },
         {to: '/about', label: 'About', position: 'left'},
+        {
+          // A dropdown rather than a `docSidebar` item so the two top-level
+          // bodies of the documentation are reachable in one click. The parent
+          // still goes to the docs introduction, and `activeBasePath` keeps it
+          // lit on every /docs/ page including the tutorial leftovers.
+          type: 'dropdown',
+          label: 'Docs',
+          to: '/docs/intro',
+          activeBasePath: '/docs',
+          position: 'left',
+          items: [
+            {to: '/docs/executing-strategy', label: 'Executing Strategy'},
+            {to: '/docs/script-repository', label: 'Script Repository'},
+          ],
+        },
+        {
+          // Like Study, Hacks has a real index page listing the breakdowns, so
+          // the parent label links to it rather than being inert. One item per
+          // technique.
+          type: 'dropdown',
+          label: 'Hacks',
+          to: '/hacks',
+          activeBasePath: '/hacks',
+          position: 'left',
+          items: [{to: '/hacks/ghost-lock', label: 'GhostLock'}],
+        },
         {
           // Unlike Tools, Study has a real index page listing the programs, so
           // the parent label links to it rather than being inert.
@@ -151,12 +192,6 @@ const config: Config = {
           activeBasePath: '/study',
           position: 'left',
           items: [{to: '/study/AZ-104', label: 'AZ-104: Azure Administrator'}],
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
-          position: 'left',
-          label: 'Docs',
         },
         {
           // No /tools index page exists, so this parent is a plain label.
@@ -214,6 +249,12 @@ const config: Config = {
             {
               label: 'Docs',
               to: '/docs/intro',
+            },
+            {
+              // The index listing the technique breakdowns, same reasoning as
+              // Study above.
+              label: 'Hacks',
+              to: '/hacks',
             },
           ],
         },
