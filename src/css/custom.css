@@ -63,20 +63,30 @@ html {
 }
 
 /* ---------------------------------------------------------------------------
- * Dark mode — lightened Purpureus for AA contrast on dark surfaces.
- * Russian Violet sets the background tone per the brand's "shadow" identity.
+ * Dark mode — a violet-tinted dark rather than a near-black, per the brand's
+ * "shadow" identity.
+ *
+ * The surfaces were lifted from 12%/18% lightness to 20%/26%: the original
+ * pair read as a hole rather than a room, and the cards barely separated from
+ * the page behind them (1.13 contrast, now 1.19).
+ *
+ * The primary had to move with them, which is the part worth not forgetting.
+ * At #c44fd4 it was already only 4.19 against a card — below AA for body-sized
+ * text — and lifting the background would have taken it to 3.42. #d98ae6 sits
+ * at 5.51 on a card and 6.55 on the page, so link text passes AA properly
+ * rather than by rounding. The rest of the ramp is generated from it.
  * ------------------------------------------------------------------------- */
 [data-theme='dark'] {
-  --ifm-color-primary: #c44fd4;
-  --ifm-color-primary-dark: #ba32cd;
-  --ifm-color-primary-darker: #af2fc1;
-  --ifm-color-primary-darkest: #9528a4;
-  --ifm-color-primary-light: #ce6cdb;
-  --ifm-color-primary-lighter: #d278de;
-  --ifm-color-primary-lightest: #db95e5;
+  --ifm-color-primary: #d98ae6;
+  --ifm-color-primary-dark: #d47be3;
+  --ifm-color-primary-darker: #d275e1;
+  --ifm-color-primary-darkest: #cb60dd;
+  --ifm-color-primary-light: #de99e9;
+  --ifm-color-primary-lighter: #e09feb;
+  --ifm-color-primary-lightest: #e7b4ef;
 
-  --ifm-background-color: #1a0e30;
-  --ifm-background-surface-color: #281549; /* Russian Violet */
+  --ifm-background-color: #271a4a;
+  --ifm-background-surface-color: #372460; /* lifted Russian Violet */
   --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.12);
 }
 
@@ -636,8 +646,10 @@ html {
   --shade-line-soft: #9a63c4;
   --shade-ink: #f4f0e6;
   --shade-glow: rgba(190, 0, 255, 0.25);
-  --nudge-surface: #321c58;
-  --nudge-border: #4a2f74;
+  /* Lifted with the page surfaces above, keeping the same offsets from them —
+     the nudge has to read as a card sitting on the page, not as the page. */
+  --nudge-surface: #422575;
+  --nudge-border: #5b3a8f;
   --shadow-nudge: 0 8px 24px rgba(0, 0, 0, 0.55);
   --shadow-peek: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
