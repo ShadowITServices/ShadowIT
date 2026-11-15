@@ -1,10 +1,18 @@
 /**
- * Homepage. The first screen (hero + the three entry cards) is sized to the
- * viewport on desktop so the page still opens as one composed screen; the
- * sections below it are reached by scrolling.
+ * Homepage. The first screen (the three entry cards) is sized to the viewport
+ * on desktop so the page opens as one composed screen; the sections below it
+ * are reached by scrolling.
+ *
+ * A gradient hero used to sit above the cards. It is gone: it repeated the
+ * wordmark already in the navbar, and on a viewport-height screen its ~280px
+ * came straight out of the cards. What it contributed that the navbar did not
+ * was the radar motif, and that survives in `.backdrop` — quiet enough to sit
+ * behind text in both themes rather than compete with it.
  */
 
 .firstScreen {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - var(--ifm-navbar-height));
@@ -12,175 +20,108 @@
 }
 
 .homeMain {
+  position: relative;
+  z-index: 1;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   align-items: center;
 }
 
-/* --- Hero ------------------------------------------------------------- */
-.heroBanner {
-  padding: clamp(1rem, 3.5vh, 2.5rem) 0;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-  flex: 0 0 auto;
-}
+/* --- Accessible heading ------------------------------------------------ */
 
-/* Doubled class to out-specify the global `.hero--primary` background: the
-   gradient is oversized and drifts, so the hero breathes rather than sitting
-   as a flat panel. */
-.heroBanner.heroBanner {
-  background: linear-gradient(
-    120deg,
-    var(--brand-electric-indigo) 0%,
-    var(--brand-electric-purple) 38%,
-    var(--brand-purpureus) 62%,
-    var(--brand-electric-indigo) 100%
-  );
-  background-size: 220% 220%;
-  animation: heroDrift 22s ease-in-out infinite;
-}
-
-/* Subtle dot-grid + soft centre glow over the gradient for depth. */
-.heroBanner::before {
-  content: '';
+/**
+ * Off-screen, but readable by assistive technology and indexable. `clip-path`
+ * on a 1px box rather than `display: none`, which would take the heading out
+ * of the accessibility tree entirely and defeat the point of keeping it.
+ */
+.visuallyHidden {
   position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.16), transparent 58%),
-    radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
-  background-size: 100% 100%, 22px 22px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.heroBanner :global(.container) {
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes heroDrift {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-/* Radar pulse rings, centred behind the logo. */
-.heroRings {
-  position: absolute;
-  top: 45%;
-  left: 50%;
   width: 1px;
   height: 1px;
-  transform: translate(-50%, -50%);
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- First-screen backdrop ---------------------------------------------
+ *
+ * Three layers, all deliberately faint: a dot grid for texture, a soft centre
+ * glow for depth, and the radar rings the hero used to carry. The constraint
+ * is the whole design — nothing here may make the card text harder to read,
+ * so the alphas are set against the lighter page colour and nudged up for
+ * dark mode, where the same values disappear.
+ * --------------------------------------------------------------------- */
+
+.backdrop {
+  position: absolute;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
+  background-image:
+    radial-gradient(circle at 50% 38%, rgba(190, 0, 255, 0.07), transparent 62%),
+    radial-gradient(rgba(109, 0, 230, 0.07) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    26px 26px;
+  /* Fade out before the sections below, so the join is a gradient rather than
+     a visible edge where the texture stops. */
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
 }
 
-.heroRings span {
+[data-theme='dark'] .backdrop {
+  background-image:
+    radial-gradient(circle at 50% 38%, rgba(190, 0, 255, 0.16), transparent 62%),
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
+
+/* Radar rings, centred on the glow. */
+.backdrop span {
   position: absolute;
-  top: 50%;
+  top: 38%;
   left: 50%;
-  width: 240px;
-  height: 240px;
-  margin: -120px 0 0 -120px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  width: min(34vw, 420px);
+  aspect-ratio: 1;
+  margin: calc(min(34vw, 420px) / -2);
+  border: 1px solid rgba(109, 0, 230, 0.1);
   border-radius: 50%;
-  opacity: 0;
-  animation: heroPulse 6s ease-out infinite;
+  transform-origin: center;
+  animation: ringPulse 9s ease-out infinite;
 }
 
-.heroRings span:nth-child(2) {
-  animation-delay: 2s;
+[data-theme='dark'] .backdrop span {
+  border-color: rgba(196, 79, 212, 0.16);
 }
 
-.heroRings span:nth-child(3) {
-  animation-delay: 4s;
+.backdrop span:nth-child(2) {
+  animation-delay: 3s;
 }
 
-@keyframes heroPulse {
+.backdrop span:nth-child(3) {
+  animation-delay: 6s;
+}
+
+@keyframes ringPulse {
   0% {
-    transform: scale(0.4);
-    opacity: 0.55;
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
   }
   100% {
-    transform: scale(3.2);
+    transform: scale(1.9);
     opacity: 0;
   }
-}
-
-/* Staggered entrance for the hero's own content. */
-.heroLogoHeading,
-.heroTagline,
-.heroDivider {
-  animation: heroRise 0.8s cubic-bezier(0.22, 0.68, 0.2, 1) both;
-}
-
-.heroLogoHeading {
-  margin-bottom: clamp(0.5rem, 1.5vh, 1rem);
-}
-
-.heroTagline {
-  animation-delay: 0.12s;
-}
-
-.heroDivider {
-  animation-delay: 0.24s;
-}
-
-@keyframes heroRise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* Dark wordmark rendered as a white silhouette on the brand gradient. */
-.heroLogo {
-  display: block;
-  width: clamp(200px, 28vw, 400px);
-  max-height: 11vh;
-  height: auto;
-  margin: 0 auto;
-  object-fit: contain;
-  filter: brightness(0) invert(1);
-}
-
-.heroTagline {
-  margin: 0;
-  font-family: var(--brand-font-heading);
-  font-weight: 600;
-  font-size: clamp(0.95rem, 0.85rem + 0.7vh, 1.4rem);
-  letter-spacing: 0.08em;
-  color: var(--brand-white);
-  opacity: 0.9;
-}
-
-.heroDivider {
-  display: block;
-  width: 64px;
-  height: 3px;
-  margin: clamp(0.6rem, 1.5vh, 1rem) auto 0;
-  border-radius: 3px;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.25),
-    rgba(255, 255, 255, 0.9),
-    rgba(255, 255, 255, 0.25)
-  );
 }
 
 /* --- Scroll cue -------------------------------------------------------- */
 .cueWrap {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   padding-bottom: clamp(0.75rem, 2.5vh, 1.75rem);
   text-align: center;
@@ -225,31 +166,45 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .heroRings span {
+  /* The rings stay, held at roughly the opacity they animate through, so the
+     backdrop still reads as intentional rather than vanishing for readers who
+     asked for less motion. */
+  .backdrop span {
     animation: none;
-    opacity: 0.16;
+    opacity: 0.6;
+    transform: scale(1.2);
   }
-  .heroBanner.heroBanner,
-  .heroLogoHeading,
-  .heroTagline,
-  .heroDivider,
   .cueArrow {
     animation: none;
   }
 }
 
 /* Mobile-portrait / narrow screens: let the first screen size to its content
-   rather than the viewport — a hero plus three stacked cards won't fit a phone. */
+   rather than the viewport — three stacked cards won't fit a phone. */
 @media screen and (max-width: 768px) {
   .firstScreen {
     display: block;
     min-height: 0;
+    padding-top: 1.5rem;
   }
   .homeMain {
     display: block;
   }
-  .heroBanner {
-    padding: 2.5rem 1rem;
+  .backdrop {
+    /* Shorter screen: keep the glow in the upper band rather than letting it
+       stretch down the whole scroll. */
+    background-size:
+      100% 70%,
+      26px 26px;
+    background-repeat: no-repeat, repeat;
+  }
+  /* Sit the rings behind the heading rather than the paragraph. At this width
+     the sweep otherwise crosses the body copy, and a faint arc through a line
+     of text is still an arc through a line of text. */
+  .backdrop span {
+    top: 14%;
+    width: min(58vw, 260px);
+    margin: calc(min(58vw, 260px) / -2);
   }
   .cueWrap {
     display: none;
