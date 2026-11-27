@@ -15,7 +15,6 @@ export default function HomepageClosing(): ReactNode {
   return (
     <section className={styles.closing}>
       <div className={clsx('container', styles.inner, 'panelIn')}>
-        <p className={styles.eyebrow}>Albury–Wodonga · NSW–VIC border</p>
         <Heading as="h2" className={styles.title}>
           Managing the unseen
         </Heading>
@@ -24,11 +23,9 @@ export default function HomepageClosing(): ReactNode {
           so it can be checked, handed over, and understood a year from now. That habit is
           what the docs here come from.
         </p>
-        <ul className={styles.chips}>
+        <ul className={styles.credentials} aria-label="Credentials">
           {CREDENTIALS.map((c) => (
-            <li key={c} className={styles.chip}>
-              {c}
-            </li>
+            <li key={c}>{c}</li>
           ))}
         </ul>
         <div className={styles.actions}>
@@ -40,7 +37,8 @@ export default function HomepageClosing(): ReactNode {
           </a>
         </div>
         <p className={styles.note}>
-          If something here is useful, wrong, or worth a conversation, I&apos;d like to hear it.
+          I&apos;m based in Albury–Wodonga, on the NSW–VIC border. If something here is useful,
+          wrong, or worth a conversation, I&apos;d like to hear it.
           More about the person behind it on the <Link to="/about">about page</Link>.
         </p>
       </div>

@@ -153,64 +153,42 @@ html {
 }
 
 /* ---------------------------------------------------------------------------
- * Numbered step cards — a gradient-badged sequence for walking through a short,
- * ordered process. Used on the tool pages.
+ * Numbered steps — a plain ordered list for walking through a short process.
+ * Used on the tool pages. These were bordered cards with gradient number
+ * badges; three sentences of instruction read better as a list.
  * ------------------------------------------------------------------------- */
-.stepGrid {
-  display: grid;
-  gap: 1rem;
-  margin: 2rem 0 2.5rem;
+.stepList {
+  counter-reset: step;
+  margin: 1.25rem 0 2.5rem;
+  padding: 0;
+  list-style: none;
 }
 
-.stepCard {
+.stepList > li {
+  counter-increment: step;
   position: relative;
-  padding: 1.25rem 1.5rem 1.25rem 4.5rem;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: 12px;
-  background: var(--ifm-background-surface-color);
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  padding-left: 2.25rem;
+  margin-bottom: 1.25rem;
 }
 
-.stepCard:hover {
-  border-color: var(--ifm-color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(40, 21, 73, 0.18);
-}
-
-.stepBadge {
+.stepList > li::before {
+  content: counter(step);
   position: absolute;
-  left: 1.25rem;
-  top: 1.4rem;
-  width: 2.25rem;
-  height: 2.25rem;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
+  left: 0;
+  top: 0;
   font-family: var(--brand-font-heading);
+  font-size: 1.05rem;
   font-weight: 700;
-  font-size: 1.1rem;
-  line-height: 1;
-  color: var(--brand-white);
-  background: var(--brand-gradient);
+  line-height: var(--ifm-heading-line-height);
+  color: var(--ifm-color-primary);
 }
 
-.stepCard h3 {
-  margin-top: 0;
-  margin-bottom: 0.4rem;
+.stepList h3 {
+  margin: 0 0 0.3rem;
 }
 
-.stepCard p:last-child {
+.stepList p:last-child {
   margin-bottom: 0;
-}
-
-@media screen and (max-width: 480px) {
-  .stepCard {
-    padding: 1.25rem;
-  }
-  .stepBadge {
-    position: static;
-    margin-bottom: 0.75rem;
-  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -246,11 +224,9 @@ html {
 
 .footer__title {
   margin-bottom: 0.2rem;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  opacity: 0.65;
+  opacity: 0.75;
 }
 
 .footer__items {

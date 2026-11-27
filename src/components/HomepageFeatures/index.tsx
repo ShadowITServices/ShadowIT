@@ -79,14 +79,9 @@ export default function HomepageFeatures(): ReactNode {
     <section className={styles.features}>
       <div className="container">
         <div className={styles.header}>
-          <p className={styles.eyebrow}>Start here</p>
           <Heading as="h2" className={styles.headingTitle}>
             Three ways in
           </Heading>
-          <p className={styles.headingSub}>
-            Open documentation, the person behind it, and tools you can run
-            yourself — pick wherever you'd like to begin.
-          </p>
         </div>
         <div className={clsx('row', styles.cardRow)}>
           {FeatureList.map((props, idx) => (

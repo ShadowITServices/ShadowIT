@@ -83,9 +83,7 @@
   margin: 0 0 0.4rem;
   font-family: var(--brand-font-heading);
   font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 0.88rem;
   color: var(--ifm-color-primary);
 }
 
@@ -239,7 +237,6 @@
   margin-bottom: 1.2rem;
   padding: 1rem 1.1rem;
   border: 1px solid var(--ifm-color-emphasis-200);
-  border-left: 3px solid var(--ifm-color-primary);
   border-radius: 10px;
   background: var(--ifm-color-emphasis-100);
   font-size: 0.9rem;
@@ -396,10 +393,8 @@
 
 .recKicker {
   font-family: var(--brand-font-heading);
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   opacity: 0.92;
 }
 
@@ -432,7 +427,7 @@
 .hardRule {
   margin-bottom: 1.2rem;
   padding: 0.85rem 1rem;
-  border-left: 4px solid var(--ifm-color-warning);
+  border: 1px solid var(--ifm-color-warning);
   border-radius: 8px;
   background: var(--ifm-color-warning-contrast-background);
   color: var(--ifm-color-warning-contrast-foreground);
@@ -450,10 +445,8 @@
 .stackLabel {
   margin-bottom: 0.4rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ifm-color-primary);
 }
 
@@ -510,10 +503,8 @@
 .priceLabel {
   margin-bottom: 0.3rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.7rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--panel-accent);
 }
 
@@ -640,10 +631,8 @@
 .columnHead {
   margin-bottom: 0.5rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.74rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .columnGet .columnHead {
@@ -697,10 +686,8 @@
 .upgradeHead {
   margin-bottom: 0.6rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.74rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--panel-accent);
 }
 
@@ -756,10 +743,8 @@
 .beyondTitle {
   margin-bottom: 0.3rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .beyondSub {
@@ -814,10 +799,8 @@
 .includesTitle {
   margin-bottom: 0.7rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.74rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   opacity: 0.7;
 }
 
@@ -853,10 +836,8 @@
 .linksTitle {
   margin-bottom: 0.7rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.74rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ifm-color-primary);
 }
 
@@ -989,7 +970,7 @@
 
 .cwBand {
   padding: 0.7rem 0.8rem;
-  border-left: 4px solid var(--ifm-color-primary);
+  border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 8px;
   background: var(--ifm-color-emphasis-100);
   font-size: 1.05rem;
@@ -1000,25 +981,19 @@
 }
 
 .cwBreak {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin-top: 0.75rem;
 }
 
-.cwTile {
-  padding: 0.55rem 0.6rem;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: 8px;
-  background: var(--ifm-background-color);
-  text-align: center;
-}
-
+/* Figures sit in a plain row, label above value. They were three bordered
+   tiles; boxing each number added nothing the label didn't already say. */
 .cwTile span {
   display: block;
-  margin-bottom: 0.2rem;
-  font-size: 0.68rem;
-  opacity: 0.7;
+  margin-bottom: 0.1rem;
+  font-size: 0.8rem;
+  opacity: 0.75;
 }
 
 .cwTile b {
@@ -1118,10 +1093,8 @@
 
 .rungWord {
   font-family: var(--brand-font-heading);
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   opacity: 0.9;
 }
 
@@ -1140,7 +1113,6 @@
   display: block;
   margin-bottom: 0.6rem;
   padding: 0.45rem 0.7rem;
-  border-left: 3px solid var(--ifm-color-primary);
   border-radius: 6px;
   background: var(--ifm-color-emphasis-100);
   font-size: 0.8rem;
@@ -1395,10 +1367,8 @@
   border-radius: 6px;
   background: var(--ifm-color-emphasis-100);
   font-family: var(--brand-font-heading);
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ifm-color-primary);
 }
 
@@ -1417,7 +1387,6 @@
 .newsWhy {
   margin-bottom: 0.7rem;
   padding: 0.6rem 0.75rem;
-  border-left: 3px solid var(--ifm-color-primary);
   border-radius: 6px;
   background: var(--ifm-color-emphasis-100);
   font-size: 0.86rem;
@@ -1444,10 +1413,8 @@
 .stayTitle {
   margin-bottom: 0.3rem;
   font-family: var(--brand-font-heading);
-  font-size: 0.76rem;
+  font-size: 0.88rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--panel-accent);
 }
 
@@ -1528,7 +1495,7 @@
   }
 
   .cwBreak {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .rung {
@@ -1603,9 +1570,8 @@
 
   /* --- Recommendation header: tier colour as a rule, not a fill --------- */
   .recHead {
-    padding: 0 0 0.6rem 0.9rem;
-    border-left: 5pt solid #6e1b78;
-    border-bottom: 1px solid #cfc9d6;
+    padding: 0 0 0.6rem;
+    border-bottom: 2pt solid #6e1b78;
     border-radius: 0;
     background: none !important;
     color: #000 !important;
@@ -1616,15 +1582,15 @@
   }
 
   .toneGood {
-    border-left-color: #1d4e7d !important;
+    border-bottom-color: #1d4e7d !important;
   }
 
   .toneBetter {
-    border-left-color: #7d1f89 !important;
+    border-bottom-color: #7d1f89 !important;
   }
 
   .toneBest {
-    border-left-color: #4d00a3 !important;
+    border-bottom-color: #4d00a3 !important;
   }
 
   .recKicker {

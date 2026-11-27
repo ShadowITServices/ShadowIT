@@ -130,17 +130,16 @@ export default function ChromeExtensionPage(): ReactNode {
           <Heading as="h2" style={{fontSize: '1.3rem'}}>
             How it works
           </Heading>
-          <div className="stepGrid">
-            {STEPS.map((step, i) => (
-              <div className="stepCard" key={step.title}>
-                <span className="stepBadge">{i + 1}</span>
+          <ol className="stepList">
+            {STEPS.map((step) => (
+              <li key={step.title}>
                 <Heading as="h3" style={{fontSize: '1.05rem'}}>
                   {step.title}
                 </Heading>
                 <p style={{fontSize: '0.92rem', lineHeight: 1.55}}>{step.body}</p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
         <section style={{maxWidth: '780px', margin: '0 auto 2rem'}}>

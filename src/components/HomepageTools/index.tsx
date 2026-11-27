@@ -6,8 +6,6 @@ import styles from './styles.module.css';
 
 type Tool = {
   name: string;
-  tag: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
   to: string;
   description: ReactNode;
 };
@@ -15,8 +13,6 @@ type Tool = {
 const ToolList: Tool[] = [
   {
     name: 'Microsoft Licensing',
-    tag: 'Advisor',
-    Svg: require('@site/static/img/feature_cloud.svg').default,
     to: '/tools/licensing',
     description: (
       <>
@@ -27,10 +23,6 @@ const ToolList: Tool[] = [
   },
   {
     name: 'Copilot Estimator',
-    // Not 'Estimator' — the name already says that, and the pills exist to
-    // tell the three cards apart at a glance.
-    tag: 'Pricing',
-    Svg: require('@site/static/img/feature_spark.svg').default,
     to: '/tools/copilot',
     description: (
       <>
@@ -41,8 +33,6 @@ const ToolList: Tool[] = [
   },
   {
     name: 'Chrome Extension',
-    tag: 'Chrome',
-    Svg: require('@site/static/img/feature_browser.svg').default,
     to: '/tools/chrome-extension',
     description: (
       <>
@@ -53,61 +43,43 @@ const ToolList: Tool[] = [
   },
 ];
 
-function ToolCard({name, tag, Svg, to, description, anchor}: Tool & {anchor?: boolean}) {
+function ToolRow({name, to, description}: Tool) {
   return (
-    <div className={clsx('col col--4', styles.toolCol)}>
-      <Link
-        to={to}
-        className={styles.toolCard}
-        // Shade may lift its head over this card's top edge. The card is
-        // opaque and gets its own stacking context from the [data-shade] rule
-        // in custom.css, so it hides two thirds of the character, and the
-        // section's flat background sits behind both.
-        data-shade={anchor ? 'peek-edge' : undefined}
-        data-shade-id={anchor ? 'tools' : undefined}>
-        <span className={styles.toolTop} aria-hidden="true" />
-        <div className={styles.toolHead}>
-          <span className={styles.toolIcon}>
-            <Svg className={styles.toolSvg} role="img" />
-          </span>
-          <span className={styles.toolTag}>{tag}</span>
-        </div>
+    <li>
+      <Link to={to} className={styles.toolRow}>
         <Heading as="h3" className={styles.toolTitle}>
-          {name}
-        </Heading>
-        <p className={styles.toolText}>{description}</p>
-        <span className={styles.toolCta}>
-          Open it
+          <span className={styles.toolName}>{name}</span>
           <span aria-hidden="true" className={styles.toolArrow}>
             →
           </span>
-        </span>
+        </Heading>
+        <p className={styles.toolText}>{description}</p>
       </Link>
-    </div>
+    </li>
   );
 }
 
 export default function HomepageTools(): ReactNode {
   return (
-    // The anchor is the first tool card, not this section: the homepage snaps
-    // in full-viewport panels, so the section's own top edge always comes to
-    // rest under the sticky navbar, where a peek would never be seen.
+    // The tools are a plain list rather than a row of cards: three items with
+    // a name and a sentence each don't need a box apiece.
+    //
+    // Shade's anchor is the list itself. It is opaque (it paints the section's
+    // own surface colour) and gets a stacking context from the [data-shade]
+    // rule in custom.css, so the character can lift its head over the list's
+    // top edge. The section can't be the anchor: the homepage snaps in
+    // full-viewport panels, so its top edge always rests under the navbar.
     <section className={styles.tools} id="tools">
       <div className={clsx('container', styles.panel, 'panelIn')}>
-        <div className={styles.header}>
-          <p className={styles.eyebrow}>Free tools</p>
+        <div className={styles.inner}>
           <Heading as="h2" className={styles.headingTitle}>
             Things you can use right now
           </Heading>
-          <p className={styles.headingSub}>
-            The work I was doing by hand often enough to be worth building properly.
-            No sign-up, no email wall — open the page and go.
-          </p>
-        </div>
-        <div className={clsx('row', styles.cardRow)}>
-          {ToolList.map((tool, i) => (
-            <ToolCard key={tool.name} {...tool} anchor={i === 0} />
-          ))}
+          <ul className={styles.toolList} data-shade="peek-edge" data-shade-id="tools">
+            {ToolList.map((tool) => (
+              <ToolRow key={tool.name} {...tool} />
+            ))}
+          </ul>
         </div>
       </div>
     </section>

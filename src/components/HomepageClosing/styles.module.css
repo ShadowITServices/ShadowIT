@@ -31,15 +31,6 @@
   text-align: center;
 }
 
-.eyebrow {
-  margin: 0 0 0.5rem;
-  font-family: var(--brand-font-heading);
-  font-weight: 700;
-  font-size: 0.74rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.8;
-}
 
 .title {
   margin: 0 0 0.75rem;
@@ -55,25 +46,24 @@
   opacity: 0.92;
 }
 
-/* --- Credential chips -------------------------------------------------- */
-.chips {
+/* --- Credentials ------------------------------------------------------
+ * A plain line of text, items spaced apart. These were pill chips; four
+ * bordered capsules said "badges" more loudly than the credentials did.
+ * Spacing rather than middot separators, because a separator strands itself
+ * at the start of the second line when the row wraps.
+ * --------------------------------------------------------------------- */
+.credentials {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.5rem;
-  margin: 0 0 1.75rem;
+  gap: 0.35rem 1.75rem;
+  margin: 0 auto 1.75rem;
+  max-width: 40rem;
   padding: 0;
   list-style: none;
-}
-
-.chip {
-  padding: 0.35rem 0.85rem;
-  font-size: 0.78rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(2px);
+  opacity: 0.9;
 }
 
 /* --- Buttons ----------------------------------------------------------- */
